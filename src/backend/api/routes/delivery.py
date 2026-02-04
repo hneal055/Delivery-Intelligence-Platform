@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 from pydantic import BaseModel
 from src.backend.models.domain import Location, Driver
 from src.analytics.geofencing.engine import geofence_engine
 from src.analytics.image_analysis.verifier import image_verifier
 from src.backend.services.auth import get_current_device
+from src.backend.services.notifications import notification_service, NotificationEvent
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -51,6 +52,7 @@ async def verify_location(
 async def confirm_delivery(
     package_id: str,
     driver_id: str,
+    background_tasks: BackgroundTasks,
     photo: UploadFile = File(...),
     authorized: bool = Depends(get_current_device)
 ):
@@ -73,6 +75,15 @@ async def confirm_delivery(
         
     # 3. (Mock) Save success state
     # In a real app, we would write to database and S3 here.
+
+    # 4. Trigger Async Notification
+    background_tasks.add_task(
+        notification_service.send_notification,
+        recipient_id='customer_mock',
+        contact_info='customer@example.com',
+        event=NotificationEvent.DELIVERED,
+        message=f'Your package {package_id} has been delivered by {driver_id}.'
+    )
     
     return {
         "status": "confirmed",
