@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Request
 from pydantic import BaseModel
 from src.backend.models.domain import Location, Driver
 from src.analytics.geofencing.engine import geofence_engine
 from src.analytics.image_analysis.verifier import image_verifier
 from src.backend.services.auth import get_current_device
 from src.backend.services.notifications import notification_service, NotificationEvent
+from src.backend.api.limiter import limiter
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -15,8 +16,10 @@ class LocationVerifyRequest(BaseModel):
     target_delivery_location: Location
 
 @router.post("/verify-location")
+@limiter.limit("120/minute")
 async def verify_location(
-    request: LocationVerifyRequest,
+    request: Request,
+    verify_req: LocationVerifyRequest,
     authorized: bool = Depends(get_current_device)
 ):
     """
@@ -26,8 +29,8 @@ async def verify_location(
     
     # 1. Calculate distance using the Engine
     dist_meters = geofence_engine.calculate_distance_meters(
-        request.current_location, 
-        request.target_delivery_location
+        verify_req.current_location, 
+        verify_req.target_delivery_location
     )
     
     # 2. Define the rule (e.g., must be within 50 meters)
@@ -49,7 +52,9 @@ async def verify_location(
     }
 
 @router.post("/confirm")
+@limiter.limit("20/minute")
 async def confirm_delivery(
+    request: Request,
     package_id: str,
     driver_id: str,
     background_tasks: BackgroundTasks,
