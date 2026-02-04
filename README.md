@@ -93,3 +93,28 @@ To simulate fleet activity and stress-test the API:
     *   --interval: Polling interval in seconds (default: 2.0).
 
 This simulates full delivery lifecycles including Routing, Geofencing, and Proof-of-Delivery uploads.
+
+
+## Deployment (Docker)
+
+To deploy the application using Docker containers:
+
+1.  **Build and Start Services**:
+    `ash
+    docker-compose up --build
+    `
+    This will build the ackend image and start it on port 8000.
+
+2.  **Verify Running Container**:
+    Check http://localhost:8000/health to confirm the service is online.
+
+3.  **Stop Services**:
+    `ash
+    docker-compose down
+    `
+
+## Deployment (Docker)
+
+To deploy using Docker:
+1. Run: docker-compose up --build
+2. Check: http://localhost:8000/health

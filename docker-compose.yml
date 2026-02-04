@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: delivery_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      # Secrets should be loaded from .env file in production
+      # - SECRET_KEY= 
+    volumes:
+      - ./src:/app/src
+      - ./tools:/app/tools
+    command: uvicorn src.backend.api.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: on-failure
+
+  # Optional: Redis for Geofence Caching & Rate Limiting (Phase 7+)
+  # redis:
+  #   image: redis:alpine
+  #   ports:
+  #     - "6379:6379"
