@@ -75,3 +75,21 @@ DeliveryIntelligencePlatform/
 This project uses header-based API Key authentication for device endpoints (`secure-ping`).
 *   **Header**: `X-DIAD-Token`
 *   **Default Dev Key**: `dev-secret-key-123`
+
+## Simulation & Load Testing
+
+To simulate fleet activity and stress-test the API:
+
+1.  **Start the Backend Server**:
+    `ash
+    uvicorn src.backend.api.main:app --host 127.0.0.1 --port 8000
+    ` 
+
+2.  **Run the Fleet Simulator** (in a separate terminal):
+    `ash
+    python tools/simulators/fleet_sim.py --drivers 50
+    ` 
+    *   --drivers: Number of concurrent drivers to simulate (default: 10).
+    *   --interval: Polling interval in seconds (default: 2.0).
+
+This simulates full delivery lifecycles including Routing, Geofencing, and Proof-of-Delivery uploads.
