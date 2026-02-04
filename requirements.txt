@@ -28,3 +28,6 @@ requests==2.31.0
 # Optimization & Hardening
 slowapi>=0.1.9
 tenacity>=8.2.3
+
+# Monitoring
+prometheus-fastapi-instrumentator>=6.0.0

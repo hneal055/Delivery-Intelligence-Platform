@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from prometheus_fastapi_instrumentator import Instrumentator
 from src.backend.api.limiter import limiter
 from src.backend.api.routes import delivery
 from src.backend.api.routes import routing
@@ -16,6 +17,9 @@ app = FastAPI(title="Delivery Intelligence Platform")
 # Rate Limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Monitoring
+Instrumentator().instrument(app).expose(app)
 
 # Global Exception Handler
 @app.exception_handler(Exception)
