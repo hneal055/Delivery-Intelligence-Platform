@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 // Configuration
 // Ideally use environment variables, but for demo:
 // Android Emulator uses 10.0.2.2 for localhost
-const API_URL = Platform.OS === 'android' ? 'http://192.168.12.139:8000' : 'http://192.168.12.139:8000';
+const API_URL = Platform.OS === 'android' ? 'http://192.168.12.196:8000' : 'http://192.168.12.196:8000';
 const DRIVER_ID = 'driver-mobile-001';
 
 export default function App() {

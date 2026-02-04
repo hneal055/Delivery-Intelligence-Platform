@@ -5,19 +5,33 @@ services:
     build: .
     container_name: delivery_backend
     ports:
-      - "8000:8000"
+      - '8000:8000'
     environment:
       - PYTHONPATH=/app
-      # Secrets should be loaded from .env file in production
-      # - SECRET_KEY= 
     volumes:
       - ./src:/app/src
       - ./tools:/app/tools
     command: uvicorn src.backend.api.main:app --host 0.0.0.0 --port 8000 --reload
     restart: on-failure
 
-  # Optional: Redis for Geofence Caching & Rate Limiting (Phase 7+)
-  # redis:
-  #   image: redis:alpine
-  #   ports:
-  #     - "6379:6379"
+  prometheus:
+    image: prom/prometheus
+    container_name: delivery_prometheus
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  grafana:
+    image: grafana/grafana
+    container_name: delivery_grafana
+    ports:
+      - '3500:3000'
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+

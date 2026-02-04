@@ -9,6 +9,8 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Automated Verification**: Proof-of-delivery validation (Photo/Signature) to reduce error rates.
 *   **Dynamic Routing**: Instructions and route updates dispatched directly to driver DIAD devices.
 *   **Real-time Alerts**: Instant notifications for customers (SMS/Email) and fleet managers via the Notification Service.
+*   **Advanced Route Optimization**: 2-Opt Local Search algorithm with Haversine distance for optimal delivery sequencing.
+*   **Background Processing**: Asynchronous task management for non-blocking notifications and status updates.
 
 ## Technical Stack
 *   **Backend**: Python 3.8+, FastAPI, Uvicorn
@@ -118,3 +120,4 @@ To deploy the application using Docker containers:
 To deploy using Docker:
 1. Run: docker-compose up --build
 2. Check: http://localhost:8000/health
+
