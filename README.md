@@ -17,13 +17,30 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Testing**: Pytest, Pytest-cov
 *   **Security**: API Key authentication for DIAD devices
 
-## Getting Started
+## Quick Start Guide
 
-### Prerequisites
-*   Python 3.8 or higher
-*   PowerShell (for setup scripts)
+### How to install dependencies
+```bash
+pip install -r requirements.txt
+```
 
-### Installation
+### How to start the app
+```bash
+uvicorn src.backend.api.main:app --reload
+```
+
+### How to run with Docker
+```bash
+docker-compose up
+```
+
+### How to run tests
+```bash
+pytest
+```
+
+## Detailed Installation
+
 1.  **Clone the repository**
     ```bash
     git clone https://github.com/hneal055/Delivery-Intelligence-Platofrm.git
@@ -31,24 +48,12 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
     ```
 
 2.  **Set up the environment** (Windows)
-    Run the setup script to create the virtual environment and install dependencies:
+    Run the setup script to create the virtual environment:
     ```powershell
     ./Setup_PythonEnvironment.ps1
     ```
-    *Alternatively, install manually:*
-    ```bash
-    python -m venv venv
-    .\venv\Scripts\Activate
-    pip install -r requirements.txt
-    ```
 
-3.  **Run the Server**
-    Start the FastAPI development server:
-    ```bash
-    uvicorn src.backend.api.main:app --reload
-    ```
-
-4.  **Explore the API**
+3.  **Explore the API**
     Open your browser to: `http://127.0.0.1:8000/docs`
 
 ## Project Structure
@@ -70,4 +75,3 @@ DeliveryIntelligencePlatform/
 This project uses header-based API Key authentication for device endpoints (`secure-ping`).
 *   **Header**: `X-DIAD-Token`
 *   **Default Dev Key**: `dev-secret-key-123`
-
