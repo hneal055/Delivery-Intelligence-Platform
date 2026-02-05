@@ -10,13 +10,16 @@ from fastapi import (
 )
 from pydantic import BaseModel
 import time
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.backend.models.domain import Location, Driver, User
 from src.analytics.geofencing.engine import geofence_engine
 from src.analytics.image_analysis.verifier import image_verifier
 from src.backend.api.deps import get_current_active_user
 from src.backend.services.notifications import notification_service, NotificationEvent
+from src.backend.services import delivery_service
 from src.backend.api.limiter import limiter
 from src.backend.api.metrics import driver_heartbeats
+from src.backend.core.database import get_db
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -30,16 +33,25 @@ class LocationVerifyRequest(BaseModel):
 
 
 @router.post("/verify-location")
-@limiter.limit("120/minute")
+@limiter.limit("1000/minute") # Increased for simulation
 async def verify_location(
     request: Request,
     payload: LocationVerifyRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
 ):
     # Update heartbeat
     # Use driver_id from payload if present, else username
     driver_id = payload.driver_id if payload.driver_id != "unknown" else current_user.username
     driver_heartbeats[driver_id] = time.time()
+    
+    # Save location to Database
+    await delivery_service.update_driver_location(
+        db, 
+        driver_id, 
+        payload.current_location.lat, 
+        payload.current_location.lon
+    )
 
     # Verify if the driver is within valid range of the delivery target
     is_valid, distance = geofence_engine.verify_delivery_location(
@@ -62,7 +74,8 @@ async def confirm_delivery(
     driver_id: str = Form(...),
     photo: UploadFile = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
 ):
     # Update Heartbeat
     driver_heartbeats[driver_id] = time.time()
@@ -76,8 +89,8 @@ async def confirm_delivery(
     if not is_valid_image:
          raise HTTPException(status_code=400, detail=f"Invalid Proof of Delivery: {reason}")
     
-    # 3. (Mock) Save to Object Store / Database
-    # save_to_s3(content, filename)
+    # 3. Update Database Status
+    await delivery_service.update_package_status(db, package_id, "delivered", driver_id)
     
     # 4. Trigger Async Notification
     background_tasks.add_task(
@@ -85,7 +98,6 @@ async def confirm_delivery(
         "customer_placeholder",
         "email@example.com",
         NotificationEvent.DELIVERY_COMPLETED,
-        f"Package {package_id} delivered by {driver_id}"
     )
-
-    return {"status": "success", "package_id": package_id, "verification": "passed"}
+    
+    return {"status": "success", "package_id": package_id}

@@ -7,3 +7,17 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     uid: P1809F7CD0C75ACF3
+
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: db:5432
+    user: postgres
+    database: delivery_db
+    jsonData:
+      sslmode: 'disable'
+      postgresVersion: 1500
+    secureJsonData:
+      password: 'new_postgres_password'
+    uid: PSQL_DELIVERY_DB
+

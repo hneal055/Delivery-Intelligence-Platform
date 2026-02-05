@@ -10,12 +10,31 @@ services:
       - PYTHONPATH=/app
       - SECRET_KEY=production-secret-key-change-me
       - BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:3000,*
+      - DATABASE_URL=postgresql://postgres:new_postgres_password@db:5432/delivery_db
     volumes:
       - ./src:/app/src
       - ./tools:/app/tools
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini
     # Hardening: Removed --reload for production stability
     command: uvicorn src.backend.api.main:app --host 0.0.0.0 --port 8000
     restart: always
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15-alpine
+    container_name: delivery_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=new_postgres_password
+      - POSTGRES_DB=delivery_db
+    ports:
+      # Changed host port to 5433 to avoid conflict with existing postgres services
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus
@@ -34,7 +53,7 @@ services:
       - '3500:3000'
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=your_new_grafana_password
       - GF_PUBLIC_DASHBOARDS_ENABLED=true
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning
@@ -42,3 +61,5 @@ services:
     depends_on:
       - prometheus
 
+volumes:
+  postgres_data:

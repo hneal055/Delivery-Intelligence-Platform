@@ -2,13 +2,18 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.backend.core.config import settings
-from src.backend.models.domain import TokenData, User
+from src.backend.models.domain import TokenData, User, UserRole
 from src.backend.services.user_service import get_user_by_username
+from src.backend.core.database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)]
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -17,22 +22,29 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
-        role: str = payload.get("role")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username, role=role)
+        token_data = TokenData(username=username, role=payload.get("role"))
     except JWTError:
         raise credentials_exception
     
-    # In a real app we might verify if user exists in DB here
-    # user = get_user_by_username(username)
-    # if user is None:
-    #     raise credentials_exception
-    return token_data
+    user_sql = await get_user_by_username(db, username=token_data.username)
+    if user_sql is None:
+        raise credentials_exception
+        
+    # Convert to Domain Model
+    user = User(
+        id=user_sql.id,
+        username=user_sql.username,
+        email=user_sql.email,
+        role=UserRole(user_sql.role),
+        is_active=user_sql.is_active
+    )
+    return user
 
 async def get_current_active_user(
-    current_user: Annotated[TokenData, Depends(get_current_user)]
-):
-    # logic for active user...
+    current_user: Annotated[User, Depends(get_current_user)]
+) -> User:
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
-

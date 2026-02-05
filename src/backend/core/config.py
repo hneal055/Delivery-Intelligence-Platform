@@ -18,5 +18,8 @@ class Settings:
         "http://localhost:8081,http://localhost:8082,http://127.0.0.1:8081,http://127.0.0.1:8082,*"
     ).split(",")
 
-settings = Settings()
+    # DATABASE
+    # Default to localhost for local development (outside Docker)
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/delivery_db")
 
+settings = Settings()
