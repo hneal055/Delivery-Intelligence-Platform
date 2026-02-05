@@ -6,3 +6,4 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    uid: P1809F7CD0C75ACF3
