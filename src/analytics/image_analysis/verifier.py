@@ -33,7 +33,7 @@ class ImageVerifier:
 
         # 2. Mock ML Inference
         # Simulation: We use the length to create a pseudo-random but deterministic score
-        # In real life, we would load `model.predict(image_data)`
+        # In real life, we would load model.predict(image_data)
         
         mock_score = 0.95 # High confidence for demo purposes
         
@@ -48,6 +48,17 @@ class ImageVerifier:
             detected_objects=detected,
             issues=[]
         )
+
+    def verify_proof_of_delivery(self, image_data: bytes) -> tuple[bool, str]:
+        """
+        Legacy/Wrapper method for compatibility with delivery route.
+        Returns a tuple (is_valid, reason).
+        """
+        result = self.verify_delivery_photo(image_data)
+        if result.is_valid:
+            return True, "Valid"
+        else:
+            return False, "; ".join(result.issues) if result.issues else "Unknown verification failure"
 
 # Singleton instance
 image_verifier = ImageVerifier()

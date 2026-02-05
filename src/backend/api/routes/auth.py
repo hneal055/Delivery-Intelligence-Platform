@@ -3,9 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from src.backend.models.domain import Token, User
-from src.backend.utils.security import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from src.backend.utils.security import verify_password, create_access_token
 from src.backend.services.user_service import get_user_by_username, fake_users_db
 from src.backend.api.deps import get_current_active_user
+from src.backend.core.config import settings
 
 router = APIRouter()
 
@@ -31,7 +32,7 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         subject=user.username, 
         role=user.role.value,
@@ -42,3 +43,4 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
 @router.get("/users/me", response_model=User)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]):
     return current_user
+

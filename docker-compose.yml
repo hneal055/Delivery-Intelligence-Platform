@@ -8,11 +8,14 @@ services:
       - '8000:8000'
     environment:
       - PYTHONPATH=/app
+      - SECRET_KEY=production-secret-key-change-me
+      - BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:3000,*
     volumes:
       - ./src:/app/src
       - ./tools:/app/tools
-    command: uvicorn src.backend.api.main:app --host 0.0.0.0 --port 8000 --reload
-    restart: on-failure
+    # Hardening: Removed --reload for production stability
+    command: uvicorn src.backend.api.main:app --host 0.0.0.0 --port 8000
+    restart: always
 
   prometheus:
     image: prom/prometheus
@@ -32,8 +35,10 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PUBLIC_DASHBOARDS_ENABLED=true
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning
       - ./config/grafana/dashboards:/etc/grafana/dashboards
     depends_on:
       - prometheus
+

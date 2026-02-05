@@ -15,6 +15,7 @@ class NotificationEvent(Enum):
     NEARBY = "nearby"
     DELIVERED = "delivered"
     EXCEPTION = "exception"
+    DELIVERY_COMPLETED = "delivery_completed"
 
 class NotificationService:
     """

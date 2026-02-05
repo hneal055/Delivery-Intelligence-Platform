@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from shapely.geometry import Point, Polygon
 from src.backend.models.domain import Location
 import math
@@ -73,5 +73,18 @@ class GeofenceEngine:
         # Convert back to Locations
         coords = list(circle_poly.exterior.coords)
         return [Location(lon=c[0], lat=c[1]) for c in coords]
+
+    def verify_delivery_location(self, current_coords: Tuple[float, float], target_coords: Tuple[float, float], threshold_meters: float = 100.0) -> Tuple[bool, float]:
+        """
+        Verifies if the current location is within a threshold distance of the target location.
+        Inputs are (lat, lon) tuples.
+        Returns (is_valid, distance_in_meters).
+        """
+        # Convert tuples to Location objects to reuse calculate_distance_meters
+        loc1 = Location(lat=current_coords[0], lon=current_coords[1])
+        loc2 = Location(lat=target_coords[0], lon=target_coords[1])
+        
+        distance = self.calculate_distance_meters(loc1, loc2)
+        return distance <= threshold_meters, distance
 
 geofence_engine = GeofenceEngine()

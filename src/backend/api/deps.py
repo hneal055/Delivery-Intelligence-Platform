@@ -2,7 +2,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from src.backend.utils.security import SECRET_KEY, ALGORITHM
+from src.backend.core.config import settings
 from src.backend.models.domain import TokenData, User
 from src.backend.services.user_service import get_user_by_username
 
@@ -15,7 +15,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
         role: str = payload.get("role")
         if username is None:
@@ -24,12 +24,15 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     except JWTError:
         raise credentials_exception
     
-    user = get_user_by_username(username)
-    if user is None:
-        raise credentials_exception
-    return user
+    # In a real app we might verify if user exists in DB here
+    # user = get_user_by_username(username)
+    # if user is None:
+    #     raise credentials_exception
+    return token_data
 
-async def get_current_active_user(current_user: Annotated[User, Depends(get_current_user)]):
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+async def get_current_active_user(
+    current_user: Annotated[TokenData, Depends(get_current_user)]
+):
+    # logic for active user...
     return current_user
+

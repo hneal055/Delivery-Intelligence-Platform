@@ -11,7 +11,8 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Automated Verification**: Proof-of-delivery validation (Photo/Signature) to reduce error rates.
 *   **Dynamic Routing**: Instructions and route updates dispatched directly to driver DIAD devices.
 *   **Real-time Analytics**: Grafana dashboards for fleet monitoring and operational metrics.
-*   **Mobile Driver App**: React Native application for drivers to receive routes and capturing delivery proof.
+*   **Mobile Driver App**: React Native application for drivers to receive routes, predict ETA (ML-powered), and capture delivery proof.
+*   **ML ETA Prediction**: Random Forest Regressor model providing real-time arrival estimates considering distance and traffic load.
 
 ## Technical Stack
 *   **Backend**: Python 3.8+, FastAPI, Uvicorn
@@ -19,69 +20,40 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Data & ML**: Pandas, Scikit-learn, Shapely
 *   **Infrastructure**: Docker, Kubernetes, AWS (CloudFormation)
 *   **Visualization**: Grafana, Prometheus
-*   **Testing**: Pytest, Pytest-cov
+*   **Testing**: Pytest
 
 ## Quick Start Guide
 
-### 1. Start Support Services (Docker)
-Start the database, Grafana, and backend services:
-```bash
-docker-compose up --build
-```
-*   **Backend API**: `http://localhost:8000/docs`
-*   **Grafana Dashboard**: `http://localhost:3500` (Default: `admin`/`admin`)
+### 1. Daily Development Startup
+We provided a helper script to spin up the entire stack (Backend, DB, Prometheus, Grafana):
 
-### 2. Run Backend Locally (Optional - for Dev)
-If you need to run the backend outside of Docker:
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the server
-uvicorn src.backend.api.main:app --reload
+```powershell
+.\start_platform.ps1
 ```
+
+Once complete, access the services at:
+*   **API Docs**: `http://localhost:8000/docs`
+*   **Grafana**: `http://localhost:3500` (Login: `admin` / `admin`)
+*   **Prometheus**: `http://localhost:9090`
+
+### 2. Run Fleet Simulation
+To generate live traffic and view metrics on the dashboard, run the simulation script. You can specify the number of drivers (default is 20).
+
+```powershell
+.\run_simulation.ps1 -Drivers 50
+```
+
+*Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it.*
 
 ### 3. Run Mobile App
-Navigate to the mobile directory and start the Expo development server:
+To test the driver experience manually:
 ```bash
 cd src/mobile
-npm install
-npm run web  # Run in browser
-# OR
-npm run android # Run on Android emulator
+npx expo start --web
 ```
 
-## Project Structure
-```text
-DeliveryIntelligencePlatform/
-├── src/
-│   ├── analytics/          # ML models, Geofencing, Image Analysis
-│   ├── backend/            # FastAPI App, Routes, Services, Models
-│   ├── mobile/             # React Native Driver Application
-│   └── scripts/            # ETL and Deployment scripts
-├── config/                 # Environment and logging configs
-│   ├── grafana/            # Dashboards and Datasource provision configs
-├── data/                   # Raw/Processed data storage
-├── docs/                   # Architecture and Requirements documentation
-├── infrastructure/         # Docker/K8s/AWS IaC
-├── tests/                  # Unit and Integration tests
-└── tools/                  # Simulation and profiling tools
-```
-
-## Security
-Currently uses header-based API Key authentication for device endpoints (`secure-ping`).
-*   **Header**: `X-DIAD-Token`
-*   **Default Dev Key**: `dev-secret-key-123`
-
-## Simulation & Load Testing
-To simulate fleet activity and stress-test the API:
-
+### 4. Run Tests
+Execute the unit test suite:
 ```bash
-# Ensure backend is running, then in a new terminal:
-python tools/simulators/fleet_sim.py --drivers 50
+pytest
 ```
-
-## Troubleshooting
-- **Grafana Login**: If `admin/admin` does not work, check the `docker-compose.yml` for `GF_SECURITY_ADMIN_PASSWORD`.
-- **Mobile Dependencies**: If `npm install` fails, remove `node_modules` and `package-lock.json` and try again.
-
