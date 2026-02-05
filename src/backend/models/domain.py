@@ -31,3 +31,30 @@ class TruckManifest(BaseModel):
     vehicle_id: str
     driver_id: str
     packages: List[Package] = []
+
+# --- Security Models ---
+class UserRole(str, Enum):
+    DRIVER = "driver"
+    MANAGER = "manager"
+    ADMIN = "admin"
+
+class UserBase(BaseModel):
+    username: str
+    email: Optional[str] = None
+    role: UserRole = UserRole.DRIVER
+
+class UserCreate(UserBase):
+    password: str
+
+class User(UserBase):
+    id: str
+    is_active: bool = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+    role: Optional[str] = None
+

@@ -9,10 +9,10 @@ from fastapi import (
     Request,
 )
 from pydantic import BaseModel
-from src.backend.models.domain import Location, Driver
+from src.backend.models.domain import Location, Driver, User
 from src.analytics.geofencing.engine import geofence_engine
 from src.analytics.image_analysis.verifier import image_verifier
-from src.backend.services.auth import get_current_device
+from src.backend.api.deps import get_current_active_user
 from src.backend.services.notifications import notification_service, NotificationEvent
 from src.backend.api.limiter import limiter
 
@@ -21,7 +21,6 @@ router = APIRouter(prefix="/delivery", tags=["delivery"])
 
 # Schema for the request body
 class LocationVerifyRequest(BaseModel):
-    driver_id: str
     current_location: Location
     target_delivery_location: Location
 
@@ -31,7 +30,7 @@ class LocationVerifyRequest(BaseModel):
 async def verify_location(
     request: Request,
     verify_req: LocationVerifyRequest,
-    authorized: bool = Depends(get_current_device),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Checks if the driver is close enough to the delivery target.
@@ -47,14 +46,12 @@ async def verify_location(
     MAX_DISTANCE_METERS = 50.0
 
     if dist_meters > MAX_DISTANCE_METERS:
-        # LOGIC REJECTED
         return {
             "allowed": False,
             "status": "rejected",
-            "message": f"You are {dist_meters}m away. Please move closer (Limit: {MAX_DISTANCE_METERS}m).",
+            "message": f"You are {dist_meters:.2f}m away. Please move closer (Limit: {MAX_DISTANCE_METERS}m).",
         }
 
-    # LOGIC ACCEPTED
     return {
         "allowed": True,
         "status": "approved",
@@ -68,14 +65,15 @@ async def confirm_delivery(
     request: Request,
     background_tasks: BackgroundTasks,
     package_id: str = Form(...),
-    driver_id: str = Form(...),
     photo: UploadFile = File(...),
-    authorized: bool = Depends(get_current_device),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Finalizes a delivery by uploading a Proof-of-Delivery (PoD) photo.
     The photo is analyzed by the AI Stub to ensure quality.
     """
+    driver_id = current_user.username
+
     # 1. Read the uploaded file bytes
     content = await photo.read()
 
@@ -108,3 +106,4 @@ async def confirm_delivery(
         "ai_detection": result.detected_objects,
         "message": "Delivery confirmed successfully. Great job!",
     }
+

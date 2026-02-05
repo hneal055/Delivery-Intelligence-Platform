@@ -7,6 +7,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from src.backend.api.limiter import limiter
 from src.backend.api.routes import delivery
 from src.backend.api.routes import routing
+from src.backend.api.routes import auth
 import logging
 
 # Configure Logging
@@ -47,6 +48,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Register routers
+app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(delivery.router)
 app.include_router(routing.router)
 
@@ -66,3 +68,4 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "online"}
+
