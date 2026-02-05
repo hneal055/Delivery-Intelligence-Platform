@@ -31,3 +31,4 @@ tenacity>=8.2.3
 
 # Monitoring
 prometheus-fastapi-instrumentator>=6.0.0
+python-multipart>=0.0.9

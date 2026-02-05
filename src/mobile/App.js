@@ -1,3 +1,4 @@
+/* src/mobile/App.js */
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Button, Image, Platform, ScrollView, Alert } from 'react-native';
 import * as Location from 'expo-location';
@@ -6,9 +7,8 @@ import axios from 'axios';
 import { StatusBar } from 'expo-status-bar';
 
 // Configuration
-// Ideally use environment variables, but for demo:
-// Android Emulator uses 10.0.2.2 for localhost
-const API_URL = Platform.OS === 'android' ? 'http://192.168.12.196:8000' : 'http://192.168.12.196:8000';
+// Use localhost for Web (Desktop)
+const API_URL = Platform.OS === 'web' ? 'http://localhost:8000' : 'http://192.168.12.196:8000';
 const DRIVER_ID = 'driver-mobile-001';
 
 export default function App() {
@@ -20,14 +20,12 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setErrorMsg('Permission to access location was denied');
         return;
       }
 
-      // Start watching position
       Location.watchPositionAsync(
           { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 10 },
           (newLoc) => {
@@ -40,14 +38,13 @@ export default function App() {
 
   const verifyLocation = async () => {
     if (!location) {
-        Alert.alert("Error", "No location data available yet.");
+        alert("Error: No location data available yet.");
         return;
     }
 
     try {
         setVerificationStatus('Checking...');
-        // Mock target location (e.g. 50m away from simulator default)
-        // For testing, let's use the current location slightly offset so it passes or fails
+        
         const target = {
             lat: location.coords.latitude, 
             lon: location.coords.longitude
@@ -59,22 +56,23 @@ export default function App() {
             target_delivery_location: target 
         };
 
-        const response = await axios.post(\\/delivery/verify-location\, payload, {
+        const response = await axios.post(`${API_URL}/delivery/verify-location`, payload, {
             headers: { 'X-DIAD-Token': 'dev-secret-key-123' }
         });
 
         setVerificationStatus(response.data.message);
-        Alert.alert("API Response", response.data.message);
+        if (Platform.OS === 'web') alert(response.data.message);
+        else Alert.alert("API Response", response.data.message);
 
     } catch (error) {
         console.error(error);
         setVerificationStatus('Error connecting to API');
-        Alert.alert("Error", "Failed to verify location.");
+        if (Platform.OS === 'web') alert("Failed to verify location. Check console.");
+        else Alert.alert("Error", "Failed to verify location.");
     }
   };
 
   const pickImage = async () => {
-    // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -89,7 +87,8 @@ export default function App() {
 
   const confirmDelivery = async () => {
     if (!photo) {
-        Alert.alert("Error", "Please take a proof photo first.");
+        const msg = "Please take a proof photo first.";
+        Platform.OS === 'web' ? alert(msg) : Alert.alert("Error", msg);
         return;
     }
 
@@ -98,32 +97,43 @@ export default function App() {
         formData.append('package_id', packageId);
         formData.append('driver_id', DRIVER_ID);
         
-        // Append file
         let localUri = photo;
         let filename = localUri.split('/').pop();
-        let match = /\.(\w+)$/.exec(filename);
-        let type = match ? \image/\\ : \image\;
+        
+        if (Platform.OS === 'web') {
+            const res = await fetch(localUri);
+            const blob = await res.blob();
+            formData.append('photo', blob, filename || 'upload.jpg');
+        } else {
+            let match = /\.(\w+)$/.exec(filename);
+            let type = match ? `image/${match[1]}` : `image`;
+            formData.append('photo', { uri: localUri, name: filename, type });
+        }
 
-        formData.append('photo', { uri: localUri, name: filename, type });
-
-        const response = await axios.post(\\/delivery/confirm\, formData, {
+        // --- FIXED SECTION START ---
+        // We let axios set the Content-Type automatically so it includes the boundary
+        const response = await axios.post(`${API_URL}/delivery/confirm`, formData, {
             headers: { 
-                'Content-Type': 'multipart/form-data',
                 'X-DIAD-Token': 'dev-secret-key-123'
             }
         });
+        // --- FIXED SECTION END ---
 
-        Alert.alert("Success", "Delivery Confirmed!");
+        const msg = "Delivery Confirmed!";
+        if (Platform.OS === 'web') alert(msg);
+        else Alert.alert("Success", msg);
+        
         console.log(response.data);
         setPhoto(null);
 
     } catch (error) {
          console.error(error);
-         Alert.alert("Error", "Delivery Confirmation Failed" + (error.response ? ": " + error.response.status : ""));
+         const msg = "Delivery Confirmation Failed" + (error.response ? ": " + error.response.status : "");
+         if (Platform.OS === 'web') alert(msg);
+         else Alert.alert("Error", msg);
     }
   };
 
-  /* ... Styles ... */
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -183,10 +193,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 20,
     elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 2px rgba(0,0,0,0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+    }),
   },
   subtitle: {
     fontSize: 18,
@@ -216,4 +233,5 @@ const styles = StyleSheet.create({
     borderRadius: 5
   }
 });
+
 
