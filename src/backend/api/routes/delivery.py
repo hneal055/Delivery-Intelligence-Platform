@@ -101,3 +101,20 @@ async def confirm_delivery(
     )
     
     return {"status": "success", "package_id": package_id}
+
+@router.post("/exception")
+async def report_exception(
+    package_id: str = Form(...),
+    driver_id: str = Form(...),
+    reason: str = Form(...),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Update heartbeat
+    driver_heartbeats[driver_id] = time.time()
+    
+    # Update status to exception
+    await delivery_service.update_package_status(db, package_id, "exception", driver_id)
+    
+    return {"status": "exception_reported", "package_id": package_id, "reason": reason}
+
