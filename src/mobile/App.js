@@ -92,7 +92,7 @@ export default function App() {
         };
 
         const response = await axios.post(`${API_URL}/analytics/predict-eta`, payload, {
-            headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3MDc2NzQ0OH0.Wf4f83WyeixE9ul6jOUViTTJKoQO6M-_A8QTLOUQCKE' }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
 
         // Backend response: { estimated_minutes: float, ... }
@@ -132,7 +132,7 @@ export default function App() {
         };
 
         const response = await axios.post(`${API_URL}/delivery/verify-location`,  payload, {
-            headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3MDc2NzQ0OH0.Wf4f83WyeixE9ul6jOUViTTJKoQO6M-_A8QTLOUQCKE' }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
 
         setVerificationStatus(response.data.message);
@@ -201,7 +201,7 @@ export default function App() {
 
         const response = await axios.post(`${API_URL}/delivery/confirm`,  formData, {
             headers: { 
-                'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3MDc2NzQ0OH0.Wf4f83WyeixE9ul6jOUViTTJKoQO6M-_A8QTLOUQCKE',
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'multipart/form-data',
             }
         });
@@ -431,6 +431,7 @@ const styles = StyleSheet.create({
       marginTop: 5
   }
 });
+
 
 
 
