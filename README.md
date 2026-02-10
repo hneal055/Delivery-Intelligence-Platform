@@ -58,3 +58,11 @@ Execute the unit test suite:
 pytest
 ```
 
+
+## Troubleshooting
+
+### WebSocket Disconnects (Docker/Windows)
+If you encounter unexpected WebSocket disconnects with the backend:
+1. Ensure 'uvicorn[standard]' is installed in backend dependencies.
+2. The docker-compose configuration forces the 'asyncio' event loop ('uvicorn ... --loop asyncio') to resolve compatibility issues with 'uvloop' in this environment.
+

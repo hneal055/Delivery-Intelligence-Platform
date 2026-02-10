@@ -2,7 +2,7 @@ import { Modal, Select, Button, Group, Text } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
-import { DispatchJob } from '../../types';
+import type { DispatchJob } from '../../types';
 
 interface AssignmentModalProps {
   job: DispatchJob | null;

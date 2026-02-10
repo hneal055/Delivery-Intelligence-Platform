@@ -4,7 +4,7 @@ import { IconList, IconPlus, IconDotsVertical, IconTrash, IconUserPlus } from '@
 import { useDispatch } from '../hooks/useDispatch';
 import { CreateJobModal } from '../components/dispatch/CreateJobModal';
 import { AssignmentModal } from '../components/dispatch/AssignmentModal';
-import { DispatchJob } from '../types';
+import type { DispatchJob } from '../types';
 
 export function SchedulingPage() {
   const { useJobs, deleteJob, updateJobStatus } = useDispatch();
@@ -32,10 +32,9 @@ export function SchedulingPage() {
   const rows = jobs.map((job) => (
     <Table.Tr key={job.id}>
       <Table.Td>{job.title}</Table.Td>
-      <Table.Td>{new Date(job.scheduled_time).toLocaleString()}</Table.Td>
-      <Table.Td>{job.estimated_duration_minutes} mins</Table.Td>
+      <Table.Td>{job.scheduled_at ? new Date(job.scheduled_at).toLocaleString() : "—"}</Table.Td>
       <Table.Td>
-        {job.assigned_driver_id ? (
+        {job.driver_id ? (
            <Badge color="blue">Assigned</Badge>
         ) : (
            <Badge color="yellow">Unassigned</Badge>
@@ -46,7 +45,7 @@ export function SchedulingPage() {
       </Table.Td>
       <Table.Td>
         <Group gap="xs">
-            {!job.assigned_driver_id && (
+            {!job.driver_id && (
                 <Button size="xs" variant="light" leftSection={<IconUserPlus size={14} />} onClick={() => openAssignment(job)}>
                     Assign
                 </Button>
@@ -93,7 +92,6 @@ export function SchedulingPage() {
                 <Table.Tr>
                     <Table.Th>Title</Table.Th>
                     <Table.Th>Scheduled</Table.Th>
-                    <Table.Th>Duration</Table.Th>
                     <Table.Th>Assignment</Table.Th>
                     <Table.Th>Status</Table.Th>
                     <Table.Th>Actions</Table.Th>
@@ -102,13 +100,13 @@ export function SchedulingPage() {
             <Table.Tbody>
                 {isLoading ? (
                     <Table.Tr>
-                        <Table.Td colSpan={6} align="center">Loading jobs...</Table.Td>
+                        <Table.Td colSpan={5} align="center">Loading jobs...</Table.Td>
                     </Table.Tr>
                 ) : rows.length > 0 ? (
                     rows
                 ) : (
                     <Table.Tr>
-                        <Table.Td colSpan={6} align="center">
+                        <Table.Td colSpan={5} align="center">
                              <Group gap="xs" justify="center" c="dimmed" p="xl">
                                 <IconList />
                                 <Text>No jobs scheduled</Text>
