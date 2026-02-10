@@ -18,7 +18,7 @@ from src.backend.api.deps import get_current_active_user
 from src.backend.services.notifications import notification_service, NotificationEvent
 from src.backend.services import delivery_service
 from src.backend.api.limiter import limiter
-from src.backend.api.metrics import driver_heartbeats
+from src.backend.api.metrics import driver_heartbeats, DELIVERIES_COMPLETED
 from src.backend.core.database import get_db
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
@@ -91,6 +91,7 @@ async def confirm_delivery(
     
     # 3. Update Database Status
     await delivery_service.update_package_status(db, package_id, "delivered", driver_id)
+    DELIVERIES_COMPLETED.inc()
     
     # 4. Trigger Async Notification
     background_tasks.add_task(
@@ -117,4 +118,5 @@ async def report_exception(
     await delivery_service.update_package_status(db, package_id, "exception", driver_id)
     
     return {"status": "exception_reported", "package_id": package_id, "reason": reason}
+
 

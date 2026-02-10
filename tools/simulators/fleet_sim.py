@@ -4,6 +4,7 @@ import random
 import logging
 import argparse
 import time
+from datetime import datetime
 from typing import List, Dict
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
@@ -38,90 +39,88 @@ class VirtualDriver:
                 self.token = response.json()["access_token"]
             else:
                 logger.error(f"Login Failed: {response.text}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Login connection error: {e}")
 
-    @property
-    def auth_headers(self):
-        return {"Authorization": f"Bearer {self.token}"} if self.token else {}
-
-    @property
-    def device_headers(self):
-        return {"X-DIAD-Token": DEVICE_API_KEY}
-
-
-    async def get_route(self):
-        logger.info(f"Driver {self.driver_id}: Requesting Route...")
-        num_stops = random.randint(3, 5)
-        raw_stops = [self._random_location() for _ in range(num_stops)]
-        payload = {"driver_id": self.driver_id, "current_location": self.current_location, "stops": raw_stops}
-
-        try:
-            response = await self.client.post("/route/optimize", json=payload, headers=self.device_headers)
-            if response.status_code == 200:
-                self.stops = response.json().get("optimized_stops", [])
-                self.status = "DELIVERING"
-        except Exception:
-            pass
-
-    async def predict_eta(self, target_node):
-        dist = ((target_node["lat"] - self.current_location["lat"])**2 + 
-                (target_node["lon"] - self.current_location["lon"])**2)**0.5 * 111.0
-        payload = {"distance_km": max(0.1, dist), "traffic_load": random.random(), "num_packages": 1}
-        try:
-            await self.client.post("/analytics/predict-eta", json=payload, headers=self.auth_headers)
-        except Exception:
-            pass
-
-
-    async def simulate_movement(self):
-        if not self.stops:
-            self.status = "IDLE"
+    async def update_location(self):
+        if not self.token:
             return
-        target = self.stops[0]
-        await self.predict_eta(target)
-        await asyncio.sleep(random.uniform(0.5, 2.0))
-        self.current_location = {"lat": target["lat"] + 0.0001, "lon": target["lon"] + 0.0001}
-        await self.verify_location(target)
 
-    async def confirm_delivery(self, package_id: str):
-        dummy_image = b"0" * 2048
-        files = {"photo": ("pod_mock.jpg", dummy_image, "image/jpeg")}
+        # Simulate movement
+        if self.stops:
+            target = self.stops[0]
+            lat_diff = target["dest_lat"] - self.current_location["lat"]
+            lon_diff = target["dest_lon"] - self.current_location["lon"]
+            self.current_location["lat"] += lat_diff * 0.1
+            self.current_location["lon"] += lon_diff * 0.1
+        else:
+            self.current_location["lat"] += random.uniform(-0.001, 0.001)
+            self.current_location["lon"] += random.uniform(-0.001, 0.001)
+
         try:
-            resp = await self.client.post("/delivery/confirm", data={"package_id": package_id, "driver_id": self.driver_id}, files=files, headers=self.auth_headers)
-            if resp.status_code == 200:
-                logger.info(f"Driver {self.driver_id}: Delivered {package_id}")
-        except Exception:
-            pass
+            await self.client.post(
+                f"/tracking/{self.driver_id}/location",
+                json={
+                    "lat": self.current_location["lat"],
+                    "lon": self.current_location["lon"],
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "speed": random.uniform(0, 60),
+                    "heading": random.uniform(0, 360)
+                },
+                headers={"Authorization": f"Bearer {self.token}"}
+            )
+        except Exception as e:
+            pass 
 
-    async def verify_location(self, target):
-        payload = {"driver_id": self.driver_id, "current_location": self.current_location, "target_delivery_location": target}
-        try:
-            response = await self.client.post("/delivery/verify-location", json=payload, headers=self.auth_headers)
-            if response.json().get("allowed"):
-                self.stops.pop(0)
-                await self.confirm_delivery(f"PKG-{self.driver_id}-{int(time.time())}")
-            else:
-                self.stops.pop(0)
-        except Exception:
-            self.stops.pop(0)
-
-    async def run_lifecycle(self):
-        await self.login()
+    async def perform_delivery(self):
         if not self.token: return
+        
+        # 10% Chance to deliver a package on this tick
+        if random.random() > 0.1: 
+            return
+
+        pkg_id = f"PKG-{self.driver_id}-{int(time.time())}-{random.randint(1000,9999)}"
+        
+        # >1KB dummy image to pass verification
+        dummy_image = b'x' * 2048 
+        
+        files = {'photo': ('proof.png', dummy_image, 'image/png')}
+        data = {'package_id': pkg_id, 'driver_id': self.driver_id}
+        
+        try:
+            logger.info(f"{self.driver_id} delivering {pkg_id}...")
+            resp = await self.client.post(
+                "/delivery/confirm",
+                data=data,
+                files=files,
+                headers={"Authorization": f"Bearer {self.token}"}
+            )
+            if resp.status_code != 200:
+                logger.warning(f"Delivery failed: {resp.text}")
+        except Exception as e:
+            logger.error(f"Delivery Exception: {e}")
+
+    async def run(self):
+        await self.login()
         while True:
-            await self.get_route()
-            while self.stops and self.status == "DELIVERING":
-                await self.simulate_movement()
-            await asyncio.sleep(random.uniform(2.0, 5.0))
+            await self.update_location()
+            await self.perform_delivery()
+            await asyncio.sleep(5)
 
 async def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--drivers", type=int, default=5)
+    parser.add_argument("--drivers", type=int, default=10)
     args = parser.parse_args()
+    
     logger.info(f"Starting Fleet Simulation with {args.drivers} drivers...")
+    
     drivers = [VirtualDriver(f"D{i+1:03d}") for i in range(args.drivers)]
-    await asyncio.gather(*(d.run_lifecycle() for d in drivers))
+    
+    # Run all drivers concurrently
+    await asyncio.gather(*[d.run() for d in drivers])
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Stopping simulation...")

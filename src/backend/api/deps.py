@@ -48,3 +48,15 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+async def get_current_dispatcher(
+    current_user: Annotated[User, Depends(get_current_active_user)]
+) -> User:
+    """Require manager or admin role for dispatch operations."""
+    if current_user.role not in (UserRole.MANAGER, UserRole.ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Dispatcher (manager/admin) role required"
+        )
+    return current_user

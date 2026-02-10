@@ -21,11 +21,23 @@ class Package(BaseModel):
     status: str = "pending"
     loaded_at: Optional[datetime] = None
     section: Optional[VehicleSection] = None
+    priority: str = "standard"
+    scheduled_window_start: Optional[datetime] = None
+    scheduled_window_end: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
 
 class Driver(BaseModel):
     id: str
     name: str
     current_location: Optional[Location] = None
+    vehicle_id: Optional[str] = None
+    shift_start: Optional[datetime] = None
+    shift_end: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
 
 class TruckManifest(BaseModel):
     vehicle_id: str
@@ -49,6 +61,9 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: str
     is_active: bool = True
+    
+    class Config:
+        from_attributes = True
 
 class Token(BaseModel):
     access_token: str
@@ -57,4 +72,46 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Optional[str] = None
     role: Optional[str] = None
+
+# --- Phase 2: Dispatch & Scheduling ---
+
+class JobStatus(str, Enum):
+    PENDING = "pending"
+    ASSIGNED = "assigned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+class DispatchJobCreate(BaseModel):
+    driver_id: Optional[str] = None
+    title: str
+    type: str = "delivery"
+    priority: str = "medium"
+    notes: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
+    package_id: Optional[str] = None
+
+class DispatchJob(DispatchJobCreate):
+    id: str
+    status: str = "pending"
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+class AvailabilityCreate(BaseModel):
+    driver_id: str
+    date: datetime
+    is_available: bool
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+class LocationUpdate(BaseModel):
+    lat: float
+    lon: float
+    speed: Optional[float] = None
+    heading: Optional[float] = None
+    battery_level: Optional[float] = None
+    timestamp: Optional[datetime] = None
 

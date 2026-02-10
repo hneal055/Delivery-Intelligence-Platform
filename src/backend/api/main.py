@@ -10,6 +10,9 @@ from src.backend.api.routes import delivery
 from src.backend.api.routes import routing
 from src.backend.api.routes import auth
 from src.backend.api.routes import analytics # Phase 4
+from src.backend.api.routes import websocket
+from src.backend.api.routes import dispatch
+from src.backend.api.routes import tracking
 from src.backend.core.config import settings
 from src.backend.api.metrics import ACTIVE_DRIVERS, driver_heartbeats
 from src.backend.core.database import AsyncSessionLocal
@@ -46,6 +49,9 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(routing.router)
 app.include_router(delivery.router)
 app.include_router(analytics.router)
+app.include_router(websocket.router)
+app.include_router(dispatch.router)
+app.include_router(tracking.router)
 
 async def update_active_drivers():
     while True:
@@ -79,6 +85,16 @@ async def init_data():
                     db,
                     UserCreate(username="driver1", password="driverpassword", email="driver1@diplatform.com"),
                     role=UserRole.DRIVER
+                )
+
+            # Check and create Dispatcher
+            dispatcher = await get_user_by_username(db, "dispatcher1")
+            if not dispatcher:
+                logger.info("Creating default dispatcher user")
+                await create_user(
+                    db,
+                    UserCreate(username="dispatcher1", password="dispatcherpassword", email="dispatcher1@diplatform.com"),
+                    role=UserRole.MANAGER
                 )
         except Exception as e:
             logger.error(f"Error initializing data: {e}")
