@@ -91,8 +91,8 @@ export default function App() {
             num_packages: 5
         };
 
-        const response = await axios.post(${API_URL}/analytics/predict-eta, payload, {
-            headers: { 'Authorization': Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcwMzU5NDk3fQ.23y4ZQDvtPrrnOaaKaPSnaeDUa9P36x5xEHjtfNS_7w }
+        const response = await axios.post(`${API_URL}/analytics/predict-eta`, payload, {
+            headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3MDc2NzQ0OH0.Wf4f83WyeixE9ul6jOUViTTJKoQO6M-_A8QTLOUQCKE' }
         });
 
         // Backend response: { estimated_minutes: float, ... }
@@ -131,8 +131,8 @@ export default function App() {
             target_delivery_location: target 
         };
 
-        const response = await axios.post(${API_URL}/delivery/verify-location, payload, {
-            headers: { 'Authorization': Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcwMzU5NDk3fQ.23y4ZQDvtPrrnOaaKaPSnaeDUa9P36x5xEHjtfNS_7w }
+        const response = await axios.post(`${API_URL}/delivery/verify-location`,  payload, {
+            headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3MDc2NzQ0OH0.Wf4f83WyeixE9ul6jOUViTTJKoQO6M-_A8QTLOUQCKE' }
         });
 
         setVerificationStatus(response.data.message);
@@ -189,13 +189,13 @@ export default function App() {
             formData.append('photo', blob, filename || 'upload.jpg');
         } else {
             let match = /\.(\w+)$/.exec(filename);
-            let type = match ? image/ : 'image';
+            let type = match ? `image/${match[1]}` : 'image';
             formData.append('photo', { uri: localUri, name: filename, type });
         }
 
-        const response = await axios.post(${API_URL}/delivery/confirm, formData, {
+        const response = await axios.post(`${API_URL}/delivery/confirm`,  formData, {
             headers: { 
-                'Authorization': Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbl91c2VyIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzcwMzU5NDk3fQ.23y4ZQDvtPrrnOaaKaPSnaeDUa9P36x5xEHjtfNS_7w,
+                'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3MDc2NzQ0OH0.Wf4f83WyeixE9ul6jOUViTTJKoQO6M-_A8QTLOUQCKE',
                 'Content-Type': 'multipart/form-data',
             }
         });
@@ -425,6 +425,10 @@ const styles = StyleSheet.create({
       marginTop: 5
   }
 });
+
+
+
+
 
 
 
