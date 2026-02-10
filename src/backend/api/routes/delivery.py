@@ -83,6 +83,17 @@ async def confirm_delivery(
     # 1. Read file content
     content = await photo.read()
     
+    # 1.5 Save Proof of Delivery (Storage)
+    import os
+    # Move up from api/routes to backend root
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    upload_dir = os.path.join(base_dir, "uploads", "proofs")
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    file_path = os.path.join(upload_dir, f"{package_id}_{driver_id}.jpg")
+    with open(file_path, "wb") as f:
+        f.write(content)
+
     # 2. Verify Image (Blur/Darkness)
     is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)
     
@@ -118,5 +129,6 @@ async def report_exception(
     await delivery_service.update_package_status(db, package_id, "exception", driver_id)
     
     return {"status": "exception_reported", "package_id": package_id, "reason": reason}
+
 
 
