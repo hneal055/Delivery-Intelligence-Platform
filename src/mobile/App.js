@@ -148,6 +148,12 @@ export default function App() {
   };
 
   const pickImage = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+        const msg = 'Sorry, we need camera permissions to upload proof of delivery!';
+        Platform.OS === 'web' ? alert(msg) : Alert.alert('Permission Required', msg);
+        return;
+    }
     try {
         const mediaTypes = ImagePicker.MediaTypeOptions?.Images || ImagePicker.MediaType?.Images || 'Images';
         
@@ -425,6 +431,7 @@ const styles = StyleSheet.create({
       marginTop: 5
   }
 });
+
 
 
 
