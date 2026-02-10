@@ -16,7 +16,6 @@ services:
       - ./tools:/app/tools
       - ./migrations:/app/migrations
       - ./alembic.ini:/app/alembic.ini
-    # Hardening: Removed --reload for production stability
     command: uvicorn src.backend.api.main:app --host 0.0.0.0 --port 8000
     restart: always
     depends_on:
@@ -30,7 +29,6 @@ services:
       - POSTGRES_PASSWORD=new_postgres_password
       - POSTGRES_DB=delivery_db
     ports:
-      # Changed host port to 5433 to avoid conflict with existing postgres services
       - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -53,9 +51,9 @@ services:
       - '3500:3000'
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=your_new_grafana_password
       - GF_PUBLIC_DASHBOARDS_ENABLED=true
     volumes:
+      - grafana_data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning
       - ./config/grafana/dashboards:/etc/grafana/dashboards
     depends_on:
@@ -63,3 +61,5 @@ services:
 
 volumes:
   postgres_data:
+  grafana_data:
+

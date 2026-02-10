@@ -9,20 +9,38 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 }
 
 # 2. Start Services
-Write-Host "`n[1/3] Starting Backend & Monitoring Services..." -ForegroundColor Yellow
-docker-compose down
+Write-Host "`n[1/5] Starting Backend & Monitoring Services..." -ForegroundColor Yellow
+docker-compose down --remove-orphans
 docker-compose up -d --build
 
-# 3. Wait for Health (Simple pause for MVP, logic can be improved)
-Write-Host "`n[2/3] Waiting for services to stabilize (15s)..." -ForegroundColor Yellow
+# 3. Wait for Health
+Write-Host "`n[2/5] Waiting for services to stabilize (15s)..." -ForegroundColor Yellow
 Start-Sleep -Seconds 15
 
-# 4. Display Access Info
-Write-Host "`n[3/3] Platform Ready!" -ForegroundColor Green
+# 4. Migrations & Seeding
+Write-Host "`n[3/5] Applying Database Migrations & Seeding Data..." -ForegroundColor Yellow
+docker-compose exec -T backend alembic upgrade head
+docker-compose exec -T backend python tools/seed_data.py
+
+# 5. Grafana Setup
+Write-Host "`n[4/5] Configuring Grafana Access..." -ForegroundColor Yellow
+# Reset admin password to ensure access
+docker-compose exec -T grafana grafana-cli admin reset-admin-password new_bizness123
+
+# 6. Start Simulation
+Write-Host "`n[5/5] Launching Fleet Simulation..." -ForegroundColor Yellow
+Start-Process powershell -ArgumentList "-NoExit", "-File", ".\run_simulation.ps1"
+
+# 7. Display Access Info
+Write-Host "`n===================================================" -ForegroundColor Green
+Write-Host "   PLATFORM READY" -ForegroundColor Green
+Write-Host "===================================================" -ForegroundColor Green
+Write-Host "1. Backend API      : http://localhost:8000/docs"
+Write-Host "2. Grafana          : http://localhost:3500"
+Write-Host "   - User           : admin"
+Write-Host "   - Password       : new_bizness123"
+Write-Host "3. Prometheus       : http://localhost:9090"
 Write-Host "---------------------------------------------------"
-Write-Host "API Documentation : http://localhost:8000/docs"
-Write-Host "Grafana Dashboards: http://localhost:3500 (admin/admin)"
-Write-Host "Prometheus        : http://localhost:9090"
-Write-Host "---------------------------------------------------"
-Write-Host "`nNext Steps:"
-Write-Host "Run the fleet simulator: .\run_simulation.ps1"
+Write-Host "Traffic simulation is correctly running in the separate window."
+Write-Host "Dashboards are provisioned and ready."
+

@@ -25,7 +25,7 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 ## Quick Start Guide
 
 ### 1. Daily Development Startup
-We provided a helper script to spin up the entire stack (Backend, DB, Prometheus, Grafana):
+We provided a helper script to spin up the entire stack, apply migrations, seed data, and start traffic simulation:
 
 ```powershell
 .\start_platform.ps1
@@ -33,11 +33,11 @@ We provided a helper script to spin up the entire stack (Backend, DB, Prometheus
 
 Once complete, access the services at:
 *   **API Docs**: `http://localhost:8000/docs`
-*   **Grafana**: `http://localhost:3500` (Login: `admin` / `admin`)
+*   **Grafana**: `http://localhost:3500` (Login: `admin` / `new_bizness123`)
 *   **Prometheus**: `http://localhost:9090`
 
-### 2. Run Fleet Simulation
-To generate live traffic and view metrics on the dashboard, run the simulation script. You can specify the number of drivers (default is 20).
+### 2. Fleet Simulation
+The startup script automatically launches the simulation in a new window. To run it manually or add additional load:
 
 ```powershell
 .\run_simulation.ps1 -Drivers 50
@@ -57,3 +57,4 @@ Execute the unit test suite:
 ```bash
 pytest
 ```
+
