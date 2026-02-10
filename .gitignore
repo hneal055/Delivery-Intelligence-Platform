@@ -45,3 +45,5 @@ yarn-error.log
 .expo/
 web-build/
 
+
+src/backend/uploads/

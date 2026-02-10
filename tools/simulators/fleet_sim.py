@@ -4,7 +4,7 @@ import random
 import logging
 import argparse
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
@@ -63,7 +63,7 @@ class VirtualDriver:
                 json={
                     "lat": self.current_location["lat"],
                     "lon": self.current_location["lon"],
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "speed": random.uniform(0, 60),
                     "heading": random.uniform(0, 360)
                 },
@@ -79,13 +79,42 @@ class VirtualDriver:
         if random.random() > 0.1: 
             return
 
+        # 1. VERIFY LOCATION (Geofencing Check)
+        # Create a randomized target location close to current location (~0-10m)
+        target_lat = self.current_location["lat"] + random.uniform(-0.0001, 0.0001) 
+        target_lon = self.current_location["lon"] + random.uniform(-0.0001, 0.0001)
+        
+        try:
+            verify_payload = {
+                "driver_id": self.driver_id,
+                "current_location": self.current_location,
+                "target_delivery_location": {"lat": target_lat, "lon": target_lon}
+            }
+            verify_resp = await self.client.post(
+                "/delivery/verify-location",
+                json=verify_payload,
+                headers={"Authorization": f"Bearer {self.token}"}
+            )
+            
+            if verify_resp.status_code == 200:
+                result = verify_resp.json()
+                if not result.get("allowed"):
+                    logger.warning(f"{self.driver_id} Geofence Blocked: {result.get("message")}")
+                    return
+            else:
+                logger.warning(f"Geofence Check Failed: {verify_resp.status_code}")
+                # return # Optional: strict mode would return here
+        except Exception as e:
+            logger.error(f"Geofence Error: {e}")
+
+        # 2. PERFORM DELIVERY
         pkg_id = f"PKG-{self.driver_id}-{int(time.time())}-{random.randint(1000,9999)}"
         
         # >1KB dummy image to pass verification
-        dummy_image = b'x' * 2048 
+        dummy_image = b"x" * 2048 
         
-        files = {'photo': ('proof.png', dummy_image, 'image/png')}
-        data = {'package_id': pkg_id, 'driver_id': self.driver_id}
+        files = {"photo": ("proof.png", dummy_image, "image/png")}
+        data = {"package_id": pkg_id, "driver_id": self.driver_id}
         
         try:
             logger.info(f"{self.driver_id} delivering {pkg_id}...")
