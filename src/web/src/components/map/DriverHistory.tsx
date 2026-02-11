@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Polyline } from 'react-leaflet';
 import { useQuery } from '@tanstack/react-query';
 import { getLocationHistory } from '../../api/dispatch';

@@ -6,6 +6,9 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DriversPage } from "./pages/DriversPage";
 import { PackagesPage } from "./pages/PackagesPage";
 import { SchedulingPage } from "./pages/SchedulingPage";
+import { ProofGalleryPage } from "./pages/ProofGalleryPage";
+import { TrackingPage } from "./pages/TrackingPage";
+import { EquipmentPage } from "./pages/EquipmentPage";
 
 function App() {
   return (
@@ -23,6 +26,9 @@ function App() {
           <Route path="/drivers" element={<DriversPage />} />
           <Route path="/packages" element={<PackagesPage />} />
           <Route path="/scheduling" element={<SchedulingPage />} />
+          <Route path="/proofs" element={<ProofGalleryPage />} />
+          <Route path="/tracking" element={<TrackingPage />} />
+          <Route path="/equipment" element={<EquipmentPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,4 +1,4 @@
-import { SimpleGrid, Paper, Text, Group } from "@mantine/core";
+import { SimpleGrid, Paper, Text } from "@mantine/core";
 import type { DashboardSummary } from "../../types";
 
 interface DashboardStatsProps {

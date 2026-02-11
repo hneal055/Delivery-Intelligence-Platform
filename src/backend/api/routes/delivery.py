@@ -9,7 +9,11 @@ from fastapi import (
     Request,
 )
 from pydantic import BaseModel
+import os
 import time
+from datetime import datetime
+from typing import List
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.backend.models.domain import Location, Driver, User
 from src.analytics.geofencing.engine import geofence_engine
@@ -22,6 +26,46 @@ from src.backend.api.metrics import driver_heartbeats, DELIVERIES_COMPLETED
 from src.backend.core.database import get_db
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
+
+PROOFS_BASE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "uploads", "proofs"
+)
+
+
+@router.get("/recent-proofs")
+async def get_recent_proofs() -> List[dict]:
+    if not os.path.exists(PROOFS_BASE_DIR):
+        return []
+
+    files = []
+    for f in os.listdir(PROOFS_BASE_DIR):
+        if not f.lower().endswith((".jpg", ".jpeg", ".png")):
+            continue
+        path = os.path.join(PROOFS_BASE_DIR, f)
+        stat = os.stat(path)
+        parts = f.rsplit(".", 1)[0].split("_")
+        pkg_id = parts[0] if len(parts) > 0 else "Unknown"
+        driver_id = parts[1] if len(parts) > 1 else "Unknown"
+
+        files.append({
+            "packageId": pkg_id,
+            "driverId": driver_id,
+            "timestamp": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "filename": f,
+            "url": f"/delivery/proof/{f}",
+        })
+
+    files.sort(key=lambda x: x["timestamp"], reverse=True)
+    return files[:50]
+
+
+@router.get("/proof/{filename}")
+async def get_proof_image(filename: str):
+    path = os.path.join(PROOFS_BASE_DIR, filename)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(path, media_type="image/jpeg")
 
 
 # Schema for the request body
@@ -84,13 +128,8 @@ async def confirm_delivery(
     content = await photo.read()
     
     # 1.5 Save Proof of Delivery (Storage)
-    import os
-    # Move up from api/routes to backend root
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    upload_dir = os.path.join(base_dir, "uploads", "proofs")
-    os.makedirs(upload_dir, exist_ok=True)
-    
-    file_path = os.path.join(upload_dir, f"{package_id}_{driver_id}.jpg")
+    os.makedirs(PROOFS_BASE_DIR, exist_ok=True)
+    file_path = os.path.join(PROOFS_BASE_DIR, f"{package_id}_{driver_id}.jpg")
     with open(file_path, "wb") as f:
         f.write(content)
 

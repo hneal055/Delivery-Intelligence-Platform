@@ -1,4 +1,4 @@
-import { Modal, TextInput, NumberInput, Button, Group, Textarea } from '@mantine/core';
+import { Modal, TextInput, Button, Group, Textarea, Select } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
@@ -10,27 +10,28 @@ interface CreateJobModalProps {
 
 export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
   const { createJob } = useDispatch();
-  
+
   const form = useForm({
     initialValues: {
       title: '',
-      description: '',
-      scheduled_time: new Date(),
-      estimated_duration_minutes: 60,
+      notes: '',
+      type: 'delivery',
+      priority: 'medium',
+      scheduled_at: new Date(),
     },
     validate: {
       title: (value) => (value.length < 2 ? 'Title must be at least 2 characters' : null),
-      scheduled_time: (value) => (value ? null : 'Scheduled time is required'),
-      estimated_duration_minutes: (value) => (value > 0 ? null : 'Duration must be positive'),
+      scheduled_at: (value) => (value ? null : 'Scheduled time is required'),
     },
   });
 
   const handleSubmit = (values: typeof form.values) => {
     createJob.mutate({
       title: values.title,
-      description: values.description,
-      scheduled_time: values.scheduled_time.toISOString(),
-      estimated_duration_minutes: values.estimated_duration_minutes,
+      notes: values.notes || undefined,
+      type: values.type,
+      priority: values.priority,
+      scheduled_at: values.scheduled_at.toISOString(),
     }, {
       onSuccess: () => {
         form.reset();
@@ -49,27 +50,41 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
           {...form.getInputProps('title')}
           mb="sm"
         />
-        
-        <Textarea
-          label="Description"
-          placeholder="Optional details..."
-          {...form.getInputProps('description')}
-          mb="sm"
-        />
+
+        <Group grow mb="sm">
+          <Select
+            label="Type"
+            data={[
+              { value: 'delivery', label: 'Delivery' },
+              { value: 'pickup', label: 'Pickup' },
+              { value: 'service', label: 'Service' },
+            ]}
+            {...form.getInputProps('type')}
+          />
+          <Select
+            label="Priority"
+            data={[
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+              { value: 'urgent', label: 'Urgent' },
+            ]}
+            {...form.getInputProps('priority')}
+          />
+        </Group>
 
         <DateTimePicker
           withAsterisk
           label="Scheduled Time"
           placeholder="Pick date and time"
-          {...form.getInputProps('scheduled_time')}
+          {...form.getInputProps('scheduled_at')}
           mb="sm"
         />
 
-        <NumberInput
-          withAsterisk
-          label="Estimated Duration (minutes)"
-          min={1}
-          {...form.getInputProps('estimated_duration_minutes')}
+        <Textarea
+          label="Notes"
+          placeholder="Optional details..."
+          {...form.getInputProps('notes')}
           mb="md"
         />
 

@@ -100,6 +100,11 @@ export async function setAvailability(availability: DriverAvailabilityCreate): P
   return response.data;
 }
 
+export async function getJob(jobId: string): Promise<DispatchJob> {
+  const response = await apiClient.get<DispatchJob>(`/dispatch/jobs/${jobId}`);
+  return response.data;
+}
+
 export async function getLocationHistory(driverId: string, hours: number = 24): Promise<LiveDriverLocation[]> {
   const response = await apiClient.get<LiveDriverLocation[]>(`/tracking/${driverId}/history`, {
     params: { hours }

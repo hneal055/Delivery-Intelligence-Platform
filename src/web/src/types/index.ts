@@ -115,3 +115,49 @@ export interface DriverAvailability {
   end_time: string | null;
 }
 
+export interface DriverAvailabilityCreate {
+  driver_id: string;
+  date: string;
+  is_available: boolean;
+  start_time?: string;
+  end_time?: string;
+}
+
+export interface ProofOfDelivery {
+  filename: string;
+  packageId: string;
+  driverId: string;
+  timestamp: string;
+  url: string;
+}
+
+export interface LocationHistoryPoint {
+  id: number;
+  driver_id: string;
+  lat: number;
+  lon: number;
+  speed: number | null;
+  heading: number | null;
+  battery_level: number | null;
+  timestamp: string;
+}
+
+export interface Equipment {
+  id: string;
+  barcode: string;
+  name: string;
+  type: string;
+  status: "available" | "checked_out" | "maintenance";
+  checked_out_by: string | null;
+  checked_out_at: string | null;
+  notes: string | null;
+}
+
+export interface EquipmentScanEvent {
+  equipment_id: string;
+  barcode: string;
+  action: "check_in" | "check_out";
+  driver_id: string;
+  timestamp: string;
+}
+

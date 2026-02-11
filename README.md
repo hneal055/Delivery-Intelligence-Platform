@@ -13,9 +13,14 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Real-time Analytics**: Grafana dashboards for fleet monitoring and operational metrics.
 *   **Mobile Driver App**: React Native application for drivers to receive routes, predict ETA (ML-powered), and capture delivery proof.
 *   **ML ETA Prediction**: Random Forest Regressor model providing real-time arrival estimates considering distance and traffic load.
+*   **Dispatch & Scheduling**: Job creation, assignment, and Kanban board for managing dispatch workflows.
+*   **GPS Tracking**: Real-time driver map with route history playback and speed controls.
+*   **Proof of Delivery Gallery**: Filterable gallery of delivery proof images with detail views.
+*   **Equipment / Barcode Scanning**: Camera-based barcode scanning for equipment check-in/out tracking.
 
 ## Technical Stack
 *   **Backend**: Python 3.8+, FastAPI, Uvicorn
+*   **Web Dashboard**: React 19, TypeScript, Vite, Mantine UI, Leaflet Maps
 *   **Mobile**: React Native, Expo
 *   **Data & ML**: Pandas, Scikit-learn, Shapely
 *   **Infrastructure**: Docker, Kubernetes, AWS (CloudFormation)
@@ -45,14 +50,28 @@ The startup script automatically launches the simulation in a new window. To run
 
 *Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it.*
 
-### 3. Run Mobile App
+### 3. Run Dispatcher Web UI
+
+```bash
+cd src/web
+npm install
+npm run dev
+```
+
+Access at `http://localhost:5173`. Login with `dispatcher1` / `dispatcherpassword`.
+
+Pages: Dashboard, Scheduling, Drivers, Packages, Proof Gallery, Tracking, Equipment.
+
+### 4. Run Mobile App
+
 To test the driver experience manually:
+
 ```bash
 cd src/mobile
 npx expo start --web
 ```
 
-### 4. Run Tests
+### 5. Run Tests
 Execute the unit test suite:
 ```bash
 pytest

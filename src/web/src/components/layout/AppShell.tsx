@@ -53,6 +53,24 @@ export function AppShell() {
             to="/packages"
             active={location.pathname === "/packages"}
           />
+          <NavLink
+            label="Proof Gallery"
+            component={RouterNavLink}
+            to="/proofs"
+            active={location.pathname === "/proofs"}
+          />
+          <NavLink
+            label="Tracking"
+            component={RouterNavLink}
+            to="/tracking"
+            active={location.pathname === "/tracking"}
+          />
+          <NavLink
+            label="Equipment"
+            component={RouterNavLink}
+            to="/equipment"
+            active={location.pathname === "/equipment"}
+          />
         </Stack>
       </MantineAppShell.Navbar>
 

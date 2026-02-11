@@ -1,3 +1,4 @@
+
 Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host "   Delivery Intelligence Platform - Startup" -ForegroundColor Cyan
 Write-Host "===================================================" -ForegroundColor Cyan
@@ -20,7 +21,7 @@ Start-Sleep -Seconds 15
 # 4. Migrations & Seeding
 Write-Host "`n[3/5] Applying Database Migrations & Seeding Data..." -ForegroundColor Yellow
 docker-compose exec -T backend alembic upgrade head
-docker-compose exec -T backend python tools/seed_db.py
+docker-compose exec -T backend python tools/seed_data.py
 
 # 5. Grafana Setup
 Write-Host "`n[4/5] Configuring Grafana Access..." -ForegroundColor Yellow
