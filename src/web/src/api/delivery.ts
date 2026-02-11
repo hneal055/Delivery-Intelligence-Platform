@@ -15,7 +15,8 @@ export async function getRecentProofs(): Promise<ProofOfDelivery[]> {
     packageId: p.packageId,
     driverId: p.driverId,
     timestamp: p.timestamp,
-    url: `${API_URL}${p.url}`,
+    // S3 presigned URLs are absolute; local URLs are relative paths
+    url: p.url.startsWith("http") ? p.url : `${API_URL}${p.url}`,
   }));
 }
 

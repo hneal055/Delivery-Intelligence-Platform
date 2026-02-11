@@ -14,13 +14,13 @@ from src.backend.api.routes import websocket
 from src.backend.api.routes import dispatch
 from src.backend.api.routes import tracking
 from src.backend.core.config import settings
-from src.backend.api.metrics import ACTIVE_DRIVERS, driver_heartbeats
+from src.backend.api.metrics import ACTIVE_DRIVERS
+from src.backend.services.heartbeat import heartbeat_service
 from src.backend.core.database import AsyncSessionLocal
 from src.backend.services.user_service import get_user_by_username, create_user
 from src.backend.models.domain import UserCreate, UserRole
 import logging
 import asyncio
-import time
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -56,9 +56,7 @@ app.include_router(tracking.router)
 async def update_active_drivers():
     while True:
         try:
-            now = time.time()
-            # Count drivers seen in last 60 seconds
-            active_count = sum(1 for ts in driver_heartbeats.values() if now - ts < 60)
+            active_count = await heartbeat_service.get_online_count()
             ACTIVE_DRIVERS.set(active_count)
         except Exception as e:
             logger.error(f"Error updating active drivers metric: {e}")

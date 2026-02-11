@@ -4,13 +4,11 @@ from sqlalchemy import select, func
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
-import time
-
 from src.backend.core.database import get_db
 from src.backend.api.deps import get_current_active_user
 from src.backend.models.domain import User
 from src.backend.models.sql_models import Driver as DriverSQL, Package as PackageSQL
-from src.backend.api.metrics import driver_heartbeats
+from src.backend.services.heartbeat import heartbeat_service
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 
@@ -65,7 +63,6 @@ async def list_drivers(
     result = await db.execute(query)
     drivers = result.scalars().all()
 
-    now = time.time()
     responses = []
     for d in drivers:
         # Count packages assigned to this driver
@@ -74,9 +71,7 @@ async def list_drivers(
         )
         pkg_count = pkg_count_result.scalar() or 0
 
-        # Check if driver has recent heartbeat (online in last 60s)
-        last_hb = driver_heartbeats.get(d.id)
-        is_online = last_hb is not None and (now - last_hb) < 60
+        is_online = await heartbeat_service.is_online(d.id)
 
         responses.append(DriverResponse(
             id=d.id,
@@ -168,8 +163,6 @@ async def get_dashboard_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """Get dispatch dashboard summary statistics."""
-    now = time.time()
-
     # Driver counts
     total_drivers_result = await db.execute(select(func.count()).select_from(DriverSQL))
     total_drivers = total_drivers_result.scalar() or 0
@@ -179,7 +172,7 @@ async def get_dashboard_summary(
     )
     active_drivers = active_drivers_result.scalar() or 0
 
-    online_drivers = sum(1 for ts in driver_heartbeats.values() if now - ts < 60)
+    online_drivers = await heartbeat_service.get_online_count()
 
     # Package counts
     total_packages_result = await db.execute(select(func.count()).select_from(PackageSQL))

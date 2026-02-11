@@ -1,15 +1,15 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel
-import time
+from datetime import datetime
 
 from src.backend.core.database import get_db
 from src.backend.api.deps import get_current_active_user
-from src.backend.models.domain import User
-from src.backend.models.sql_models import Driver as DriverSQL
-from src.backend.api.metrics import driver_heartbeats
+from src.backend.models.domain import User, LocationUpdate
+from src.backend.models.sql_models import Driver as DriverSQL, LocationHistory
+from src.backend.services.heartbeat import heartbeat_service
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
@@ -33,11 +33,9 @@ async def get_all_live_locations(
     result = await db.execute(select(DriverSQL))
     drivers = result.scalars().all()
 
-    now = time.time()
     locations = []
     for d in drivers:
-        last_hb = driver_heartbeats.get(d.id)
-        is_online = last_hb is not None and (now - last_hb) < 60
+        is_online = await heartbeat_service.is_online(d.id)
 
         if d.current_lat is not None and d.current_lon is not None:
             locations.append(LiveDriverLocation(
@@ -53,12 +51,6 @@ async def get_all_live_locations(
     return locations
 
 
-# --- Phase 2: Location History ---
-from fastapi import HTTPException
-from src.backend.models.sql_models import LocationHistory
-from src.backend.models.domain import LocationUpdate
-from datetime import datetime
-
 @router.post("/{driver_id}/location")
 async def update_location(
     driver_id: str,
@@ -70,12 +62,12 @@ async def update_location(
     result = await db.execute(select(DriverSQL).where(DriverSQL.id == driver_id))
     driver = result.scalars().first()
     if not driver:
-         raise HTTPException(status_code=404, detail="Driver not found")
-    
+        raise HTTPException(status_code=404, detail="Driver not found")
+
     driver.current_lat = data.lat
     driver.current_lon = data.lon
-    driver_heartbeats[driver_id] = time.time()
-    
+    await heartbeat_service.update(driver_id)
+
     # Add to History
     history = LocationHistory(
         driver_id=driver_id,
@@ -87,7 +79,7 @@ async def update_location(
         timestamp=data.timestamp or datetime.utcnow()
     )
     db.add(history)
-    
+
     await db.commit()
     return {"status": "updated"}
 
@@ -103,4 +95,3 @@ async def get_location_history(
     result = await db.execute(query)
     history = result.scalars().all()
     return history
-
