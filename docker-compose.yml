@@ -40,8 +40,32 @@ services:
       - db
       - redis
 
+  worker:
+    build: .
+    container_name: delivery_worker
+    environment:
+      - PYTHONPATH=/app
+      - SECRET_KEY=production-secret-key-change-me
+      - DATABASE_URL=postgresql://postgres:new_postgres_password@db:5432/delivery_db
+      - REDIS_URL=redis://redis:6379/0
+      - PROOF_STORAGE=local
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_REGION=us-east-1
+      - S3_BUCKET_NAME=delivery-proofs
+      - S3_ENDPOINT_URL=http://localstack:4566
+    volumes:
+      - ./src:/app/src
+      - ./tools:/app/tools
+      - ./migrations:/app/migrations
+    command: arq src.backend.worker.main.WorkerSettings --watch src
+    restart: always
+    depends_on:
+      - db
+      - redis
+
   db:
-    image: postgres:15-alpine
+    image: postgis/postgis:15-3.3-alpine
     container_name: delivery_db
     environment:
       - POSTGRES_USER=postgres
@@ -101,3 +125,4 @@ volumes:
   postgres_data:
   grafana_data:
   localstack_data:
+

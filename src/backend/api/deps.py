@@ -7,6 +7,7 @@ from src.backend.core.config import settings
 from src.backend.models.domain import TokenData, User, UserRole
 from src.backend.services.user_service import get_user_by_username
 from src.backend.core.database import get_db
+from src.backend.core.permissions import Permission, ROLE_PERMISSIONS
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
@@ -60,3 +61,16 @@ async def get_current_dispatcher(
             detail="Dispatcher (manager/admin) role required"
         )
     return current_user
+
+class PermissionChecker:
+    def __init__(self, required_permission: Permission):
+        self.required_permission = required_permission
+
+    def __call__(self, user: User = Depends(get_current_active_user)) -> User:
+        user_permissions = ROLE_PERMISSIONS.get(user.role, set())
+        if self.required_permission not in user_permissions:
+             raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Operation not permitted. Required: {self.required_permission.value}"
+            )
+        return user

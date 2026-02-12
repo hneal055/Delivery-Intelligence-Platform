@@ -5,6 +5,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy.ext.asyncio import AsyncSession
+from arq import create_pool
+from arq.connections import RedisSettings
+
 from src.backend.api.limiter import limiter
 from src.backend.api.routes import delivery
 from src.backend.api.routes import routing
@@ -19,11 +22,13 @@ from src.backend.services.heartbeat import heartbeat_service
 from src.backend.core.database import AsyncSessionLocal
 from src.backend.services.user_service import get_user_by_username, create_user
 from src.backend.models.domain import UserCreate, UserRole
+from src.backend.services.redis_manager import manager as ws_manager
+from src.backend.core.logging_config import configure_logging
 import logging
 import asyncio
 
 # Configure Logging
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -99,9 +104,28 @@ async def init_data():
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(update_active_drivers())
+    logger.info("Starting up Delivery Intelligence Platform...")
+    
+    # Init ARQ Redis Pool
+    if settings.REDIS_URL:
+        # Simple parsing logic for local dev "redis://redis:6379/0"
+        # For robustness, could use urlparse
+        try:
+            app.state.arq_pool = await create_pool(RedisSettings(host="redis", port=6379, database=0))
+            logger.info("ARQ Redis pool initialized")
+        except Exception as e:
+            logger.error(f"Failed to init ARQ pool: {e}")
+            app.state.arq_pool = None
+    
     await init_data()
+    await ws_manager.connect()
+    asyncio.create_task(update_active_drivers())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    if hasattr(app.state, "arq_pool") and app.state.arq_pool:
+        await app.state.arq_pool.close()
 
 @app.get("/")
-def root():
+async def root():
     return RedirectResponse(url="/docs")

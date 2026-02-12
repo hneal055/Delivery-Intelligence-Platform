@@ -19,11 +19,11 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Equipment / Barcode Scanning**: Camera-based barcode scanning for equipment check-in/out tracking.
 
 ## Technical Stack
-*   **Backend**: Python 3.8+, FastAPI, Uvicorn
+*   **Backend**: Python 3.9+, FastAPI, Uvicorn, Arq (Async Worker)
 *   **Web Dashboard**: React 19, TypeScript, Vite, Mantine UI, Leaflet Maps
 *   **Mobile**: React Native, Expo
-*   **Data & ML**: Pandas, Scikit-learn, Shapely
-*   **Infrastructure**: Docker, Kubernetes, AWS (CloudFormation)
+*   **Data & ML**: Pandas, Scikit-learn, Shapely, GeoAlchemy2, PostGIS
+*   **Infrastructure**: Docker Compose, PostgreSQL + PostGIS, Redis, LocalStack (S3)
 *   **Visualization**: Grafana, Prometheus
 *   **Testing**: Pytest
 

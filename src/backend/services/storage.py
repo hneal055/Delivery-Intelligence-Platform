@@ -34,6 +34,11 @@ class StorageBackend(ABC):
 
 class LocalStorageBackend(StorageBackend):
     def __init__(self, base_dir: str):
+        if settings.ENV == "production":
+            raise RuntimeError(
+                "LocalStorageBackend is not allowed in production environment. "
+                "Please configure S3StorageBackend by setting PROOF_STORAGE=s3."
+            )
         self.base_dir = base_dir
         os.makedirs(self.base_dir, exist_ok=True)
 
@@ -148,8 +153,15 @@ def get_storage_backend() -> StorageBackend:
     if settings.PROOF_STORAGE == "s3" and settings.AWS_ACCESS_KEY_ID:
         logger.info("Using S3 storage backend for proofs")
         return S3StorageBackend()
-    logger.info("Using local filesystem storage backend for proofs")
-    return LocalStorageBackend(_get_proofs_base_dir())
+    
+    # Check if PROOF_STORAGE is "local" but ENVIRONMENT is "production"
+    if settings.ENV == "production" and settings.PROOF_STORAGE == "local":
+         raise RuntimeError(
+                "Fatal Configuration Error: LocalStorageBackend is not allowed in production. "
+                "Set PROOF_STORAGE=s3 and provide AWS credentials."
+            )
 
+    logger.info("Using Local storage backend for proofs")
+    return LocalStorageBackend(_get_proofs_base_dir())
 
 proof_storage = get_storage_backend()

@@ -9,6 +9,7 @@ from alembic import context
 
 # Import project settings and models
 import sys
+import geoalchemy2
 import os
 
 # Add the project root to the python path so imports work

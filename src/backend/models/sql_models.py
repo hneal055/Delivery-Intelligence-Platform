@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Boolean, Float, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from geoalchemy2 import Geometry
 import uuid
 
 from src.backend.core.database import Base
@@ -36,6 +37,7 @@ class Driver(Base):
     # Current Location (Flattened from Location model)
     current_lat = Column(Float, nullable=True)
     current_lon = Column(Float, nullable=True)
+    location = Column(Geometry('POINT', srid=4326), nullable=True)
     last_updated = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
@@ -58,6 +60,7 @@ class Package(Base):
     dest_lat = Column(Float, nullable=False)
     dest_lon = Column(Float, nullable=False)
     dest_address = Column(String, nullable=True)
+    destination_location = Column(Geometry('POINT', srid=4326), nullable=True)
     
     status = Column(String, default="pending")
     section = Column(String, nullable=True)
@@ -66,6 +69,9 @@ class Package(Base):
     priority = Column(String, default="standard")
     scheduled_window_start = Column(DateTime(timezone=True), nullable=True)
     scheduled_window_end = Column(DateTime(timezone=True), nullable=True)
+
+    # Customer Tracking
+    tracking_code = Column(String, unique=True, index=True, nullable=True)
 
     # ML Training Features
     distance_km = Column(Float, nullable=True)
@@ -123,6 +129,7 @@ class LocationHistory(Base):
     driver_id = Column(String, ForeignKey("drivers.id"), nullable=False, index=True)
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
+    location = Column(Geometry('POINT', srid=4326), nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     speed = Column(Float, nullable=True)
     heading = Column(Float, nullable=True)
@@ -130,3 +137,12 @@ class LocationHistory(Base):
     
     driver = relationship("Driver", back_populates="location_history")
 
+
+class DeviceToken(Base):
+    __tablename__ = "device_tokens"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    token = Column(String, unique=True, nullable=False)
+    platform = Column(String, default="android")  # ios, android, web
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

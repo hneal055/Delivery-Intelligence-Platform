@@ -63,39 +63,6 @@ Testing the system without physical vehicles.
 
 Full-featured React/TypeScript dispatcher dashboard.
 
-### 6.1 Foundation & Bug Fixes
 
-- [x] Install missing dependencies (`@tabler/icons-react`, `@mantine/form`, `@mantine/notifications`)
-- [x] Fix style imports and add Notifications provider
-- [x] Add new TypeScript types and fix field name mismatches in SchedulingPage
-
-### 6.2 Proof of Delivery Gallery
-
-- [x] Backend endpoints: `GET /delivery/recent-proofs`, `GET /delivery/proof/{filename}`
-- [x] Gallery page with card grid, detail modal, search/date filtering
-- **Files**: `src/web/src/pages/ProofGalleryPage.tsx`, `src/web/src/components/delivery/`
-
-### 6.3 GPS Tracking Enhancement
-
-- [x] Full-page tracking with driver selector and real-time map
-- [x] Route playback with play/pause, speed control, and timeline scrubbing
-- **Files**: `src/web/src/pages/TrackingPage.tsx`, `src/web/src/components/map/RoutePlayback*.tsx`
-
-### 6.4 Dispatch & Scheduling Enhancement
-
-- [x] Table/Board (Kanban) toggle view with status filters
-- [x] Job detail drawer with actions (Assign, Start, Complete, Cancel)
-- [x] Enhanced CreateJobModal (type, priority) and AssignmentModal (workload sorting)
-- **Files**: `src/web/src/pages/SchedulingPage.tsx`, `src/web/src/components/dispatch/`
-
-### 6.5 Equipment & Barcode Scanning
-
-- [x] Camera-based barcode scanning via BarcodeDetector API with polyfill
-- [x] Equipment management with check-in/out, localStorage persistence
-- [x] Activity timeline of scan events
-- **Files**: `src/web/src/pages/EquipmentPage.tsx`, `src/web/src/components/equipment/`
-
-## Phase 7: Production Hardening
-*   **Database**: Persist data to PostgreSQL instead of memory.
-*   **Containerization**: Finalize `Dockerfile` and `docker-compose.yml`.
-*   **Metrics**: Prometheus/Grafana export.
+## Phase 7: Production Readiness (Next Phase)
+See [PRODUCTION_READINESS_PLAN.md](PRODUCTION_READINESS_PLAN.md) for the detailed roadmap on Security, Scalability, and Infrastructure hardening.

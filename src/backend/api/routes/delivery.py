@@ -12,6 +12,9 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
+import traceback
+import logging
+
 from src.backend.models.domain import Location, Driver, User
 from src.analytics.geofencing.engine import geofence_engine
 from src.analytics.image_analysis.verifier import image_verifier
@@ -23,6 +26,8 @@ from src.backend.api.limiter import limiter
 from src.backend.api.metrics import DELIVERIES_COMPLETED
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.core.database import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
@@ -99,6 +104,7 @@ async def verify_location(
 
 @router.post("/confirm")
 async def confirm_delivery(
+    request: Request,
     package_id: str = Form(...),
     driver_id: str = Form(...),
     photo: UploadFile = File(...),
@@ -106,33 +112,52 @@ async def confirm_delivery(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    await heartbeat_service.update(driver_id)
+    try:
+        await heartbeat_service.update(driver_id)
 
-    # 1. Read file content
-    content = await photo.read()
+        # 1. Read file content
+        content = await photo.read()
 
-    # 2. Save Proof of Delivery via storage backend (local or S3)
-    storage_key = f"{package_id}_{driver_id}.jpg"
-    proof_storage.upload(storage_key, content, "image/jpeg")
+        # 2. Save Proof of Delivery via storage backend (local or S3)
+        storage_key = f"{package_id}_{driver_id}.jpg"
+        proof_storage.upload(storage_key, content, "image/jpeg")
 
-    # 3. Verify Image (Blur/Darkness)
-    is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)
-    if not is_valid_image:
-        raise HTTPException(status_code=400, detail=f"Invalid Proof of Delivery: {reason}")
+        # 3. Verify Image (Blur/Darkness) - STILL SYNCHRONOUS for now as it is critical path rejection
+        is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)
+        if not is_valid_image:
+            raise HTTPException(status_code=400, detail=f"Invalid Proof of Delivery: {reason}")
 
-    # 4. Update Database Status
-    await delivery_service.update_package_status(db, package_id, "delivered", driver_id)
-    DELIVERIES_COMPLETED.inc()
+        # 4. Update Database Status
+        await delivery_service.update_package_status(db, package_id, "delivered", driver_id)
+        DELIVERIES_COMPLETED.inc()
 
-    # 5. Trigger Async Notification
-    background_tasks.add_task(
-        notification_service.send_notification,
-        "customer_placeholder",
-        "email@example.com",
-        NotificationEvent.DELIVERY_COMPLETED,
-    )
+        # 5. Trigger Notification (Async via Queue if available, else BackgroundTasks)
+        # Using ARQ if available
+        if hasattr(request.app.state, "arq_pool") and request.app.state.arq_pool:
+            logger.info("Enqueuing notification task via ARQ")
+            await request.app.state.arq_pool.enqueue_job(
+                "send_notification_task",
+                "customer_placeholder",
+                "email@example.com",
+                NotificationEvent.DELIVERY_COMPLETED.value
+            )
+        else:
+            logger.info("Enqueuing notification via BackgroundTasks (Fallback)")
+            background_tasks.add_task(
+                notification_service.send_notification,
+                "customer_placeholder",
+                "email@example.com",
+                NotificationEvent.DELIVERY_COMPLETED,
+            )
 
-    return {"status": "success", "package_id": package_id}
+        return {"status": "success", "package_id": package_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing delivery confirmation for {package_id}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @router.post("/exception")
 async def report_exception(
@@ -145,3 +170,4 @@ async def report_exception(
     await heartbeat_service.update(driver_id)
     await delivery_service.update_package_status(db, package_id, "exception", driver_id)
     return {"status": "exception_reported", "package_id": package_id, "reason": reason}
+
