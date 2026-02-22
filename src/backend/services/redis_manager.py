@@ -64,11 +64,13 @@ class RedisPubSubManager:
         self.driver_connections[driver_id] = websocket
         logger.info(f"Driver {driver_id} connected (Local). Total: {len(self.driver_connections)}")
 
-    def disconnect(self, user_id: str):
+    def disconnect(self, user_id: str, websocket: WebSocket = None):
         if user_id in self.dispatcher_connections:
-            del self.dispatcher_connections[user_id]
+            if websocket is None or self.dispatcher_connections[user_id] is websocket:
+                del self.dispatcher_connections[user_id]
         if user_id in self.driver_connections:
-            del self.driver_connections[user_id]
+            if websocket is None or self.driver_connections[user_id] is websocket:
+                del self.driver_connections[user_id]
 
     async def broadcast_to_dispatchers(self, message: dict):
         """

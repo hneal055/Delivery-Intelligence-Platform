@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 import traceback
 import logging
 
@@ -34,7 +35,7 @@ router = APIRouter(prefix="/delivery", tags=["delivery"])
 
 @router.get("/recent-proofs")
 async def get_recent_proofs() -> List[dict]:
-    files = proof_storage.list_files()
+    files = await asyncio.to_thread(proof_storage.list_files)
     results = []
     for entry in files:
         key = entry["key"]
@@ -120,7 +121,7 @@ async def confirm_delivery(
 
         # 2. Save Proof of Delivery via storage backend (local or S3)
         storage_key = f"{package_id}_{driver_id}.jpg"
-        proof_storage.upload(storage_key, content, "image/jpeg")
+        await asyncio.to_thread(proof_storage.upload, storage_key, content, "image/jpeg")
 
         # 3. Verify Image (Blur/Darkness) - STILL SYNCHRONOUS for now as it is critical path rejection
         is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)

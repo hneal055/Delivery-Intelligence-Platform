@@ -26,7 +26,10 @@ docker-compose exec -T backend python tools/seed_data.py
 # 5. Grafana Setup
 Write-Host "`n[4/5] Configuring Grafana Access..." -ForegroundColor Yellow
 # Reset admin password to ensure access
-docker-compose exec -T grafana grafana-cli admin reset-admin-password new_bizness123
+docker-compose exec -T grafana grafana cli admin reset-admin-password new_bizness123
+# Restart Grafana to clear temporary login lockouts after repeated failed attempts
+docker-compose restart grafana | Out-Null
+Start-Sleep -Seconds 3
 
 # 6. Start Simulation
 Write-Host "`n[5/5] Launching Fleet Simulation..." -ForegroundColor Yellow
@@ -44,4 +47,3 @@ Write-Host "3. Prometheus       : http://localhost:9090"
 Write-Host "---------------------------------------------------"
 Write-Host "Traffic simulation is correctly running in the separate window."
 Write-Host "Dashboards are provisioned and ready."
-

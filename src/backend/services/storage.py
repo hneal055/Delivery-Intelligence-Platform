@@ -5,6 +5,7 @@ Controlled by PROOF_STORAGE env var: "local" or "s3".
 """
 
 import os
+import re
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -61,19 +62,26 @@ class LocalStorageBackend(StorageBackend):
     def list_files(self, prefix: str = "") -> List[dict]:
         if not os.path.exists(self.base_dir):
             return []
-        results = []
+        # Extract the Unix timestamp embedded in filenames (e.g. PKG-D001-1770914907-5763_D001.jpg)
+        # to sort without calling os.stat() on every file — avoids O(n) stat calls on slow
+        # Docker-for-Windows volume mounts where each stat syscall has ~50ms latency.
+        _ts_re = re.compile(r'-(\d{9,11})-')
+        entries = []
         for f in os.listdir(self.base_dir):
             if not f.lower().endswith((".jpg", ".jpeg", ".png")):
                 continue
-            path = os.path.join(self.base_dir, f)
-            stat = os.stat(path)
+            m = _ts_re.search(f)
+            ts = int(m.group(1)) if m else 0
+            entries.append((ts, f))
+        entries.sort(reverse=True)
+        results = []
+        for ts, f in entries[:50]:
             results.append({
                 "key": f,
-                "size": stat.st_size,
-                "last_modified": datetime.fromtimestamp(stat.st_mtime),
+                "size": 0,
+                "last_modified": datetime.fromtimestamp(ts),
             })
-        results.sort(key=lambda x: x["last_modified"], reverse=True)
-        return results[:50]
+        return results
 
 
 class S3StorageBackend(StorageBackend):

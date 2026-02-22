@@ -18,7 +18,10 @@ export class DispatchWebSocket {
   }
 
   connect() {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (
+      this.ws?.readyState === WebSocket.OPEN ||
+      this.ws?.readyState === WebSocket.CONNECTING
+    ) return;
 
     const url = `${WS_BASE}/ws/dispatch?token=${encodeURIComponent(this.token)}`;
     this.ws = new WebSocket(url);
@@ -56,6 +59,11 @@ export class DispatchWebSocket {
       this.reconnectTimer = null;
     }
     if (this.ws) {
+      // Null handlers before close so onerror/onclose don't fire after intentional disconnect
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
       this.ws.close();
       this.ws = null;
     }

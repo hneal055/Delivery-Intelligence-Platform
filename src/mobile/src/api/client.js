@@ -2,33 +2,36 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
 
-const API_URL =
+// REPLACE WITH YOUR PC'S IP ADDRESS IF TESTING ON PHYSICAL DEVICE
+// For Android Emulator, use '10.0.2.2'
+// For iOS Simulator, use 'localhost'
+const DEV_MACHINE_IP = '192.168.12.196'; 
+const PORT = '8000';
+
+export const API_URL =
   Platform.OS === 'web'
-    ? 'http://localhost:8000'
-    : 'http://192.168.12.196:8000';
+    ? `http://localhost:${PORT}`
+    : `http://${DEV_MACHINE_IP}:${PORT}`;
+
+export const WS_URL =
+  Platform.OS === 'web'
+    ? `ws://localhost:${PORT}`
+    : `ws://${DEV_MACHINE_IP}:${PORT}`;
 
 const apiClient = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 10000,
 });
 
-apiClient.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      useAuthStore.getState().logout();
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = useAuthStore.getState().token;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    return Promise.reject(error);
-  }
+    return config;
+  },
+  (error) => Promise.reject(error)
 );
 
-export { API_URL };
 export default apiClient;
