@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-export default function EtaDisplay({ eta }) {
+const EtaDisplay = React.memo(function EtaDisplay({ eta }) {
   if (!eta) {
     return (
       <View style={styles.container}>
@@ -19,7 +19,9 @@ export default function EtaDisplay({ eta }) {
       <Text style={styles.note}>(ML Model Confidence: High)</Text>
     </View>
   );
-}
+});
+
+export default EtaDisplay;
 
 const styles = StyleSheet.create({
   container: {

@@ -7,6 +7,12 @@
 
 $ErrorActionPreference = "Stop"
 
+$RepoRoot = $PSScriptRoot
+if (-not $RepoRoot) {
+    $RepoRoot = (Get-Location).Path
+}
+Set-Location $RepoRoot
+
 function Write-Section {
     param([string]$Message)
     Write-Host "`n===================================================" -ForegroundColor Cyan
@@ -53,7 +59,7 @@ if (Test-Path ".\start_platform.ps1") {
 
 # 3. Start Frontend
 Write-Step "Launching Frontend (Vite)..."
-$frontendPath = ".\src\web"
+$frontendPath = Join-Path $RepoRoot "src\web"
 if (Test-Path $frontendPath) {
     Push-Location $frontendPath
     
@@ -77,8 +83,36 @@ if (Test-Path $frontendPath) {
     Write-Warning "Frontend path $frontendPath not found."
 }
 
+# 4. Start Mobile App (Expo)
+Write-Step "Launching Mobile App (Expo)..."
+$mobilePath = Join-Path $RepoRoot "src\mobile"
+if (Test-Path $mobilePath) {
+    Push-Location $mobilePath
+
+    if (Test-Path "package.json") {
+        Write-Host "Checking mobile dependencies..." -ForegroundColor Gray
+        try {
+            npm install --silent
+        } catch {
+            Write-Warning "npm install had issues. Continuing to start..."
+        }
+
+        Write-Host "Starting Expo Development Server in new window..." -ForegroundColor Green
+        $absPath = (Resolve-Path $mobilePath).Path
+        Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm start" -WorkingDirectory $absPath -WindowStyle Normal
+    } else {
+        Write-Warning "No package.json found in $mobilePath"
+    }
+    Pop-Location
+} else {
+    Write-Warning "Mobile path $mobilePath not found."
+}
+
 Write-Section "Daily Startup Complete"
 Write-Host "1. Backend & Services : (See start_platform output)"
 Write-Host "2. Simulation         : Running in separate window"
 Write-Host "3. Frontend           : Running in separate window (http://localhost:5173)"
+Write-Host "4. Mobile (Expo)      : Running in separate window (scan QR for device)"
 Write-Host "`nHappy Coding!" -ForegroundColor Green
+
+

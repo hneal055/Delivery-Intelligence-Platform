@@ -1,3 +1,8 @@
+$RepoRoot = $PSScriptRoot
+if (-not $RepoRoot) {
+    $RepoRoot = (Get-Location).Path
+}
+Set-Location $RepoRoot
 
 Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host "   Delivery Intelligence Platform - Startup" -ForegroundColor Cyan
@@ -47,3 +52,5 @@ Write-Host "3. Prometheus       : http://localhost:9090"
 Write-Host "---------------------------------------------------"
 Write-Host "Traffic simulation is correctly running in the separate window."
 Write-Host "Dashboards are provisioned and ready."
+
+

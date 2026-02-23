@@ -82,10 +82,16 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
+class JobType(str, Enum):
+    DELIVERY = "delivery"
+    PICKUP = "pickup"
+    SERVICE = "service"
+    EXCEPTION = "exception"
+
 class DispatchJobCreate(BaseModel):
     driver_id: Optional[str] = None
     title: str
-    type: str = "delivery"
+    type: JobType = JobType.DELIVERY
     priority: str = "medium"
     notes: Optional[str] = None
     scheduled_at: Optional[datetime] = None

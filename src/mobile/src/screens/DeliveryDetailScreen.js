@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, Button, Image, ScrollView, StyleSheet,
   Platform, Alert, Switch,
@@ -20,16 +20,9 @@ export default function DeliveryDetailScreen({ route }) {
   const [photo, setPhoto] = useState(null);
   const [eta, setEta] = useState(null);
   const [traffic, setTraffic] = useState(0.5);
-  const [isAutoEta, setIsAutoEta] = useState(true);
+  const [isAutoEta, setIsAutoEta] = useState(false);
 
-  useEffect(() => {
-    if (isAutoEta && location) {
-      const timer = setTimeout(() => calculateEta(), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [location, traffic, isAutoEta]);
-
-  const calculateEta = async () => {
+  const calculateEta = useCallback(async () => {
     if (!location) return;
     try {
       const dist = getDistanceFromLatLonInKm(
@@ -47,11 +40,18 @@ export default function DeliveryDetailScreen({ route }) {
     } catch (error) {
       console.error('ETA Error', error);
     }
-  };
+  }, [location, traffic, pkg.dest_lat, pkg.dest_lon]);
 
-  const verifyLocation = async () => {
+  useEffect(() => {
+    if (isAutoEta && location) {
+      const timer = setTimeout(() => calculateEta(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [location, traffic, isAutoEta, calculateEta]);
+
+  const verifyLocation = useCallback(async () => {
     if (!location) {
-      alert('No location data available yet.');
+      Alert.alert('No GPS Signal', 'No location data available yet. Please wait for GPS lock.');
       return;
     }
     try {
@@ -68,23 +68,26 @@ export default function DeliveryDetailScreen({ route }) {
         },
       });
       setVerificationStatus(response.data.message);
-      const msg = response.data.message;
-      Platform.OS === 'web' ? alert(msg) : Alert.alert('API Response', msg);
+      Alert.alert('Location Check', response.data.message);
     } catch (error) {
       console.error(error);
       setVerificationStatus('Error connecting to API');
     }
-  };
+  }, [location, driverId, pkg.dest_lat, pkg.dest_lon]);
 
-  const pickImage = async () => {
+  const pickImage = useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      alert('Camera permission is required for proof of delivery.');
+      Alert.alert(
+        'Camera Required',
+        'Camera permission is required to capture proof of delivery.',
+        [{ text: 'OK' }]
+      );
       return;
     }
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: 'Images',
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.5,
@@ -95,11 +98,11 @@ export default function DeliveryDetailScreen({ route }) {
     } catch (error) {
       console.error('Camera Error:', error);
     }
-  };
+  }, []);
 
-  const confirmDelivery = async () => {
+  const confirmDelivery = useCallback(async () => {
     if (!photo) {
-      alert('Please take a proof photo first.');
+      Alert.alert('Photo Required', 'Please take a proof photo first.');
       return;
     }
     try {
@@ -116,7 +119,7 @@ export default function DeliveryDetailScreen({ route }) {
         formData.append('photo', blob, filename || 'upload.jpg');
       } else {
         const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image';
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
         formData.append('photo', { uri: localUri, name: filename, type });
       }
 
@@ -124,17 +127,15 @@ export default function DeliveryDetailScreen({ route }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      const msg = 'Delivery Confirmed!';
-      Platform.OS === 'web' ? alert(msg) : Alert.alert('Success', msg);
+      Alert.alert('Success', 'Delivery Confirmed!');
       setPhoto(null);
     } catch (error) {
       console.error(error);
-      const msg = 'Delivery Confirmation Failed';
-      Platform.OS === 'web' ? alert(msg) : Alert.alert('Error', msg);
+      Alert.alert('Error', 'Delivery Confirmation Failed. Please try again.');
     }
-  };
+  }, [photo, pkg.id, driverId]);
 
-  const reportException = async () => {
+  const reportException = useCallback(async () => {
     try {
       const formData = new FormData();
       formData.append('package_id', pkg.id);
@@ -145,13 +146,12 @@ export default function DeliveryDetailScreen({ route }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      const msg = 'Exception reported.';
-      Platform.OS === 'web' ? alert(msg) : Alert.alert('Reported', msg);
+      Alert.alert('Reported', 'Exception reported.');
     } catch (error) {
       console.error(error);
-      alert('Failed to report exception.');
+      Alert.alert('Error', 'Failed to report exception.');
     }
-  };
+  }, [pkg.id, driverId]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -163,7 +163,7 @@ export default function DeliveryDetailScreen({ route }) {
         </View>
         <TrafficSelector traffic={traffic} onTrafficChange={setTraffic} />
         <EtaDisplay eta={eta} />
-        {!isAutoEta && <Button title="Refresh ETA" onPress={calculateEta} />}
+        <Button title="Calculate ETA" onPress={calculateEta} />
       </View>
 
       <View style={styles.card}>
@@ -186,7 +186,7 @@ export default function DeliveryDetailScreen({ route }) {
         </View>
 
         <Button title="Capture Proof of Delivery" onPress={pickImage} />
-        {photo && <Image source={{ uri: photo }} style={styles.image} />}
+        {photo && <Image source={{ uri: photo }} style={styles.image} resizeMode="cover" />}
 
         <View style={{ marginTop: 10 }}>
           <Button

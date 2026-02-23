@@ -11,7 +11,7 @@ function statusColor(status) {
   }
 }
 
-export default function DeliveryCard({ pkg, onPress }) {
+const DeliveryCard = React.memo(function DeliveryCard({ pkg, onPress }) {
   const etaMinutes = pkg.predicted_eta_seconds ? Math.round(pkg.predicted_eta_seconds / 60) : null;
 
   return (
@@ -22,15 +22,15 @@ export default function DeliveryCard({ pkg, onPress }) {
           <Text style={styles.badgeText}>{pkg.status.toUpperCase()}</Text>
         </View>
       </View>
-      
+
       <View style={styles.divider} />
-      
+
       <View style={styles.body}>
         <Text style={styles.addressLabel}>Destination:</Text>
         <Text style={styles.address} numberOfLines={2}>
           {pkg.dest_address || `${pkg.dest_lat.toFixed(4)}, ${pkg.dest_lon.toFixed(4)}`}
         </Text>
-        
+
         {etaMinutes !== null && (
           <View style={styles.etaContainer}>
             <Text style={styles.etaLabel}>Est. Arrival:</Text>
@@ -40,7 +40,9 @@ export default function DeliveryCard({ pkg, onPress }) {
       </View>
     </TouchableOpacity>
   );
-}
+});
+
+export default DeliveryCard;
 
 const styles = StyleSheet.create({
   card: {

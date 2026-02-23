@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Text, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, FlatList, Text, StyleSheet, RefreshControl, ActivityIndicator, Platform } from 'react-native';
+
 import apiClient from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import DeliveryCard from '../components/DeliveryCard';
@@ -61,6 +62,18 @@ export default function DeliveryListScreen({ navigation }) {
     fetchPackages();
   }, [fetchPackages]);
 
+  const keyExtractor = useCallback((item) => item.id, []);
+
+  const renderItem = useCallback(
+    ({ item }) => (
+      <DeliveryCard
+        pkg={item}
+        onPress={() => navigation.navigate('DeliveryDetail', { pkg: item })}
+      />
+    ),
+    [navigation]
+  );
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -74,13 +87,8 @@ export default function DeliveryListScreen({ navigation }) {
     <View style={styles.container}>
       <FlatList
         data={packages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <DeliveryCard
-            pkg={item}
-            onPress={() => navigation.navigate('DeliveryDetail', { pkg: item })}
-          />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -88,6 +96,11 @@ export default function DeliveryListScreen({ navigation }) {
         ListEmptyComponent={
           <Text style={styles.empty}>No deliveries assigned</Text>
         }
+        // Performance tuning for high-refresh-rate displays (iPhone 17 ProMotion 120Hz)
+        initialNumToRender={8}
+        maxToRenderPerBatch={5}
+        windowSize={10}
+        removeClippedSubviews={Platform.OS === 'ios'}
       />
     </View>
   );

@@ -1,7 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Text, View } from 'react-native';
+import { Text, View, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DeliveryListScreen from '../screens/DeliveryListScreen';
 import DeliveryDetailScreen from '../screens/DeliveryDetailScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -38,6 +39,9 @@ function TabIcon({ label, focused }) {
 export default function MainTabs() {
   // Start tracking location when main tabs are mounted (user is logged in)
   const { status } = useTracking();
+  // Respect the iPhone 17 home indicator / Dynamic Island safe area
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = Platform.OS === 'ios' ? 50 + insets.bottom : 60;
 
   return (
     <Tab.Navigator
@@ -47,14 +51,13 @@ export default function MainTabs() {
         tabBarActiveTintColor: '#0066cc',
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          height: tabBarHeight,
+          paddingTop: 6,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          paddingBottom: 5,
-        }
+        },
       })}
     >
       <Tab.Screen

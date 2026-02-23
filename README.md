@@ -30,18 +30,35 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 ## Quick Start Guide
 
 ### 1. Daily Development Startup
-We provided a helper script to spin up the entire stack, apply migrations, seed data, and start traffic simulation:
+Run the daily startup script to launch the entire stack (backend, frontend, mobile, and simulation):
+
+```powershell
+.\daily_startup.ps1
+```
+
+This automated script:
+- Pulls latest code from git
+- Starts Docker services (PostgreSQL, Redis, Grafana)
+- Applies database migrations and seeds test data
+- Launches fleet simulation
+- Starts web dashboard (Vite)
+- Starts mobile Expo server
+
+Once complete, access the services at:
+*   **API Docs**: `http://localhost:8000/docs`
+*   **Web Dashboard**: `http://localhost:5173`
+*   **Grafana**: `http://localhost:3500` (Login: `admin` / `new_bizness123`)
+*   **Prometheus**: `http://localhost:9090`
+
+### 2. Backend & Infrastructure Only
+
+If you only need backend services without frontend:
 
 ```powershell
 .\start_platform.ps1
 ```
 
-Once complete, access the services at:
-*   **API Docs**: `http://localhost:8000/docs`
-*   **Grafana**: `http://localhost:3500` (Login: `admin` / `new_bizness123`)
-*   **Prometheus**: `http://localhost:9090`
-
-### 2. Fleet Simulation
+### 3. Fleet Simulation
 The startup script automatically launches the simulation in a new window. To run it manually or add additional load:
 
 ```powershell
@@ -50,7 +67,7 @@ The startup script automatically launches the simulation in a new window. To run
 
 *Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it.*
 
-### 3. Run Dispatcher Web UI
+### 4. Run Dispatcher Web UI
 
 ```bash
 cd src/web
@@ -62,16 +79,43 @@ Access at `http://localhost:5173`. Login with `dispatcher1` / `dispatcherpasswor
 
 Pages: Dashboard, Scheduling, Drivers, Packages, Proof Gallery, Tracking, Equipment.
 
-### 4. Run Mobile App
+### 5. Run Mobile App (Physical Device)
 
-To test the driver experience manually:
-
-```bash
-cd src/mobile
-npx expo start --web
+#### Quick Setup
+Auto-configure your local IP for mobile testing:
+```powershell
+.\configure-mobile-env.ps1
 ```
 
-### 5. Run Tests
+#### Manual Setup
+1. Copy environment template:
+   ```bash
+   cd src/mobile
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and set your PC's LAN IP:
+   ```env
+   EXPO_PUBLIC_API_HOST=192.168.1.100  # Your PC's IP
+   EXPO_PUBLIC_API_PORT=8000
+   ```
+
+3. Start Expo dev server:
+   ```bash
+   npm install
+   npm start
+   ```
+
+4. Scan QR code with Expo Go app on your iPhone/Android device
+
+**Requirements:**
+- Phone and PC must be on the same Wi-Fi network
+- Backend must be running (`.\start_platform.ps1`)
+- Test credentials: `driver1` / `driverpassword`
+
+See [src/mobile/README.md](src/mobile/README.md) for detailed mobile app documentation.
+
+### 6. Run Tests
 Execute the unit test suite:
 ```bash
 pytest
@@ -85,3 +129,9 @@ If you encounter unexpected WebSocket disconnects with the backend:
 1. Ensure 'uvicorn[standard]' is installed in backend dependencies.
 2. The docker-compose configuration forces the 'asyncio' event loop ('uvicorn ... --loop asyncio') to resolve compatibility issues with 'uvloop' in this environment.
 
+### Mobile App Connection Issues
+- Verify backend is running and accessible
+- Check `.env` file in `src/mobile/` has correct IP address
+- Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your PC's LAN IP
+- Ensure firewall allows connections on port 8000
+- Use `.\configure-mobile-env.ps1` for automatic IP detection

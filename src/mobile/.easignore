@@ -1,0 +1,12 @@
+# Exclude runtime-generated proof-of-delivery images — these are created on-device
+# and uploaded to the backend directly; they don't belong in the EAS build source.
+src/uploads/
+
+# Local Expo dev environment files — machine-specific, not part of the build
+.expo/
+
+# Node modules — restored from package.json by EAS
+node_modules/
+
+# Local env overrides (keep EXPO_PUBLIC_* vars out of cloud build logs)
+.env.local

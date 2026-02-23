@@ -1,3 +1,5 @@
+import type { JobType } from "../constants/dispatch";
+
 export interface Location {
   lat: number;
   lon: number;
@@ -40,7 +42,7 @@ export interface User {
 
 export interface Token {
   access_token: string;
-  token_type: string;
+  token_type: JobType;
 }
 
 export interface DashboardSummary {
@@ -80,14 +82,14 @@ export interface DriverStatusUpdate {
   timestamp: number;
 }
 
-export type WebSocketMessage = DriverLocationUpdate | DriverStatusUpdate | { type: string; [key: string]: unknown };
+export type WebSocketMessage = DriverLocationUpdate | DriverStatusUpdate | { type: JobType; [key: string]: unknown };
 
 
 export interface DispatchJob {
   id: string;
   driver_id: string | null;
   title: string;
-  type: string;
+  type: JobType;
   status: string;
   priority: string;
   notes: string | null;
@@ -99,7 +101,7 @@ export interface DispatchJob {
 export interface DispatchJobCreate {
   driver_id?: string;
   title: string;
-  type?: string;
+  type?: JobType;
   priority?: string;
   notes?: string;
   scheduled_at?: string;
@@ -146,7 +148,7 @@ export interface Equipment {
   id: string;
   barcode: string;
   name: string;
-  type: string;
+  type: JobType;
   status: "available" | "checked_out" | "maintenance";
   checked_out_by: string | null;
   checked_out_at: string | null;

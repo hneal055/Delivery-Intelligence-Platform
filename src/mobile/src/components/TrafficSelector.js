@@ -7,7 +7,7 @@ const TRAFFIC_OPTIONS = [
   { label: 'Heavy', value: 0.9 },
 ];
 
-export default function TrafficSelector({ traffic, onTrafficChange }) {
+const TrafficSelector = React.memo(function TrafficSelector({ traffic, onTrafficChange }) {
   return (
     <View>
       <Text style={styles.label}>Current Traffic Conditions:</Text>
@@ -26,7 +26,9 @@ export default function TrafficSelector({ traffic, onTrafficChange }) {
       </View>
     </View>
   );
-}
+});
+
+export default TrafficSelector;
 
 const styles = StyleSheet.create({
   label: {
