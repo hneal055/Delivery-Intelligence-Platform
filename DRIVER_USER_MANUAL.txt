@@ -1,0 +1,1089 @@
+╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║     DELIVERY INTELLIGENCE PLATFORM                                ║
+║     DRIVER USER MANUAL                                            ║
+║                                                                    ║
+║     Version 2.0 | February 2026                                   ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
+
+
+═══════════════════════════════════════════════════════════════════════
+TABLE OF CONTENTS
+═══════════════════════════════════════════════════════════════════════
+
+1. GETTING STARTED
+2. APP INSTALLATION & LOGIN
+3. HOME SCREEN OVERVIEW
+4. ACCEPTING & MANAGING JOBS
+5. NAVIGATION & ROUTING
+6. COMPLETING JOBS
+7. LOCATION TRACKING & PRIVACY
+8. OFFLINE MODE
+9. COMMUNICATION & SUPPORT
+10. TROUBLESHOOTING
+11. FAQ
+
+
+═══════════════════════════════════════════════════════════════════════
+1. GETTING STARTED
+═══════════════════════════════════════════════════════════════════════
+
+WELCOME TO THE DRIVER APP!
+
+This app helps you:
+  ✓ Receive delivery/pickup jobs
+  ✓ Navigate to job locations
+  ✓ Track time and distance
+  ✓ Capture proof of delivery (photos/signatures)
+  ✓ Stay connected with dispatch
+  ✓ Earn performance bonuses
+
+SYSTEM REQUIREMENTS:
+
+  iPhone:
+    • iOS 14.0 or later
+    • 150 MB free storage
+    • Location services enabled
+    • Good WiFi or cellular connection
+
+  Android:
+    • Android 10 or later
+    • 150 MB free storage
+    • Location services enabled
+    • Good WiFi or cellular connection
+
+WHAT YOU NEED TO START:
+
+  • Smartphone (iPhone or Android)
+  • Company user credentials
+  • Location services enabled
+  • Phone number registered
+  • Accept GPS tracking permission
+
+
+═══════════════════════════════════════════════════════════════════════
+2. APP INSTALLATION & LOGIN
+═══════════════════════════════════════════════════════════════════════
+
+INSTALLING THE APP:
+
+iPhone:
+  1. Open App Store
+  2. Search: "Delivery Intelligence"
+  3. Tap "Get" (may ask for fingerprint/face)
+  4. Wait for installation (2-3 minutes)
+  5. Tap "Open"
+
+Android:
+  1. Open Google Play Store
+  2. Search: "Delivery Intelligence"
+  3. Tap "Install"
+  4. Wait for installation (2-3 minutes)
+  5. Tap "Open"
+
+FIRST LOGIN:
+
+Step 1: PERMISSIONS
+  App will request:
+  ✓ GPS Location Access
+  ✓ Storage Access (for photos)
+  ✓ Camera Access (for delivery photos)
+  ✓ Contacts Access (optional, for driver info)
+  
+  👉 Tap "Allow All" to proceed smoothly
+
+Step 2: ENTER CREDENTIALS
+  • Username: Given by dispatcher/manager
+  • Password: Given by dispatcher/manager
+  • Phone: Your work phone number
+  • Tap "Login"
+
+Step 3: LOCATION PERMISSION
+  
+  iPhone users will see:
+    "Allow 'Delivery' to access your location?"
+    ├─ While Using the App → Tap this
+    └─ Always Allow → (optional, for background tracking)
+  
+  Android users will see:
+    "Allow location access?"
+    ├─ Only this time → Tap to test
+    └─ While using the app → Better for efficiency
+
+Step 4: CAMERA SETUP
+  "Allow camera access for delivery photos?"
+  ✓ Must allow to complete deliveries
+  ✓ Also enables face unlock feature
+
+✅ LOGIN COMPLETE
+  You'll see main home screen with today's jobs
+
+
+═══════════════════════════════════════════════════════════════════════
+3. HOME SCREEN OVERVIEW
+═══════════════════════════════════════════════════════════════════════
+
+THE HOME SCREEN LAYOUT:
+
+┌─────────────────────────────────────────────────┐
+│  🟢 Location Tracking Active | ⚙️ Settings     │ ← Status Bar
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  TODAY'S STATISTICS                             │ ← Quick Stats
+│  ✓ 3 Completed  ⟳ 1 Active  🕐 2 Pending      │
+│                                                 │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  📌 ACTIVE JOB                                  │ ← Current Job
+│  Deliver Package to 456 Park Ave                │
+│  🕐 Started: 2:15 PM | Distance: 2.3 km        │
+│  [VIEW MAP] [CALL DISPATCHER]                   │
+│                                                 │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  📋 PENDING JOBS (Next Up)                      │
+│  ☐ Pickup at Downtown Warehouse                │
+│  ☐ Delivery to 123 Main St, Suite B            │
+│  ☐ Service visit: Install equipment            │
+│                                                 │
+└─────────────────────────────────────────────────┘
+
+TOP STATUS BAR:
+
+Color Indicators:
+  🟢 Green:   "✓ Location Tracking Active"
+              GPS is on, app connected, you're tracked
+  
+  🟠 Orange:  "⟳ Connecting..."
+              Reconnecting to server (wait 5 seconds)
+  
+  🔴 Red:     "⊘ Offline"
+              No connection, jobs saving locally, will sync
+  
+  🟣 Purple:  "⚠️ GPS Permission Required"
+              Allow GPS access to continue work
+
+WHAT IT MEANS:
+  • 🟢 Green = All systems operational
+  • 🟠 Orange = Temporary connectivity issue
+  • 🔴 Red = Will auto-recover when connected
+  • 🟣 Purple = STOP: Enable GPS from settings
+
+
+═══════════════════════════════════════════════════════════════════════
+4. ACCEPTING & MANAGING JOBS
+═══════════════════════════════════════════════════════════════════════
+
+RECEIVING NEW JOBS:
+
+When dispatcher creates a job for you:
+  ✅ You get push notification (ding!)
+  ✅ Job appears in "Pending Jobs" list
+  ✅ Notification shows job type + location
+  ✅ You can accept or request reassignment
+
+ACCEPTING A JOB:
+
+Method 1: From Home Screen
+  1. See pending job in list
+  2. Tap job name
+  3. Read full details (address, notes, instructions)
+  4. Tap "Accept Job"
+  ✅ Job moves to "Active Jobs"
+  ✅ Dispatcher gets notification
+  ✅ You're ready to navigate
+
+Method 2: From Notification
+  1. Tap notification when it arrives
+  2. Review job details
+  3. Tap "Accept"
+  ✅ Immediately navigates to home screen
+
+WHAT'S IN JOB DETAILS:
+
+Every job includes:
+  
+  📌 LOCATION
+     Full address, cross streets, apartment/suite
+     Building access code (if needed)
+     Special location notes
+  
+  👤 CUSTOMER
+     Name and phone number
+     Contact instructions
+     Special requests
+  
+  📝 DELIVERY NOTES
+     What you're delivering/picking up
+     Special handling (fragile, cold, etc.)
+     Signature requirement
+     Proof of delivery needed (photo)
+  
+  ⚡ PRIORITY
+     🟢 Normal: Whenever convenient
+     🟠 Medium: Within 2 hours preferred
+     🔴 High: ASAP, customer waiting
+  
+  🎯 TYPE
+     🚚 Delivery: Bring package to customer
+     📦 Pickup: Collect items from location
+     🔧 Service: Install/repair/inspect work
+     ⚠️  Exception: Special/urgent situation
+
+REJECTING OR DELAYING:
+
+Not available right now?
+  1. Tap job
+  2. Tap "More" (⋮) menu
+  3. Select "Request Reassignment"
+  4. Choose reason (too far, too busy, etc.)
+  5. Dispatcher reassigns to another driver
+  
+  ✅ Penalty-free if done before accepting
+
+If You Accept, Then Can't Do It:
+  1. Tap active job
+  2. Go to "More" menu
+  3. Select "Request Help"
+  4. Message dispatcher why
+  5. Continue with next task (don't abandon)
+  
+  ⚠️  Multiple rejections may affect pay/standing
+
+VIEWING JOB QUEUE:
+
+Upcoming Jobs List:
+  Shows: All jobs assigned to you (in order)
+  Sorted: By priority, then by time
+  Shows: Address, type, priority level
+  
+  Tap any job to see full details
+  Tap "Accept Next" to work through queue
+
+
+═══════════════════════════════════════════════════════════════════════
+5. NAVIGATION & ROUTING
+═══════════════════════════════════════════════════════════════════════
+
+NAVIGATION OPTIONS:
+
+When you accept a job, you can:
+
+Option 1: USE BUILT-IN NAVIGATION
+  1. Tap "Open Map" on active job
+  2. See your location + destination
+  3. Tap "Navigate" button
+  4. Shows: Route, ETA, distance, street names
+  5. Voice directions (if enabled)
+  ✅ Best for efficiency tracking
+
+Option 2: GOOGLE MAPS / APPLE MAPS
+  1. Tap active job
+  2. Tap "Open in Maps"
+  3. Opens your preferred map app
+  4. System tracks still works in background
+  ✅ If you prefer familiar app
+
+NAVIGATION FEATURES:
+
+Real-Time Directions:
+  • Turn-by-turn navigation
+  • Voice guidance ("Turn right in 200 feet")
+  • Live traffic updates
+  • ETA automatically updates
+  • Shows alternate routes if stuck in traffic
+
+Distance Tracking:
+  • Shows current: 0.3 km remaining
+  • Shows total: 2.5 km traveled
+  • Completion percentage
+
+Favorites & Frequent Stops:
+  • Warehouse saved as favorite
+  • Customer locations remembered
+  • One-tap navigate to frequent stops
+  • Speeds up daily routing
+
+BATTERY SAVER MODE:
+
+If your phone battery is low (<20%):
+  ✅ Keep app open but battery saver ON
+  ✅ Turn off turn-by-turn voice
+  ✅ Reduce screen brightness
+  ✅ Keep location tracking ON (critical!)
+  
+  ⚠️  NEVER disable location services
+  If you do: You won't be tracked, may affect pay
+
+
+═══════════════════════════════════════════════════════════════════════
+6. COMPLETING JOBS
+═══════════════════════════════════════════════════════════════════════
+
+COMPLETING A JOB:
+
+You've arrived! Now what?
+
+Step 1: ARRIVE AT LOCATION
+  ✅ You get notification: "You've arrived"
+  ✅ System auto-detects (within 50 meters)
+  ✅ Build-in safe time window (5-10 min)
+  
+  Tap: "Mark Arrived" (if auto-detect didn't work)
+
+Step 2: TAKE PROOF PHOTO
+  Tap: "Take Photo" button
+  
+  What to photograph:
+    ✓ Package at customer location
+    ✓ Customer acceptance/signature
+    ✓ Building/address number for reference
+    ✓ Damage or issues (if any)
+  
+  Do NOT:
+    ✗ Include customer face in distressing situation
+    ✗ Take identifying photos of customer property
+    ✗ Upload blurry or dark photos
+  
+  Guidelines:
+    • Well-lit photo (daytime preferred)
+    • Shows package/delivery clearly
+    • Shows customer acceptance (if signature)
+    • Time-stamped automatically
+
+Step 3: GET SIGNATURE (If Required)
+  If job requires signature:
+    1. Tap "Get Signature"
+    2. Customer signs on phone screen
+    3. Can add notes ("Customer not home, left at door")
+    4. Tap "Confirm"
+  
+  If customer refuses:
+    1. Note: "Signature Declined"
+    2. Take photo of refusal
+    3. Document reason
+    4. Continue (don't force)
+
+Step 4: ADD NOTES (Optional)
+  "Any special notes about this delivery?"
+  
+  Examples:
+    ✓ "Left package on back porch per request"
+    ✓ "Customer not home - called phone number, no answer"
+    ✓ "Building security locked, had to call intercom"
+    ✓ "Customer satisfied, gave approval to leave"
+    ✓ "Damage to package noted, customer agreed"
+
+Step 5: MARK COMPLETE
+  1. Tap "Mark Complete"
+  2. Review summary
+  3. Tap "Confirm"
+  
+  ✅ Job completed! Dispatcher notified
+  ✅ Next job loads automatically
+  ✅ Timestamp recorded
+
+PICKUP JOBS:
+
+Similar to delivery but reversed:
+  ✓ Arrive at location
+  ✓ Collect items
+  ✓ Take photo of items collected
+  ✓ Get signature (if required) from person handing over
+  ✓ Mark "Complete"
+
+SERVICE JOBS:
+
+For repairs/installations:
+  ✓ Arrive at location
+  ✓ Document work location (photo)
+  ✓ Check: "Work completed as specified?"
+  ✓ Take photo of finished work
+  ✓ Get approval signature
+  ✓ Document time spent
+  ✓ Mark "Complete"
+
+EXCEPTION JOBS:
+
+For urgent/unusual:
+  ✓ Follow all same steps
+  ✓ Document extra details (photos of issues)
+  ✓ Communication with dispatcher key
+  ✓ Message dispatcher with updates
+  ✓ Get confirmation before marking complete
+
+
+═══════════════════════════════════════════════════════════════════════
+7. LOCATION TRACKING & PRIVACY
+═══════════════════════════════════════════════════════════════════════
+
+HOW LOCATION TRACKING WORKS:
+
+Your Phone Sends:
+  ✓ GPS coordinates (latitude, longitude)
+  ✓ Accuracy level (±5-15 meters)
+  ✓ Timestamp (when location was recorded)
+  ✓ Speed and heading (direction)
+  
+  Sent to: Company servers continuously
+  Frequency: Every 5 seconds when app active
+  When offline: Saved locally, synced when reconnected
+
+Why We Track:
+  ✓ Route optimization (avoiding traffic)
+  ✓ ETA calculations (accurate arrival times)
+  ✓ Job verification (proof you visited location)
+  ✓ Safety (can locate you if emergency)
+  ✓ Performance analytics (for bonuses)
+
+Who Can See Your Location:
+  • Your dispatcher (always)
+  • Your manager (always)
+  • You (your own history in app)
+  • Emergency dispatch (if accident/emergency)
+  • NOT: Other drivers, customers, public
+
+PRIVACY SETTINGS:
+
+App-Level:
+  Settings → Location Services
+  
+  Options:
+    ├─ While Using App ✅ RECOMMENDED
+    │  (GPS on when app open, off when closed)
+    │
+    ├─ Always Allow ⚠️  (Battery drain)
+    │  (Tracks you 24/7, even at home)
+    │
+    └─ Never ❌ (Won't work)
+       (No tracking, can't complete jobs)
+
+Phone-Level (iOS):
+  Settings → Privacy → Location Services
+  → Delivery Intelligence
+  → Select "While Using the App"
+
+Phone-Level (Android):
+  Settings → Apps & Notifications
+  → Delivery Intelligence
+  → Permissions → Location
+  → Select "Allow only while using the app"
+
+DATA DELETION:
+
+Your location history:
+  • Saved for 30 days
+  • Automatically deleted after
+  • Can manually request deletion
+  • Backed up for 90 days (legal requirement)
+
+BATTERY IMPACT:
+
+GPS tracking uses battery. Impact:
+  • ~5-10% per hour of driving
+  • ~2-3% per hour while stationary
+  • Varies by phone and terrain
+  
+  Tips to reduce battery drain:
+    ✓ Reduce screen brightness
+    ✓ Close other apps
+    ✓ Enable Battery Saver mode
+    ✓ Plug in while driving (USB car charger)
+    ✓ Disable Bluetooth if not used
+
+LOCATION ACCURACY:
+
+Where you are most accurate:
+  • Open areas (parking lots, streets): ±5 meters
+  • Suburban areas: ±10 meters
+  • Urban canyon (tall buildings): ±20-50 meters
+  • Indoors: ±20-100 meters
+  • Tunnels: No GPS signal
+
+If location looks wrong:
+  • Step outside building
+  • Wait 10 seconds for GPS lock
+  • Accuracy will improve
+  • Don't ignore this; inaccuracy affects pay
+
+
+═══════════════════════════════════════════════════════════════════════
+8. OFFLINE MODE
+═══════════════════════════════════════════════════════════════════════
+
+WHAT IS OFFLINE MODE?
+
+When you lose internet connection (no WiFi, no cellular):
+
+Status Bar Shows:
+  🔴 "⊘ Offline (will reconnect)"
+
+What Still Works:
+  ✅ View active job details
+  ✅ Navigation to location
+  ✅ Complete job (mark complete, photo, signature)
+  ✅ Work on your queue without interruption
+
+What's Queued Locally:
+  ✅ All your completed deliveries
+  ✅ Photos taken
+  ✅ Signatures captured
+  ✅ Your GPS location (up to 500 updates)
+
+When You Reconnect:
+   1. Status bar turns 🟠 Orange ("Reconnecting...")
+   2. All queued data uploads automatically
+   3. Becomes 🟢 Green ("Location Tracking Active")
+   4. Takes 10-30 seconds typically
+
+USING OFFLINE MODE EFFECTIVELY:
+
+Best Practice:
+  1. Accept multiple jobs before driving
+  2. Download offline maps
+  3. Note addresses before connection lost
+  4. Complete jobs normally (all functions work)
+  5. Connection lost? Keep working!
+  6. Data auto-syncs when reconnected
+  7. Check status bar confirms green
+  8. Continue with next job
+
+Offline Duration:
+  • Short gap (< 1 hour): No problem
+  • Longer gaps (> 2 hours): Notify dispatcher
+  • Underground/tunnels: Expected, normal
+  • Persistent offline: Check settings → airplane mode off
+
+What NOT to Do Offline:
+  ✗ Disable location services (defeats purpose)
+  ✗ Expect to accept new jobs (no network)
+  ✗ Try to call dispatcher (no signal)
+  ✗ Leave app in background (wastes data)
+  ✗ Panic if status shows red (it's normal)
+
+RECOVERING FROM OFFLINE:
+
+If stuck reconnecting:
+  1. Move to area with better signal
+  2. Restart the app
+  3. Restart your phone
+  4. Check WiFi is enabled
+  5. Wait 30 seconds
+  6. Should reconnect automatically
+  7. Message dispatcher if persists
+
+
+═══════════════════════════════════════════════════════════════════════
+9. COMMUNICATION & SUPPORT
+═══════════════════════════════════════════════════════════════════════
+
+GETTING MESSAGES FROM DISPATCHER:
+
+You receive messages:
+  • 🔔 Push notification (with sound)
+  • 📬 In-app message center
+  • Shows: Message content + time received
+
+Types of messages:
+  ✓ New job assignment
+  ✓ Route changes
+  ✓ Customer updates
+  ✓ Urgent instructions
+  ✓ Performance feedback
+
+Viewing Messages:
+  1. Tap notification when it arrives
+  2. Or tap "Messages" tab at bottom
+  3. Read full message
+  4. Dispatcher sees "read" notification
+
+SENDING MESSAGES TO DISPATCHER:
+
+Need to communicate?
+
+Quick Message:
+  1. Tap active job
+  2. Tap "Send Message"
+  3. Type your message
+  4. Tap "Send"
+  
+  Examples:
+    ✓ "Running 5 minutes late due to traffic"
+    ✓ "Customer not home, attempting to reach"
+    ✓ "Address appears incorrect, can you verify?"
+    ✓ "Traffic accident ahead, taking alternate route"
+
+Urgent Message:
+  1. Message priority "Urgent"
+  2. Dispatcher gets notification immediately
+  3. Use only for true emergencies
+  4. Excessive urgent = don't use urgent anymore
+
+CALLING DISPATCHER:
+
+Need immediate help?
+
+Tap: "Call Dispatcher" button
+  • Direct phone call to duty dispatcher
+  • Both see mapping + job details
+  • Call recorded (for compliance)
+  • Last resort (use messages first)
+
+When to call:
+  ✓ Safety issue/accident
+  ✓ Customer emergency
+  ✓ Road closure/major obstacle
+  ✓ Cannot locate address after trying
+  ✓ Vehicle issue/breakdown
+
+When NOT to call:
+  ✗ Routine questions (message instead)
+  ✗ Job details (already in app)
+  ✗ Scheduling changes (use messages)
+  ✗ Non-emergency items
+
+SUPPORT RESOURCES:
+
+In-App Help:
+  Settings → Help & Support
+  
+  Can find:
+    • FAQ answers
+    • Common issues
+    • Latest app news
+    • Feedback submission
+
+Contact Support:
+  Email: driver-support@company.com
+  Phone: Available during business hours
+  Chat: In-app support (response in 2-4 hours)
+  
+  Include when contacting:
+    • Your driver ID
+    • Job ID (if relevant)
+    • What happened
+    • Screenshot (if visual issue)
+    • Time it happened
+
+
+═══════════════════════════════════════════════════════════════════════
+10. TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════
+
+COMMON ISSUES:
+
+Issue: Status bar shows 🔴 Red "Offline"
+Cause: No internet connection
+Solutions:
+  1. Check WiFi is enabled (but don't rely on it while driving)
+  2. Check cellular signal strength
+  3. Move to area with better signal
+  4. Restart app (close and reopen)
+  5. Restart phone if persists
+  6. Work offline if necessary (data will sync)
+
+Issue: Status bar shows 🟠 Orange "Connecting..." for long time
+Cause: Temporary network issue
+Solutions:
+  1. Wait 30 seconds (usually resolves)
+  2. Check internet connection
+  3. Toggle airplane mode off/on
+  4. Restart app
+  5. If > 5 minutes: Restart phone
+  → Will eventually reconnect (don't panic)
+
+Issue: Status bar shows 🟣 Purple "GPS Permission Required"
+Cause: App doesn't have location permission
+Solutions:
+  1. Tap status bar → opens settings
+  2. Enable location services
+  3. Set to "While Using the App"
+  4. Return to app
+  5. Status should turn 🟢 Green
+
+  iPhone:
+    Settings → Privacy → Location Services
+    → Delivery Intelligence → While Using the App
+  
+  Android:
+    Settings → Apps → Delivery Intelligence
+    → Permissions → Location → Allow while using the app
+
+Issue: Not receiving new job notifications
+Cause: Notification settings disabled
+Solutions:
+  1. Settings → Notifications
+  2. Enable "Job Notifications"
+  3. Enable "Sound"
+  4. Check system settings (phone-level)
+  
+  iPhone:
+    Settings → Notifications → Delivery Intelligence
+    → Allow Notifications = ON
+    → Sounds = ON
+  
+  Android:
+    Settings → Apps → Delivery Intelligence
+    → Notifications → All job notifications enabled
+
+Issue: Photos not uploading / stuck in "Processing"
+Cause: Photo too large or poor connection
+Solutions:
+  1. Wait 5 minutes (try uploading in background)
+  2. Move to area with better connection
+  3. Reduce photo quality: Settings → Photo Quality
+  4. Restart app
+  5. If still stuck: Manually retry from job details
+
+Issue: GPS location is inaccurate (shows wrong street)
+Cause: Poor GPS signal or indoor location
+Solutions:
+  1. Step outside building
+  2. Wait 10 seconds for GPS lock
+  3. Accuracy should improve
+  4. If still wrong: Manually pin location on map
+  5. Message dispatcher with correction
+
+Issue: Battery draining too fast
+Cause: GPS tracking uses battery, screen on
+Solutions:
+  1. Reduce screen brightness
+  2. Disable Bluetooth if not needed
+  3. Disable WiFi while driving (just use cellular)
+  4. Close other apps
+  5. Enable Battery Saver mode
+  6. Use car charger (recommended for 8+ hour shifts)
+
+Issue: App crashes or freezes
+Cause: Software glitch or memory issue
+Solutions:
+  1. Force close app (swipe away, force close)
+  2. Wait 10 seconds
+  3. Reopen app
+  4. If persists: Restart phone
+  5. If still happens: Reinstall app from store
+
+Issue: Can't login / "Invalid credentials"
+Cause: Wrong password or account issue
+Solutions:
+  1. Double-check username/password (case-sensitive)
+  2. Check CAPS LOCK is off
+  3. Clear app cache: Settings → Storage → Clear Cache
+  4. Try logout, then login again
+  5. Contact support if still failing
+
+Issue: Dispatcher says I'm being tracked wrong / false location
+Cause: GPS inaccuracy or delayed sync
+Solutions:
+  1. Confirm status bar is 🟢 Green
+  2. Step outside (if indoors)
+  3. Wait 10 seconds for update
+  4. Tap job "Refresh Location" button
+  5. Message dispatcher: "Location syncing now"
+  6. In 30 seconds, accuracy improves
+
+
+═══════════════════════════════════════════════════════════════════════
+11. FAQ
+═══════════════════════════════════════════════════════════════════════
+
+Q: How much data does this app use?
+A: Approximately 1-2 MB per hour of use
+   GPS + messaging + photos
+   Recommend: Unlimited data plan or 5GB/month minimum
+   If limited data: Use WiFi at home/breaks
+
+Q: Will this app track me after work hours?
+A: No. Location tracking only while app is open.
+   Set to "While Using the App" in permissions
+   We see no location when app is closed
+   After you clock out, you're invisible to system
+
+Q: What if I forget to turn on location services?
+A: App won't work. You'll see purple status bar.
+   Tap it → automatically opens settings
+   Enable location → return to app
+   Jobs won't track without location enabled
+
+Q: Can I use Apple Maps or Google Maps instead?
+A: Yes! We support "Open in Maps" button
+   Your choice of app
+   Tracking still works in background
+   Company sees your location regardless
+
+Q: What if customer isn't home for delivery?
+A: Follow the procedure:
+   1. Try buzzer/doorbell (wait 2 minutes)
+   2. Call customer phone number (if provided)
+   3. Leave message with reason
+   4. Take photo of building/door
+   5. Ask neighbor (optional, if safe)
+   6. Mark "Incomplete" with reason
+   7. Message dispatcher immediately
+   8. DO NOT leave at door unauthorized
+   Dispatcher will follow up with customer
+
+Q: Can I reject a job after accepting?
+A: Yes, but it may affect standing:
+   1. Tap active job
+   2. Tap "More" menu
+   3. "Request Help" or "Report Issue"
+   4. Message dispatcher reason
+   5. Explain why can't complete
+   6. Wait for reassignment
+   If multiple rejections: Consequences possible
+
+Q: What counts as completed?
+A: Job marked "Complete" when:
+   ✓ You arrived at location (GPS confirmed)
+   ✓ Photo taken (proof of delivery/pickup)
+   ✓ Signature collected (if required)
+   ✓ Notes added (if special situation)
+   ✓ Final status confirmed
+   Time: 5 minutes typical per job
+
+Q: How are my daily earnings calculated?
+A: Based on:
+   ✓ Jobs completed ($ per job)
+   ✓ On-time percentage (completion rate)
+   ✓ Customer ratings (if applicable)
+   ✓ Bonus multipliers (performance)
+   Check: Settings → Earnings for breakdown
+
+Q: What if my phone dies mid-delivery?
+A: Offline mode protects you:
+   ✓ Jobs completed while offline are queued
+   ✓ When powered back on, they upload
+   ✓ Dispatcher sees you completed them
+   ✓ Still get paid
+   
+   Bring charger, avoid this situation!
+
+Q: Can dispatcher see my personal photos/contacts?
+A: No. App only accesses:
+   ✓ Delivery photos (app-specific)
+   ✓ Your location (GPS coordinates only)
+   ✓ Your GPS location history
+   ✗ Cannot access photos library
+   ✗ Cannot access contacts
+   ✗ Cannot access messages/calls
+   
+   Only what app uses for work
+
+Q: What happens if I disable location services?
+A: App will not work:
+   ✓ Status bar shows purple "GPS Required"
+   ✗ Cannot complete jobs
+   ✗ Cannot be tracked
+   ✗ Cannot claim jobs were completed
+   ✗ Won't get paid
+   
+   Must keep enabled during work hours
+
+Q: How long does photo upload take?
+A: Typically:
+   • Good signal: < 5 seconds
+   • OK signal: 5-30 seconds  
+   • Poor signal: 30+ seconds (queued)
+   • Offline: Queued, syncs when online
+   
+   Don't worry if "Processing" shows for time
+   Will complete automatically
+
+Q: Can I work for multiple companies?
+A: Not simultaneously with app tracking:
+   ✓ Can clock out, close app, use personal delivery app
+   ✓ But once logged in: Company sees your location
+   ✓ Should not:
+     - Log in for one company while working for another
+     - Have multiple driver accounts active
+     - Share credentials (account tied to you)
+
+Q: What is "Bonus Multiplier"?
+A: Earning acceleration based on performance:
+   • Complete jobs on time → 1.1x pay
+   • Accept urgent jobs → 1.2x multiplier
+   • High customer ratings → 1.15x bonus
+   • Excellent safety record → 1.1x bonus
+   
+   Stacked: Can reach 1.5x+ pay! 
+   See details in app: Earnings section
+
+Q: Who is my dispatcher?
+A: The person who assigns your jobs
+   ✓ See name in "About" section
+   ✓ or call "Contact Dispatcher" button
+   ✓ Message them with questions
+   ✓ They see your location in real-time
+
+Q: What if I need to report an accident?
+A: IMMEDIATE ACTION:
+   1. 911 if injury or major damage
+   2. Open app → "Emergency" button
+   3. If can't access: Call dispatcher directly
+   4. Document: Photos of damage, scene
+   5. Get other driver's info
+   6. Cooperate with police
+   7. Message dispatcher ASAP with details
+   
+   Honesty is critical. Don't hide accidents.
+   Company supports drivers in true accidents.
+
+
+═══════════════════════════════════════════════════════════════════════
+PERFORMANCE & BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════
+
+MAXIMIZE YOUR EARNINGS:
+
+✓ DO:
+  • Accept jobs promptly (faster = more jobs = more pay)
+  • Complete deliveries on-time (avoids penalties)
+  • Take clear, quality photos (reduces disputes)
+  • Keep phone charged (replacement = your cost)
+  • Communicate with dispatcher (prevents problems)
+  • Secure customer signatures (required for proof)
+  • Note any issues (photo evidence protects you)
+  • Use bathroom/break between jobs smartly
+  • Plan efficient routes (dispatcher helps)
+  • Check for messages frequently (urgent updates)
+
+✗ DON'T:
+  • Ignore GPS location tracking (required)
+  • Accept jobs you can't complete (rejection = penalty)
+  • Leave packages without verification
+  • Drive unsafely to beat the clock (safety first!)
+  • Lie about completion (cameras on some streets)
+  • Disable location services
+  • Share credentials with others
+  • Use personal delivery app while logged in
+  • Ignore messages from dispatcher
+  • Leave negative customer reviews lying around
+  • Park illegally to save 30 seconds (ticket = your cost)
+
+
+═══════════════════════════════════════════════════════════════════════
+DAILY CHECKLIST
+═══════════════════════════════════════════════════════════════════════
+
+START OF SHIFT:
+  ☑ Smartphone fully charged (100%)
+  ☑ App installed & updated
+  ☑ Location services enabled
+  ☑ Notifications enabled
+  ☑ Car charged/fueled
+  ☑ Login to app (wait for 🟢 Green status)
+  ☑ Check job queue (read items carefully)
+  ☑ Accept first job
+  ☑ Review job details & notes
+  ☑ Plan route
+
+DURING SHIFT:
+  ☑ Status bar stays 🟢 Green
+  ☑ Complete jobs on time
+  ☑ Take quality photos
+  ☑ Get signatures when required
+  ☑ Message dispatcher if issues
+  ☑ Keep phone plugged in if possible
+  ☑ Check messages frequently
+  ☑ Stay hydrated & take breaks
+  ☑ Drive safely (no speeding)
+
+END OF SHIFT:
+  ☑ Complete all pending jobs
+  ☑ Message dispatcher "Shift complete"
+  ☑ Clock out from app
+  ☑ Check earnings summary
+  ☑ Review any messages/feedback
+  ☑ Close app (stops tracking)
+  ☑ Plug phone into charger
+
+
+═══════════════════════════════════════════════════════════════════════
+GLOSSARY OF TERMS
+═══════════════════════════════════════════════════════════════════════
+
+API: Application Programming Interface
+     The system that connects app to company servers
+
+Cellular: Mobile data network (4G/5G)
+          What you use when not on WiFi
+
+GPS: Global Positioning System
+     Technology that finds your exact location using satellites
+
+Job: A delivery, pickup, service visit, or special task
+
+Offline: No internet connection
+         But app still works, syncs when reconnected
+
+POD: Proof of Delivery
+     Photo + signature confirming job completed
+
+Queue: List of jobs waiting to be done
+       In order of priority
+
+Push Notification: Message that pops up on your phone
+                   Usually with sound
+
+Status: Current state of your app/location tracking
+        Green = Good, Red = Problem, Orange = Checking
+
+Sync: Upload of offline data when reconnected
+      Automatic, takes 10-30 seconds typically
+
+Timestamp: Exact date/time something happened
+           Recorded automatically by app
+
+WiFi: Wireless internet network
+      Good for stationary work, avoid while driving
+
+
+═══════════════════════════════════════════════════════════════════════
+IMPORTANT POLICIES
+═══════════════════════════════════════════════════════════════════════
+
+SAFETY FIRST:
+  • Never disable location services
+  • Never drive unsafely to meet time targets
+  • Pull over to read messages
+  • Never drive under the influence
+  • Report accidents immediately
+  • Secure your phone while driving
+  • Obey all traffic laws
+  
+PROFESSIONALISM:
+  • Be courteous to customers
+  • Knock softly (don't scare people)
+  • Respect customer property
+  • Don't enter private areas without permission
+  • Follow company dress code
+  • Represent company professionally
+  
+DATA & PRIVACY:
+  • Don't share your credentials
+  • Don't access customer data beyond job details
+  • Don't take photos of people without consent
+  • Don't sell/use customer information
+  • Location data: 30-day retention then deleted
+  
+VEHICLE & EQUIPMENT:
+  • Keep vehicle clean and maintained
+  • Report defects immediately
+  • Don't use personal vehicle for company deliveries
+  • Insurance must be valid
+  • Fuel receipts reimbursed (file within 30 days)
+
+
+═══════════════════════════════════════════════════════════════════════
+
+Document Version: 2.0
+Last Updated: February 2026
+Platform Version: 2.0
+
+📞 Support: driver-support@company.com
+🌐 Help Portal: [internal help site]
+📱 App Updates: Check App Store/Play Store regularly
+
+═══════════════════════════════════════════════════════════════════════

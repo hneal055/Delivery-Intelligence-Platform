@@ -1,0 +1,696 @@
+╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║     DELIVERY INTELLIGENCE PLATFORM                                ║
+║     DISPATCHER USER MANUAL                                        ║
+║                                                                    ║
+║     Version 2.0 | February 2026                                   ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
+
+
+═══════════════════════════════════════════════════════════════════════
+TABLE OF CONTENTS
+═══════════════════════════════════════════════════════════════════════
+
+1. GETTING STARTED
+2. DASHBOARD OVERVIEW
+3. CREATING JOBS
+4. MANAGING JOBS
+5. ASSIGNING DRIVERS
+6. TRACKING DELIVERIES
+7. TROUBLESHOOTING
+8. KEYBOARD SHORTCUTS
+9. FAQ
+
+
+═══════════════════════════════════════════════════════════════════════
+1. GETTING STARTED
+═══════════════════════════════════════════════════════════════════════
+
+SYSTEM REQUIREMENTS:
+  • Modern web browser (Chrome, Safari, Firefox, Edge)
+  • Internet connection
+  • Windows, Mac, or Linux
+
+ACCESSING THE PLATFORM:
+  1. Open web browser
+  2. Navigate to: http://localhost:5173
+  3. Or: http://[server-ip]:5173 from remote location
+  4. Dashboard loads automatically
+
+FIRST LOGIN:
+  • Username: dispatcher (or assigned user)
+  • Password: Contact your administrator
+  
+  After login, you'll see the main dashboard with:
+  ✓ Job queue
+  ✓ Driver status
+  ✓ Real-time map
+  ✓ Performance metrics
+
+
+═══════════════════════════════════════════════════════════════════════
+2. DASHBOARD OVERVIEW
+═══════════════════════════════════════════════════════════════════════
+
+MAIN SECTIONS:
+
+┌─────────────────────┬──────────────────────────────────────┐
+│   NAVIGATION BAR    │  Left sidebar with quick access      │
+├─────────────────────┼──────────────────────────────────────┤
+│   JOBS              │  Create, view, manage all jobs       │
+│   DRIVERS           │  See driver status and assignments   │
+│   SCHEDULING        │  Plan routes and schedules           │
+│   REPORTS           │  Analytics and performance data      │
+│   SETTINGS          │  User preferences and config         │
+└─────────────────────┴──────────────────────────────────────┘
+
+DASHBOARD WIDGETS:
+
+📊 METRICS PANEL (Top Right)
+   • Total Active Jobs
+   • Completed Today
+   • Pending Assignments
+   • Fleet Status
+
+🗺️  LIVE MAP (Center)
+   • Color-coded driver locations
+   • Real-time GPS tracking
+   • Job locations pinned
+
+📋 JOBS TABLE (Left/Center)
+   • Job ID
+   • Address/Location
+   • Type (Delivery, Pickup, Service, Exception)
+   • Status
+   • Assigned Driver
+   • Priority
+
+👥 DRIVER PANEL (Right)
+   • Available drivers
+   • Active drivers (on job)
+   • Status indicators
+   • Quick assignment
+
+
+═══════════════════════════════════════════════════════════════════════
+3. CREATING JOBS
+═══════════════════════════════════════════════════════════════════════
+
+STEP-BY-STEP JOB CREATION:
+
+1. CLICK "CREATE NEW JOB" BUTTON
+   Location: Top right of jobs panel
+   Opens: Job creation modal
+
+2. FILL IN JOB DETAILS:
+
+   REQUIRED FIELDS:
+   ├─ Title (2+ characters)
+   │  Example: "Deliver Package to 123 Main St"
+   │  • Clear, descriptive title
+   │  • Helps driver understand task
+   │
+   ├─ Type (select one)
+   │  ├─ Delivery: Standard package delivery
+   │  ├─ Pickup: Collect items from location
+   │  ├─ Service: Service visit (repair, install)
+   │  └─ Exception: Special/urgent handling
+   │
+   ├─ Address/Location
+   │  • Click map to pinpoint location
+   │  • Or paste full address
+   │  • System auto-geocodes address
+   │
+   └─ Scheduled Time (optional)
+      • Leave blank for "start now"
+      • Set future time (5-minute minimum from now)
+      • Useful for planned routes
+
+   OPTIONAL FIELDS:
+   ├─ Priority
+   │  ├─ Low (default)
+   │  ├─ Medium
+   │  └─ High (will request driver notes)
+   │
+   ├─ Driver Assignment
+   │  • Leave blank: Assign later
+   │  • Select driver: Assign immediately
+   │  • Quick assignment modal appears
+   │
+   ├─ Driver Notes
+   │  • Special instructions
+   │  • Customer details
+   │  • Access codes
+   │  • Required for Urgent/Exception jobs
+   │
+   └─ Package Details
+      • Package ID (if tracking items)
+      • Weight/size (for planning)
+      • Fragile/special handling flags
+
+3. VALIDATION RULES:
+   ✓ Title must be 2+ characters
+   ✓ No duplicate jobs same day/driver
+   ✓ Scheduled time must be future (5min minimum)
+   ✓ Urgent priority requires notes
+   ✓ Exception type requires notes
+   ✓ Pickup type requires notes OR package ID
+   ✓ Status auto-locks to "Pending"
+
+4. SUBMIT JOB
+   Click: "Create Job" button
+   Result: Job appears in queue immediately
+   System: Notifies assigned driver (if immediately assigned)
+
+EXAMPLE JOB CREATION:
+  Title: "Deliver flowers to client office"
+  Type: Delivery
+  Address: 456 Park Ave, Downtown
+  Priority: High
+  Driver Notes: "Leave at reception desk, get signature"
+  Scheduled: Now
+  Assignment: Sarah (Driver)
+  
+  → Sarah sees job in 30 seconds on mobile
+  → You see job in "Active" column
+
+
+═══════════════════════════════════════════════════════════════════════
+4. MANAGING JOBS
+═══════════════════════════════════════════════════════════════════════
+
+JOB STATUSES:
+
+🟡 PENDING
+   • Job created
+   • Awaiting driver assignment
+   • Can: Edit, assign, delete
+   • Driver: Doesn't see yet
+
+🟢 ASSIGNED
+   • Driver has been notified
+   • Awaiting acceptance
+   • Can: Change driver, add notes
+   • Driver: Sees in accepted jobs
+
+🔵 IN PROGRESS
+   • Driver has started
+   • May have taken proof photo
+   • Can: Add notes, monitor location
+   • Driver: Tracking active
+
+🟢 COMPLETED
+   • Job finished successfully
+   • Photo/signature collected
+   • Can: View details, add feedback
+   • Driver: Job done
+
+🔴 CANCELLED
+   • Job was cancelled
+   • Can: Archive, view notes
+   • Driver: Receives notification
+
+EDITING JOBS:
+
+Before Assignment:
+  ✓ Change title, address, type
+  ✓ Edit priority, notes
+  ✓ Adjust scheduled time
+  ✓ Delete job entirely
+
+After Assignment:
+  ✓ Add/edit notes
+  ✓ Update driver instructions
+  ✗ Cannot change type/address
+  ✗ Cannot delete (archive only)
+
+In Progress:
+  ✓ Monitor location (map)
+  ✓ Send message to driver
+  ✓ Add urgent notes
+  ✗ Cannot change assignment
+
+CANCELLING JOBS:
+
+When to cancel:
+  • Job no longer needed
+  • Duplicate/mistake
+  • Customer cancellation
+  • Route optimization
+
+How to cancel:
+  1. Select job
+  2. Click "⋮" (more menu)
+  3. Select "Cancel Job"
+  4. Enter reason (optional)
+  5. Confirm
+  → Driver gets notification
+
+
+═══════════════════════════════════════════════════════════════════════
+5. ASSIGNING DRIVERS
+═══════════════════════════════════════════════════════════════════════
+
+ASSIGNMENT OPTIONS:
+
+Option 1: ASSIGN AT JOB CREATION
+  1. Create job (see Section 3)
+  2. Select driver from dropdown
+  3. Click "Create Job"
+  → Driver assigned immediately
+
+Option 2: ASSIGN FROM JOBS LIST
+  1. Click on pending job
+  2. Click "Assign Driver"
+  3. Select from available drivers
+  4. Click "Assign"
+  → Job moves to driver's queue
+
+Option 3: BATCH ASSIGNMENT
+  1. Select multiple jobs (checkboxes)
+  2. Click "Assign Selected"
+  3. Choose driver
+  4. System optimizes route
+  5. Click "Confirm"
+
+DRIVER STATUS INDICATORS:
+
+🟢 Available
+   • No active jobs
+   • Ready for assignment
+   • Can accept new jobs immediately
+
+🔵 Active
+   • Currently on job
+   • Currently tracking
+   • Fully utilization
+
+🟠 On Break
+   • Driver requested break
+   • Will resume in time shown
+   • Don't assign new jobs
+
+🔴 Offline
+   • No GPS signal
+   • No connection
+   • Can't assign (auto-reassign backup)
+
+⚪ Idle
+   • Between jobs
+   • Last GPS update > 5 minutes ago
+   • Still contactable
+
+SMART ASSIGNMENT:
+
+The system can auto-optimize assignments:
+  1. Select driver + job
+  2. System suggests best route
+  3. Avoids cross-town jumps
+  4. Minimizes total distance
+  5. You approve or adjust
+
+DRIVER NOTES:
+  • Required for priority jobs
+  • Include: Access codes, special instructions
+  • Driver sees immediately on acceptance
+  • Example: "Building 201, Suite 340, code 4567"
+
+
+═══════════════════════════════════════════════════════════════════════
+6. TRACKING DELIVERIES
+═══════════════════════════════════════════════════════════════════════
+
+REAL-TIME MONITORING:
+
+MAP VIEW:
+  • 🔴 Unassigned jobs (map pins)
+  • 🟢 Available drivers (green dots)
+  • 🔵 Active drivers (blue dots with car icon)
+  • ✓ Completed jobs (gray/checked)
+
+  Interactions:
+  ├─ Click driver dot → See driver details & current job
+  ├─ Click job pin → See job details & assigned driver
+  ├─ Click "Follow" → Auto-center on driver
+  └─ Zoom/pan → Adjust map view
+
+LIVE METRICS:
+
+Active Jobs Counter
+  • Displays: X jobs in progress
+  • Updates: Every 30 seconds
+  • Click: See details of each active job
+
+Completed Today
+  • Displays: X jobs completed
+  • Updates: Real-time
+  • Days completed vs target
+
+Driver Utilization
+  • Shows: % of fleet active
+  • Breaks down: By type of job
+  • Alerts: If below efficiency target
+
+DRIVER DETAILS PANEL:
+
+Click any driver to see:
+  ✓ Name & ID
+  ✓ Current location (address)
+  ✓ Current job (with details)
+  ✓ ETA to next stop
+  ✓ Total jobs completed today
+  ✓ Battery level on phone
+  ✓ Signal strength
+  ✓ Last GPS update
+
+Actions:
+  • Send message to driver
+  • Call driver (if enabled)
+  • View route history
+  • View performance metrics
+
+JOB DETAILS PANEL:
+
+Click any job to see:
+  ✓ Full address & pinned on map
+  ✓ Customer details
+  ✓ Special instructions
+  ✓ Current status
+  ✓ Assigned driver + location
+  ✓ Photos (if completed)
+  ✓ Signature/proof
+  ✓ Timestamp when started/completed
+
+Timeline View:
+  • Shows job lifecycle
+  • Created → Assigned → Started → Completed
+  • Times for each milestone
+  • Any notes/changes
+
+COMMUNICATION:
+
+Sending Messages:
+  1. Click driver or active job
+  2. Click "Send Message"
+  3. Type message
+  4. Click "Send"
+  → Driver gets notification + message sound
+
+Example Messages:
+  ✓ "High priority, customer waiting"
+  ✓ "Address correction: Suite 200 not 201"
+  ✓ "Customer will meet you outside"
+  ✓ "Skip this stop, return to base"
+
+Call Driver:
+  • For emergency only
+  • Opens phone/VoIP call
+  • Both parties see mapping
+  • Callrecorded (for compliance)
+
+
+═══════════════════════════════════════════════════════════════════════
+7. TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════
+
+COMMON ISSUES:
+
+Issue: Driver doesn't receive job notification
+  Solutions:
+  1. Check driver phone is on (green status)
+  2. Check WiFi/mobile connection (blue dot on map)
+  3. Resend assignment
+  4. Try calling driver to confirm
+  5. Check driver app version is current
+
+Issue: GPS location not updating
+  Causes:
+  • No GPS signal (indoors, caves)
+  • WiFi only (needs cell data)
+  • Low battery mode enabled
+  • App in background mode
+  
+  Solutions:
+  1. Ask driver to go outside
+  2. Refresh driver app
+  3. Restart driver app
+  4. Check phone battery level
+  5. Enable location services
+
+Issue: Job won't create
+  Check:
+  ✓ Title is 2+ characters (not blank)
+  ✓ Location is pinned on map
+  ✓ Type is selected
+  ✓ No duplicate for same driver/day
+  ✓ Scheduled time is in future (5min min)
+  ✓ Notes provided for urgent/exception
+  
+  Error: "Timeout exceeding"
+  → Network issue, try again in 10 seconds
+
+Issue: Driver app shows "offline"
+  But I can see GPS location?
+  
+  Explanation:
+  • GPS ≠ WebSocket connection
+  • Driver has Location ON
+  • But no API connection
+  • Can't send deliveries/updates
+  
+  Solutions:
+  1. Restart driver app
+  2. Check WiFi/cellular
+  3. Force quit app and reopen
+  4. Check backend is running
+
+Issue: Multiple jobs showing for same driver
+  Explanation:
+  • System allows queue (pending +1)
+  • Driver can accept next job while active
+  • Optimizes route planning
+  
+  If problem:
+  1. Check if jobs are duplicate
+  2. Cancel duplicates
+  3. Reassign
+
+Issue: Map not loading
+  Solutions:
+  1. Hard refresh: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
+  2. Clear browser cache
+  3. Try different browser
+  4. Check internet connection
+  5. Check backend API running
+
+
+═══════════════════════════════════════════════════════════════════════
+8. KEYBOARD SHORTCUTS
+═══════════════════════════════════════════════════════════════════════
+
+DASHBOARD NAVIGATION:
+
+  J          Jump to Jobs section
+  D          Jump to Drivers section
+  S          Jump to Scheduling section
+  R          Jump to Reports section
+  
+JOB MANAGEMENT:
+
+  N          New job (open create dialog)
+  ESC        Close dialog/modal
+  Enter      Submit/confirm
+  
+FILTERING & SEARCH:
+
+  F          Focus on filter/search
+  Ctrl+F     Browser find (search on page)
+  
+  
+DRIVER ASSIGNMENT:
+
+  A          Assign selected job to driver
+  Ctrl+A     Select all (in list)
+  
+  
+QUICK ACTIONS:
+
+  Space      Toggle job selection (in list)
+  X          Cancel selected job
+  E          Edit selected job
+
+
+═══════════════════════════════════════════════════════════════════════
+9. FAQ
+═══════════════════════════════════════════════════════════════════════
+
+Q: Can I schedule jobs for tomorrow?
+A: Yes. Create job, set "Scheduled Time" to tomorrow's date/time.
+   Job stays pending until scheduled time, then auto-activates.
+
+Q: Can drivers see each other's jobs?
+A: No. Each driver only sees their own jobs.
+   Protects customer privacy and avoids confusion.
+
+Q: What if I create duplicate job by mistake?
+A: System prevents exact duplicates (same title, driver, day).
+   Error message: "Job already exists for this driver today"
+   Solution: Edit the existing job or give new title.
+
+Q: Can I change driver mid-job?
+A: Partial. Can reassign pending jobs to different driver.
+   Once "In Progress", reassignment more complex (need override).
+   For emergencies: Contact support.
+
+Q: How long do completed jobs stay visible?
+A: 30 days. Auto-archive to Reports section.
+   Can manually archive earlier.
+   All data preserved forever in system.
+
+Q: What happens to jobs if backend goes down?
+A: Mobile drivers:
+   • Use offline queue (up to 500 updates)
+   • Locations saved locally
+   • Auto-sync when backend restarts
+   
+   Web dashboard:
+   • Shows last known state
+   • Can't create new jobs (disabled)
+   • Reconnects automatically
+
+Q: Can I export job data?
+A: Yes. Reports section → Export (CSV or PDF)
+   Choose date range + filters
+   Downloads to local computer
+
+Q: How do I train new drivers on the app?
+A: See Driver User Manual (separate document)
+   Covers: Mobile app features, location tracking, photo capture, etc.
+
+Q: What if a driver rejects a job?
+A: Job returns to pending (unassigned)
+   Status: "Rejected"
+   Reason shown (if driver provided)
+   Can reassign to different driver
+
+Q: How accurate is the GPS tracking?
+A: Within 5-15 meters in normal conditions
+   Can be 50+ meters in urban canyons/tunnels
+   Updates every 5 seconds when connected
+   Offline queue fills when signal lost
+
+Q: Can I message drivers even if offline?
+A: Yes. Message queues and delivers when online.
+   Driver sees notification when reconnected.
+   Works even if app in background.
+
+Q: Is there a mobile driver app?
+A: Yes. Separate iOS/Android app (Expo Go + custom build)
+   See: "Driver User Manual" for driver-side documentation
+   Same backend API, optimized for driving
+
+Q: How do I handle "Emergency" jobs?
+A: Use Exception type + High priority
+   Include detailed notes
+   Assign to most capable driver
+   Message driver immediately
+   Monitor closely on map
+
+
+═══════════════════════════════════════════════════════════════════════
+SUPPORT & CONTACT
+═══════════════════════════════════════════════════════════════════════
+
+SYSTEM STATUS:
+  Check: http://localhost:5173/status
+  Shows: All services operational status
+
+PERFORMANCE MONITORING:
+  Grafana: http://localhost:3500
+  Username: admin
+  Password: new_bizness123
+
+GETTING HELP:
+
+  1. Check this manual (FAQ section)
+  2. Try troubleshooting steps (Section 7)
+  3. Refresh page (Ctrl+Shift+R)
+  4. Contact system administrator
+  5. Check system status page
+
+REPORTING BUGS:
+
+  Provide:
+  • What you were doing
+  • Expected result
+  • Actual result
+  • Browser + OS
+  • Time and job ID (if relevant)
+  • Screenshot/video if possible
+
+FEATURE REQUESTS:
+
+  Contact: Development team
+  Include:
+  • Use case
+  • How it solves problem
+  • Priority (nice-to-have vs critical)
+
+
+═══════════════════════════════════════════════════════════════════════
+TIPS & BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════
+
+✓ DO:
+  • Use clear, descriptive job titles
+  • Include customer contact in notes
+  • Assign jobs as soon as possible
+  • Monitor active jobs regularly
+  • Message drivers for updates
+  • Review completed jobs for feedback
+  • Keep locations pinned accurately
+  • Update forecasts based on traffic
+
+✗ DON'T:
+  • Overload single driver with too many jobs
+  • Assign jobs too late (no planning time)
+  • Use unclear instructions
+  • Forget notes for special jobs
+  • Leave pending jobs unassigned
+  • Assign jobs without checking driver availability
+  • Refresh page during multi-job operations
+  • Archive data without backup
+
+
+═══════════════════════════════════════════════════════════════════════
+SYSTEM REQUIREMENTS & COMPATIBILITY
+═══════════════════════════════════════════════════════════════════════
+
+BROWSERS SUPPORTED:
+  ✓ Chrome 90+
+  ✓ Safari 14+
+  ✓ Firefox 88+
+  ✓ Edge 90+
+
+RECOMMENDED:
+  • >= 1920x1080 screen resolution
+  • >= 4 Mbps internet connection
+  • >= 8GB RAM
+  • SSD storage recommended
+
+MOBILE:
+  • Can access read-only dashboard on tablet
+  • For driver assignments use desktop browser
+  • Responsive design for tablets
+
+
+═══════════════════════════════════════════════════════════════════════
+
+Document Version: 2.0
+Last Updated: February 2026
+Platform Version: 2.0
+
+For latest version, visit: [internal wiki]
+
+═══════════════════════════════════════════════════════════════════════
