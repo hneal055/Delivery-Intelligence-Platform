@@ -40,6 +40,24 @@ async def login_for_access_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+@router.post("/token/refresh", response_model=Token)
+async def refresh_access_token(
+    current_user: Annotated[User, Depends(get_current_active_user)]
+):
+    """Refresh an access token using the current valid token.
+    
+    Takes an existing valid token in the Authorization header and returns a new token.
+    Useful for extending sessions without requiring re-login.
+    """
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        subject=current_user.username,
+        role=current_user.role,
+        expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 @router.get("/users/me", response_model=User)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]):
     return current_user
@@ -80,3 +98,4 @@ async def get_oidc_config():
         "issuer_url": settings.OIDC_ISSUER_URL,
         "client_id": settings.OIDC_CLIENT_ID,
     }
+
