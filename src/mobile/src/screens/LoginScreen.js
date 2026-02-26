@@ -11,9 +11,9 @@ import {
   Platform,
   Image
 } from 'react-native';
-import axios from 'axios';
+import apiClient from '../api/client';
 
-export default function LoginScreen({ onLogin, apiUrl }) {
+export default function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState('driver1');
   const [password, setPassword] = useState('driverpassword');
   const [loading, setLoading] = useState(false);
@@ -34,8 +34,8 @@ export default function LoginScreen({ onLogin, apiUrl }) {
 
       // Adjust endpoint based on backend auth implementation
       // Assuming straightforward /token endpoint or similar
-      const response = await axios.post(`${apiUrl}/auth/token`, params.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      const response = await apiClient.post('/auth/token', params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
       if (response.data && response.data.access_token) {

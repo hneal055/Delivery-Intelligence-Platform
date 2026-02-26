@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
 
 // Server configuration
@@ -21,8 +21,9 @@ export const WS_URL =
 
 const apiClient = axios.create({
   baseURL: API_URL,
-  // 15s covers LTE/5G latency spikes on a moving iPhone 17; still fails fast on total outages
-  timeout: 15000,
+  // Increased to 30 seconds for slow networks or first-time app startup
+  // Real devices connecting over WiFi may experience latency
+  timeout: 30000,
 });
 
 apiClient.interceptors.request.use(
@@ -31,9 +32,36 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Log outgoing requests for debugging
+    console.log(`[API] ${config.method?.toUpperCase()} ${config.url} (timeout: ${config.timeout}ms)`);
     return config;
   },
   (error) => Promise.reject(error)
 );
 
+// Enhanced error handling with user-friendly messages
+apiClient.interceptors.response.use(
+  (response) => {
+    console.log(`[API] ${response.status} ${response.config.url}`);
+    return response;
+  },
+  (error) => {
+    if (error.code === 'ECONNABORTED') {
+      console.error(`[API] TIMEOUT: ${error.config.url}`);
+      error.userMessage = `Request timed out. Check that:\n1. Device is on same WiFi as machine\n2. Machine IP is correct: ${DEV_MACHINE_IP}:${PORT}\n3. Backend is running`;
+    } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      console.error(`[API] CONNECTION FAILED: ${error.config.url}`);
+      error.userMessage = `Cannot reach backend at ${DEV_MACHINE_IP}:${PORT}.\nMake sure:\n1. WiFi is connected\n2. IP address is correct\n3. Backend is running`;
+    } else if (error.response?.status === 401) {
+      console.error(`[API] UNAUTHORIZED: ${error.config.url}`);
+      error.userMessage = 'Invalid credentials. Check token in .env';
+    } else {
+      console.error(`[API] ${error.response?.status || 'ERROR'}: ${error.config.url}`, error.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default apiClient;
+
+

@@ -1,0 +1,52 @@
+REAL DEVICE TESTING CHECKLIST
+==============================
+
+SETUP:
+1. Get machine IP: ipconfig (look for IPv4 Address like 192.168.x.x)
+2. Update src/mobile/.env with your IP
+3. Start dev server: cd src/mobile && npm start
+4. Scan QR code with Expo Go app on device
+
+TEST SCENARIOS:
+[ ] TEST 1: Basic Connection (5 min)
+    - Grant GPS permission
+    - Check status: "✓ Location Tracking Active" (green)
+    - Walk 2 minutes
+    - Verify locations in backend: docker logs delivery_backend | grep location
+
+[ ] TEST 2: Token Refresh (35+ min)
+    - Let app run 30+ minutes
+    - Check Metro terminal for token refresh message
+    - Verify status stays green (no re-login)
+
+[ ] TEST 3: Offline Queue (10 min)
+    - Enable airplane mode
+    - Walk 2-3 minutes (queue locations)
+    - Disable airplane mode
+    - Check all locations sent to backend
+    - Verify zero data loss
+
+[ ] TEST 4: GPS Permissions (5 min)
+    - Revoke location permission
+    - Check status: "⚠️ GPS Permission Required" (purple)
+    - Re-grant permission
+    - Check status: "✓ Location Tracking Active" (green)
+
+[ ] TEST 5: Create & Complete Job (10 min)
+    - Create job on web dashboard
+    - See job on mobile device
+    - Take proof photo
+    - Mark complete
+    - Verify in backend database
+
+STATUS BAR COLORS:
+🟢 GREEN  - Tracking active and connected
+🟠 ORANGE - Connecting...
+🔴 RED    - Offline (will reconnect)
+🟣 PURPLE - GPS permission required
+
+BACKEND VERIFICATION:
+docker logs delivery_backend --tail 20  (check for location_updates)
+docker exec delivery_db psql -U postgres -d delivery_db -c "SELECT * FROM dispatch_jobs LIMIT 5;"
+
+SUCCESS = ALL 5 TESTS PASS ✅

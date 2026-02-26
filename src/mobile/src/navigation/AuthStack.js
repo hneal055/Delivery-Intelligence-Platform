@@ -2,7 +2,6 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/LoginScreen';
 import { useAuthStore } from '../stores/authStore';
-import { API_URL } from '../api/client';
 
 const Stack = createNativeStackNavigator();
 
@@ -16,7 +15,6 @@ export default function AuthStack() {
           <LoginScreen
             {...props}
             onLogin={(token) => login(token, null)}
-            apiUrl={API_URL}
           />
         )}
       </Stack.Screen>
