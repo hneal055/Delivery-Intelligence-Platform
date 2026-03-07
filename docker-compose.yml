@@ -9,7 +9,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - SECRET_KEY=production-secret-key-change-me
-      - BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:3000
+      - BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000
       - DATABASE_URL=postgresql://postgres:new_postgres_password@db:5432/delivery_db
       # S3 Storage (LocalStack for dev)
       - PROOF_STORAGE=local
