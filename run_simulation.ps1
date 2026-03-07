@@ -1,5 +1,5 @@
 param (
-    [int]$Drivers = 20
+    [int]$Drivers = 50
 )
 
 Write-Host "===================================================" -ForegroundColor Cyan
@@ -7,7 +7,7 @@ Write-Host "   Starting Fleet Simulation (Drivers: $Drivers)" -ForegroundColor C
 Write-Host "===================================================" -ForegroundColor Cyan
 
 # Check if Backend is up
-$backendUrl = "http://localhost:8000/docs"
+$backendUrl = "http://localhost:8002/docs"
 try {
     $resp = Invoke-WebRequest -Uri $backendUrl -Method Head -ErrorAction Stop
     Write-Host "Backend is Online." -ForegroundColor Green

@@ -10,7 +10,7 @@ from typing import List, Dict
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
 logger = logging.getLogger("FleetSim")
 
-API_BASE_URL = "http://127.0.0.1:8002"
+API_BASE_URL = "http://localhost:8002"
 DEVICE_API_KEY = "dev-secret-key-123"
 
 CHICAGO_BOUNDS = {"lat_min": 41.8000, "lat_max": 42.0000, "lon_min": -87.8000, "lon_max": -87.6000}
@@ -32,8 +32,9 @@ class VirtualDriver:
 
     async def login(self):
         try:
+            username = f"driver{int(self.driver_id[1:])}"
             response = await self.client.post("/auth/token", data={
-                "username": "driver1", "password": "driverpassword", "grant_type": "password"
+                "username": username, "password": "driverpassword", "grant_type": "password"
             })
             if response.status_code == 200:
                 self.token = response.json()["access_token"]

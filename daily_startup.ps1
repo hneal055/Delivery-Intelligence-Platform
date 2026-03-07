@@ -1,8 +1,8 @@
-<#
+~~~~`<#
 .SYNOPSIS
-    Daily startup script for Delivery Intelligence Platform.
-    Automates the process of pulling updates, starting backend services,
-    launching the frontend, and verifying the environment.
+Daily startup script for Delivery Intelligence Platform.
+Automates the process of pulling updates, starting backend services,
+launching the frontend, and verifying the environment.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -33,11 +33,13 @@ try {
     $status = git status --porcelain
     if ($status) {
         Write-Warning "You have uncommitted changes. Skipping 'git pull' to avoid conflicts."
-    } else {
+    }
+    else {
         Write-Host "Pulling latest changes from origin..." -ForegroundColor Gray
         git pull
     }
-} catch {
+}
+catch {
     Write-Warning "Git operation failed. Use with caution."
 }
 
@@ -48,16 +50,25 @@ if (Test-Path ".\start_platform.ps1") {
     # It handles Docker, Migrations, Seeding, Grafana, and Simulation
     try {
         .\start_platform.ps1
-    } catch {
+    }
+    catch {
         Write-Error "Failed to execute start_platform.ps1"
         exit 1
     }
-} else {
+}
+else {
     Write-Error "start_platform.ps1 not found in current directory."
     exit 1
 }
 
-# 3. Start Frontend
+# 3. Open Monitoring Dashboards
+Write-Step "Opening Monitoring Dashboards..."
+Write-Host "Launching Grafana  : http://localhost:3500" -ForegroundColor Gray
+Start-Process "http://localhost:3500"
+Write-Host "Launching Prometheus: http://localhost:9090" -ForegroundColor Gray
+Start-Process "http://localhost:9090"
+
+# 4. Start Frontend
 Write-Step "Launching Frontend (Vite)..."
 $frontendPath = Join-Path $RepoRoot "src\web"
 if (Test-Path $frontendPath) {
@@ -68,22 +79,25 @@ if (Test-Path $frontendPath) {
         try {
             # Quiet install to avoid spamming unless error
             npm install --silent
-        } catch {
+        }
+        catch {
             Write-Warning "npm install had issues. Continuing to start..."
         }
 
         Write-Host "Starting Vite Development Server in new window..." -ForegroundColor Green
         $absPath = (Resolve-Path $frontendPath).Path
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm run dev" -WorkingDirectory $absPath -WindowStyle Normal
-    } else {
+    }
+    else {
         Write-Warning "No package.json found in $frontendPath"
     }
     Pop-Location
-} else {
+}
+else {
     Write-Warning "Frontend path $frontendPath not found."
 }
 
-# 4. Start Mobile App (Expo)
+# 5. Start Mobile App (Expo)
 Write-Step "Launching Mobile App (Expo)..."
 $mobilePath = Join-Path $RepoRoot "src\mobile"
 if (Test-Path $mobilePath) {
@@ -93,26 +107,31 @@ if (Test-Path $mobilePath) {
         Write-Host "Checking mobile dependencies..." -ForegroundColor Gray
         try {
             npm install --silent
-        } catch {
+        }
+        catch {
             Write-Warning "npm install had issues. Continuing to start..."
         }
 
         Write-Host "Starting Expo Development Server in new window..." -ForegroundColor Green
         $absPath = (Resolve-Path $mobilePath).Path
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "npm start" -WorkingDirectory $absPath -WindowStyle Normal
-    } else {
+    }
+    else {
         Write-Warning "No package.json found in $mobilePath"
     }
     Pop-Location
-} else {
+}
+else {
     Write-Warning "Mobile path $mobilePath not found."
 }
 
 Write-Section "Daily Startup Complete"
-Write-Host "1. Backend & Services : (See start_platform output)"
-Write-Host "2. Simulation         : Running in separate window"
-Write-Host "3. Frontend           : Running in separate window (http://localhost:5173)"
-Write-Host "4. Mobile (Expo)      : Running in separate window (scan QR for device)"
+Write-Host "1. Backend API        : http://localhost:8002/docs"
+Write-Host "2. Grafana            : http://localhost:3500  (admin / new_bizness123)"
+Write-Host "3. Prometheus         : http://localhost:9090"
+Write-Host "4. Simulation         : Running in separate window"
+Write-Host "5. Frontend           : Running in separate window (http://localhost:5173)"
+Write-Host "6. Mobile (Expo)      : Running in separate window (scan QR for device)"
 Write-Host "`nHappy Coding!" -ForegroundColor Green
 
 

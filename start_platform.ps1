@@ -26,7 +26,12 @@ Start-Sleep -Seconds 15
 # 4. Migrations & Seeding
 Write-Host "`n[3/5] Applying Database Migrations & Seeding Data..." -ForegroundColor Yellow
 docker-compose exec -T backend alembic upgrade head
-docker-compose exec -T backend python tools/seed_data.py
+docker-compose exec -T backend python tools/seed_db.py
+
+# Restart backend so asyncpg clears its prepared-statement cache after schema changes
+Write-Host "Restarting backend to apply schema changes..." -ForegroundColor Gray
+docker-compose restart backend | Out-Null
+Start-Sleep -Seconds 5
 
 # 5. Grafana Setup
 Write-Host "`n[4/5] Configuring Grafana Access..." -ForegroundColor Yellow
@@ -44,7 +49,7 @@ Start-Process powershell -ArgumentList "-NoExit", "-File", ".\run_simulation.ps1
 Write-Host "`n===================================================" -ForegroundColor Green
 Write-Host "   PLATFORM READY" -ForegroundColor Green
 Write-Host "===================================================" -ForegroundColor Green
-Write-Host "1. Backend API      : http://localhost:8000/docs"
+Write-Host "1. Backend API      : http://localhost:8002/docs"
 Write-Host "2. Grafana          : http://localhost:3500"
 Write-Host "   - User           : admin"
 Write-Host "   - Password       : new_bizness123"
