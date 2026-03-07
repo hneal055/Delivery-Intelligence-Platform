@@ -1,6 +1,7 @@
 import type { WebSocketMessage } from "../types";
 
-const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+const _apiUrl: string = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const WS_BASE: string = import.meta.env.VITE_WS_URL || _apiUrl.replace(/^http/, "ws");
 
 type MessageHandler = (message: WebSocketMessage) => void;
 
@@ -92,3 +93,4 @@ export class DispatchWebSocket {
     }, this.reconnectDelay);
   }
 }
+
