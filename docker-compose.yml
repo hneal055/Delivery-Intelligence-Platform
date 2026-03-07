@@ -72,7 +72,7 @@ services:
       - POSTGRES_PASSWORD=new_postgres_password
       - POSTGRES_DB=delivery_db
     ports:
-      - '5433:5432'
+      - '5434:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped

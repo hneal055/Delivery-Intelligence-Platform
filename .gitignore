@@ -45,7 +45,17 @@ yarn-error.log
 .expo/
 web-build/
 
-
+# Uploads — proof-of-delivery images stored locally (use S3 in prod)
+src/uploads/
 src/backend/uploads/
 
+# Simulation / test output
+refresh_response.json
+token_response.json
+simulation.log
+frontend.log
+frontend_v2.log
+
+# Junk files
 nul
+=
