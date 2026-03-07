@@ -5,7 +5,7 @@ services:
     build: .
     container_name: delivery_backend
     ports:
-      - '8000:8000'
+      - '8002:8000'
     environment:
       - PYTHONPATH=/app
       - SECRET_KEY=production-secret-key-change-me
