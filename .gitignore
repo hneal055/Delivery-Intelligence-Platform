@@ -59,3 +59,7 @@ frontend_v2.log
 # Junk files
 nul
 =
+
+# Local development overrides
+.env.local
+.env.*.local
