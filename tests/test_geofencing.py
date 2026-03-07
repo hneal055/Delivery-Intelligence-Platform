@@ -5,7 +5,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("GeofenceTest")
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://localhost:8002"
 
 async def test_geofencing():
     async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=10.0) as client:
@@ -54,3 +54,4 @@ async def test_geofencing():
 
 if __name__ == "__main__":
     asyncio.run(test_geofencing())
+
