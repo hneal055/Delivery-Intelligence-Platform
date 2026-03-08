@@ -1,178 +1,68 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Image
-} from 'react-native';
-import apiClient from '../api/client';
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { useAuthStore } from "../stores/authStore";
 
-export default function LoginScreen({ onLogin }) {
-  const [username, setUsername] = useState('driver1');
-  const [password, setPassword] = useState('driverpassword');
+const QUICK_FILL = [
+  { label: "Admin",       username: "admin",       password: "adminpassword" },
+  { label: "Dispatcher",  username: "dispatcher1", password: "dispatcherpassword" },
+  { label: "Driver 1",    username: "driver1",     password: "driverpassword" },
+];
+
+export default function LoginScreen() {
+  const login = useAuthStore((s) => s.login);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!username || !password) {
-      Alert.alert('Error', 'Please enter both username and password.');
-      return;
-    }
-
+    if (!username || !password) { Alert.alert("Error", "Enter username and password"); return; }
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.append('username', username);
-      params.append('password', password);
-      // grant_type is often required for OAuth2 password flow
-      // params.append('grant_type', 'password');
-
-      // Adjust endpoint based on backend auth implementation
-      // Assuming straightforward /token endpoint or similar
-      const response = await apiClient.post('/auth/token', params.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
-
-      if (response.data && response.data.access_token) {
-        onLogin(response.data.access_token);
-      } else {
-        throw new Error('No access token received');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      const msg = error.response?.data?.detail || error.message || 'Login failed';
-      Alert.alert('Login Failed', msg);
+      await login(username.trim(), password);
+    } catch (err) {
+      Alert.alert("Login Failed", err.response?.data?.detail || "Check credentials and try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title}>Delivery Driver App</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+    <View style={s.container}>
+      <Text style={s.title}>Driver App</Text>
+      <Text style={s.subtitle}>Delivery Intelligence Platform</Text>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your username"
-            placeholderTextColor="#999"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-          />
-        </View>
+      <TextInput style={s.input} placeholder="Username" autoCapitalize="none"
+        value={username} onChangeText={setUsername} />
+      <TextInput style={s.input} placeholder="Password" secureTextEntry
+        value={password} onChangeText={setPassword} />
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your password"
-            placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-        </View>
+      <TouchableOpacity style={s.btn} onPress={handleLogin} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Sign In</Text>}
+      </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
-        </TouchableOpacity>
+      <Text style={s.hint}>Quick fill:</Text>
+      <View style={s.row}>
+        {QUICK_FILL.map((c) => (
+          <TouchableOpacity key={c.label} style={s.chip}
+            onPress={() => { setUsername(c.username); setPassword(c.password); }}>
+            <Text style={s.chipText}>{c.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f7fa',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1a1a1a',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 40,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e1e1e1',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#333',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  button: {
-    backgroundColor: '#0066cc',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 20,
-    shadowColor: '#0066cc',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, justifyContent: "center", padding: 28, backgroundColor: "#f5f6fa" },
+  title: { fontSize: 28, fontWeight: "700", textAlign: "center", marginBottom: 4, color: "#1a1a2e" },
+  subtitle: { fontSize: 13, textAlign: "center", marginBottom: 32, color: "#888" },
+  input: { backgroundColor: "#fff", borderRadius: 10, padding: 14, marginBottom: 14,
+    borderWidth: 1, borderColor: "#dde", fontSize: 15 },
+  btn: { backgroundColor: "#3b5bdb", borderRadius: 10, padding: 16, alignItems: "center", marginTop: 4 },
+  btnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  hint: { color: "#aaa", fontSize: 12, marginTop: 24, marginBottom: 8, textAlign: "center" },
+  row: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  chip: { backgroundColor: "#e3e8ff", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  chipText: { color: "#3b5bdb", fontSize: 13, fontWeight: "600" },
 });

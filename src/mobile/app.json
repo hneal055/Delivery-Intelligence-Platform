@@ -20,13 +20,17 @@
         "NSPhotoLibraryUsageDescription": "Photo library access is needed to attach delivery proof images.",
         "NSLocationWhenInUseUsageDescription": "Location is used to verify delivery positions and calculate accurate ETAs.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location keeps your delivery tracking active while the app is in the background.",
-        "UIBackgroundModes": ["location", "fetch"],
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
         "NSLocationTemporaryUsageDescriptionDictionary": {
           "DeliveryVerification": "Precise location is needed to confirm you are at the delivery address."
         }
       }
     },
     "android": {
+      "package": "com.deliveryintelligence.driver",
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
@@ -37,6 +41,11 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE"
       ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2c68aa63-c2ce-42ef-b312-d7ede483973c"
+      }
     }
   }
 }

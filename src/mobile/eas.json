@@ -12,7 +12,7 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_API_PORT": "8000"
+        "EXPO_PUBLIC_API_PORT": "8002"
       }
     },
     "preview": {
@@ -29,12 +29,6 @@
     }
   },
   "submit": {
-    "production": {
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
-      }
-    }
+    "production": {}
   }
 }
