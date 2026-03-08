@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
+import { setTokenProvider, setUnauthorizedHandler } from '../api/tokenProvider';
 
 export const useAuthStore = create(
   persist(
@@ -12,69 +13,42 @@ export const useAuthStore = create(
       tokenExpiry: null,
       refreshing: false,
 
-      login: (token, user) => {
-        // Token typically lasts 30 minutes based on backend settings
+      login: (token, username) => {
         const expiry = new Date().getTime() + 30 * 60 * 1000;
-        set({ token, user, tokenExpiry: expiry });
+        const num = username ? parseInt(username.replace('driver', ''), 10) : null;
+        const driverId = num ? `D${String(num).padStart(3, '0')}` : get().driverId;
+        set({ token, user: username, driverId, tokenExpiry: expiry });
       },
 
       setDriverId: (driverId) => set({ driverId }),
 
       logout: () => set({ token: null, user: null, tokenExpiry: null }),
 
-      /**
-       * Refresh token if it''s expired or expiring soon (within 5 minutes)
-       * Returns true if refresh succeeded, false otherwise
-       */
       refreshTokenIfNeeded: async () => {
         const { token, tokenExpiry, refreshing } = get();
-        
         if (!token || refreshing) return false;
-        
         const now = new Date().getTime();
-        const timeUntilExpiry = tokenExpiry - now;
-        
-        // Only refresh if token will expire within 5 minutes
-        if (timeUntilExpiry > 5 * 60 * 1000) return true;
-        
+        if (tokenExpiry - now > 5 * 60 * 1000) return true;
         set({ refreshing: true });
-        
         try {
           const response = await apiClient.post('/auth/token/refresh');
-          const newToken = response.data.access_token;
-          const newExpiry = new Date().getTime() + 30 * 60 * 1000;
-          
-          set({ token: newToken, tokenExpiry: newExpiry, refreshing: false });
+          set({ token: response.data.access_token, tokenExpiry: new Date().getTime() + 30 * 60 * 1000, refreshing: false });
           return true;
-        } catch (error) {
-          console.warn('Token refresh failed:', error.message);
-          // If refresh fails, keep existing token and let it expire naturally
-          // This allows graceful degradation if backend is briefly unavailable
+        } catch {
           set({ refreshing: false });
           return false;
         }
       },
 
-      /**
-       * Force refresh token immediately, used on app startup
-       */
       forceRefreshToken: async () => {
         const { token } = get();
-        
         if (!token) return false;
-        
         set({ refreshing: true });
-        
         try {
           const response = await apiClient.post('/auth/token/refresh');
-          const newToken = response.data.access_token;
-          const newExpiry = new Date().getTime() + 30 * 60 * 1000;
-          
-          set({ token: newToken, tokenExpiry: newExpiry, refreshing: false });
+          set({ token: response.data.access_token, tokenExpiry: new Date().getTime() + 30 * 60 * 1000, refreshing: false });
           return true;
-        } catch (error) {
-          console.warn('Force token refresh failed:', error.message);
-          // Force refresh failure likely means token is invalid
+        } catch {
           set({ token: null, user: null, tokenExpiry: null, refreshing: false });
           return false;
         }
@@ -87,3 +61,8 @@ export const useAuthStore = create(
   )
 );
 
+// Register with tokenProvider — breaks the circular dependency:
+//   client.js no longer imports authStore; it reads the token via this getter.
+//   On 401, handleUnauthorized() calls logout() here, clearing stale tokens.
+setTokenProvider(() => useAuthStore.getState().token);
+setUnauthorizedHandler(() => useAuthStore.getState().logout());
