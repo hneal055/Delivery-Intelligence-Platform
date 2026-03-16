@@ -63,3 +63,6 @@ nul
 # Local development overrides
 .env.local
 .env.*.local
+# Explicitly track the example file even though .env is ignored
+!.env.example
+

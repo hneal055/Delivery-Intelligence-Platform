@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +7,7 @@ from src.backend.api.deps import get_current_active_user
 from src.backend.models.domain import User
 from src.backend.core.database import get_db
 from src.backend.services.mapbox import mapbox_service
+from src.backend.api.limiter import limiter
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -27,30 +28,32 @@ class ETAResponse(BaseModel):
     source: str = "ml"
 
 @router.post("/predict-eta", response_model=ETAResponse)
+@limiter.limit("60/minute")
 async def predict_delivery_time(
-    request: ETARequest,
+    request: Request,
+    payload: ETARequest,
     current_user: User = Depends(get_current_active_user)
 ):
     """
     Predicts ETA using ML model. When Mapbox is available and coordinates are provided,
     blends Mapbox travel time (60%) with ML prediction (40%) for higher accuracy.
     """
-    if request.distance_km < 0:
+    if payload.distance_km < 0:
         raise HTTPException(status_code=400, detail="Distance cannot be negative")
 
     ml_eta = eta_predictor.predict(
-        distance_km=request.distance_km,
-        traffic_load=request.traffic_load,
-        num_packages=request.num_packages
+        distance_km=payload.distance_km,
+        traffic_load=payload.traffic_load,
+        num_packages=payload.num_packages
     )
 
     # Try Mapbox for real road-network ETA
     mapbox_minutes = None
-    if (request.origin_lat is not None and request.origin_lon is not None
-            and request.dest_lat is not None and request.dest_lon is not None):
+    if (payload.origin_lat is not None and payload.origin_lon is not None
+            and payload.dest_lat is not None and payload.dest_lon is not None):
         directions = await mapbox_service.get_directions(
-            origin=(request.origin_lat, request.origin_lon),
-            destination=(request.dest_lat, request.dest_lon),
+            origin=(payload.origin_lat, payload.origin_lon),
+            destination=(payload.dest_lat, payload.dest_lon),
         )
         if directions:
             mapbox_minutes = directions["duration_minutes"]
@@ -74,7 +77,9 @@ async def predict_delivery_time(
     )
 
 @router.post("/train-from-db")
+@limiter.limit("5/minute")
 async def train_model_from_db(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -88,7 +93,9 @@ async def train_model_from_db(
     return {"message": "Model training completed", "details": result}
 
 @router.post("/train-synthetic")
+@limiter.limit("5/minute")
 async def train_model_synthetic(
+    request: Request,
     current_user: User = Depends(get_current_active_user)
 ):
     """

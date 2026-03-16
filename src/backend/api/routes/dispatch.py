@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
+
 from src.backend.core.database import get_db
-from src.backend.api.deps import get_current_active_user
-from src.backend.models.domain import User
+from src.backend.api.deps import get_current_active_user, PermissionChecker
+from src.backend.models.domain import User, DispatchJob, DispatchJobCreate, AvailabilityCreate
 from src.backend.models.sql_models import Driver as DriverSQL, Package as PackageSQL
 from src.backend.services.heartbeat import heartbeat_service
+from src.backend.core.permissions import Permission
+from src.backend.services.dispatch_service import DispatchService
+from src.backend.api.limiter import limiter
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 
@@ -52,10 +56,10 @@ class DashboardSummary(BaseModel):
 @router.get("/drivers", response_model=List[DriverResponse])
 async def list_drivers(
     status: Optional[str] = Query(None, description="Filter by driver status"),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.VIEW_ALL_DRIVERS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all drivers with their current status, location, and package count."""
+    """List all drivers. Requires manager or admin role."""
     query = select(DriverSQL)
     if status:
         query = query.where(DriverSQL.status == status)
@@ -65,12 +69,10 @@ async def list_drivers(
 
     responses = []
     for d in drivers:
-        # Count packages assigned to this driver
         pkg_count_result = await db.execute(
             select(func.count()).select_from(PackageSQL).where(PackageSQL.driver_id == d.id)
         )
         pkg_count = pkg_count_result.scalar() or 0
-
         is_online = await heartbeat_service.is_online(d.id)
 
         responses.append(DriverResponse(
@@ -91,13 +93,51 @@ async def list_drivers(
 async def get_driver_packages(
     driver_id: str,
     status: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.VIEW_ALL_PACKAGES)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all packages assigned to a specific driver."""
+    """List packages for a specific driver. Requires manager or admin role."""
     query = select(PackageSQL).where(PackageSQL.driver_id == driver_id)
     if status:
         query = query.where(PackageSQL.status == status)
+
+    result = await db.execute(query)
+    packages = result.scalars().all()
+
+    return [
+        PackageResponse(
+            id=p.id,
+            driver_id=p.driver_id,
+            vehicle_id=p.vehicle_id,
+            dest_lat=p.dest_lat,
+            dest_lon=p.dest_lon,
+            dest_address=p.dest_address,
+            status=p.status,
+            section=p.section,
+            distance_km=p.distance_km,
+            predicted_eta_seconds=p.predicted_eta_seconds,
+            created_at=p.created_at.isoformat() if p.created_at else None,
+            updated_at=p.updated_at.isoformat() if p.updated_at else None,
+        )
+        for p in packages
+    ]
+
+
+@router.get("/deliveries", response_model=List[PackageResponse])
+async def list_deliveries(
+    status: Optional[str] = Query(None, description="Filter by package status"),
+    driver_id: Optional[str] = Query(None, description="Filter by assigned driver"),
+    limit: int = Query(200, ge=1, le=1000, description="Max results to return"),
+    current_user: User = Depends(PermissionChecker(Permission.VIEW_ASSIGNED_PACKAGES)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mobile-friendly package list. Drivers see only their assigned packages."""
+    query = select(PackageSQL)
+    if status:
+        query = query.where(PackageSQL.status == status)
+    if driver_id:
+        query = query.where(PackageSQL.driver_id == driver_id)
+    query = query.limit(limit)
 
     result = await db.execute(query)
     packages = result.scalars().all()
@@ -125,15 +165,17 @@ async def get_driver_packages(
 async def list_packages(
     status: Optional[str] = Query(None, description="Filter by package status"),
     driver_id: Optional[str] = Query(None, description="Filter by assigned driver"),
-    current_user: User = Depends(get_current_active_user),
+    limit: int = Query(200, ge=1, le=1000, description="Max results to return"),
+    current_user: User = Depends(PermissionChecker(Permission.VIEW_ALL_PACKAGES)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all packages with optional filters."""
+    """List all packages (dispatcher view). Requires manager or admin role."""
     query = select(PackageSQL)
     if status:
         query = query.where(PackageSQL.status == status)
     if driver_id:
         query = query.where(PackageSQL.driver_id == driver_id)
+    query = query.limit(limit)
 
     result = await db.execute(query)
     packages = result.scalars().all()
@@ -159,11 +201,10 @@ async def list_packages(
 
 @router.get("/dashboard/summary", response_model=DashboardSummary)
 async def get_dashboard_summary(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.VIEW_ANALYTICS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get dispatch dashboard summary statistics."""
-    # Driver counts
+    """Dashboard statistics. Requires manager or admin role."""
     total_drivers_result = await db.execute(select(func.count()).select_from(DriverSQL))
     total_drivers = total_drivers_result.scalar() or 0
 
@@ -171,10 +212,8 @@ async def get_dashboard_summary(
         select(func.count()).select_from(DriverSQL).where(DriverSQL.status == "active")
     )
     active_drivers = active_drivers_result.scalar() or 0
-
     online_drivers = await heartbeat_service.get_online_count()
 
-    # Package counts
     total_packages_result = await db.execute(select(func.count()).select_from(PackageSQL))
     total_packages = total_packages_result.scalar() or 0
 
@@ -204,40 +243,40 @@ async def get_dashboard_summary(
     )
 
 
-# --- Phase 2: Dispatch & Scheduling Endpoints ---
-
-from fastapi import HTTPException
-from src.backend.services.dispatch_service import DispatchService
-from src.backend.models.domain import DispatchJob, DispatchJobCreate, AvailabilityCreate
-
 @router.post("/jobs", response_model=DispatchJob)
+@limiter.limit("60/minute")
 async def create_job(
+    request: Request,
     job_data: DispatchJobCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new dispatch job."""
+    """Create a new dispatch job. Requires manager or admin role."""
     service = DispatchService(db)
     return await service.create_job(job_data)
+
 
 @router.get("/jobs", response_model=List[DispatchJob])
 async def list_jobs(
     status: Optional[str] = None,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all dispatch jobs, optionally filtered by status."""
+    """List dispatch jobs. Requires manager or admin role."""
     service = DispatchService(db)
     return await service.get_all_jobs(status)
 
+
 @router.put("/jobs/{job_id}/assign")
+@limiter.limit("60/minute")
 async def assign_job(
+    request: Request,
     job_id: str,
     driver_id: str = Query(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Assign a driver to a job."""
+    """Assign a driver to a job. Requires manager or admin role."""
     service = DispatchService(db)
     try:
         job = await service.assign_driver(job_id, driver_id)
@@ -247,13 +286,16 @@ async def assign_job(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @router.post("/availability")
+@limiter.limit("60/minute")
 async def set_availability(
+    request: Request,
     data: AvailabilityCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Set availability for a driver."""
+    """Set driver availability. Requires manager or admin role."""
     service = DispatchService(db)
     await service.set_availability(data.driver_id, data.date, data.is_available, data.start_time, data.end_time)
     return {"message": "Availability updated"}
@@ -262,10 +304,10 @@ async def set_availability(
 @router.get("/jobs/{job_id}", response_model=DispatchJob)
 async def get_job(
     job_id: str,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a specific dispatch job."""
+    """Get a specific dispatch job. Requires manager or admin role."""
     service = DispatchService(db)
     job = await service.get_job(job_id)
     if not job:

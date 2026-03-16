@@ -1,78 +1,70 @@
+# docker-compose.yml
+#
+# SECRETS: All sensitive values are loaded from a .env file (not committed to git).
+# Copy .env.example to .env and fill in real values before starting.
+#
+# To start: docker compose up -d
+
 services:
   backend:
     build: .
     container_name: delivery_backend
     ports:
       - '8002:8000'
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
-      - SECRET_KEY=production-secret-key-change-me
-      - BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000
-      - DATABASE_URL=postgresql://postgres:new_postgres_password@db:5432/delivery_db
-      # S3 Storage (LocalStack for dev)
-      - PROOF_STORAGE=local
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - AWS_REGION=us-east-1
-      - S3_BUCKET_NAME=delivery-proofs
-      - S3_ENDPOINT_URL=http://localstack:4566
-      # Notifications (disabled by default)
-      - NOTIFICATIONS_ENABLED=false
-      - TWILIO_ACCOUNT_SID=
-      - TWILIO_AUTH_TOKEN=
-      - TWILIO_FROM_NUMBER=
-      - SENDGRID_API_KEY=
-      - SENDGRID_FROM_EMAIL=noreply@example.com
-      # Redis
+      # Non-secret runtime config (can be overridden in .env)
       - REDIS_URL=redis://redis:6379/0
-      # Mapbox (disabled by default)
-      - MAPBOX_ACCESS_TOKEN=
-    volumes:
-      - ./src:/app/src
-      - ./tools:/app/tools
-      - ./migrations:/app/migrations
-      - ./alembic.ini:/app/alembic.ini
-    command: uvicorn src.backend.api.main:app --host 0.0.0.0 --port 8000 --loop asyncio
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/delivery_db
+      - BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
     restart: always
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   worker:
     build: .
     container_name: delivery_worker
+    env_file:
+      - .env
     environment:
       - PYTHONPATH=/app
-      - SECRET_KEY=production-secret-key-change-me
-      - DATABASE_URL=postgresql://postgres:new_postgres_password@db:5432/delivery_db
       - REDIS_URL=redis://redis:6379/0
-      - PROOF_STORAGE=local
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - AWS_REGION=us-east-1
-      - S3_BUCKET_NAME=delivery-proofs
-      - S3_ENDPOINT_URL=http://localstack:4566
-    volumes:
-      - ./src:/app/src
-      - ./tools:/app/tools
-      - ./migrations:/app/migrations
-    command: arq src.backend.worker.main.WorkerSettings --watch src
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/delivery_db
+    command: arq src.backend.worker.main.WorkerSettings
     restart: always
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   db:
     image: postgis/postgis:15-3.3-alpine
     container_name: delivery_db
+    env_file:
+      - .env
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=new_postgres_password
       - POSTGRES_DB=delivery_db
     ports:
       - '5434:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d delivery_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   redis:
@@ -80,6 +72,12 @@ services:
     container_name: delivery_redis
     ports:
       - '6379:6379'
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   localstack:
@@ -109,9 +107,9 @@ services:
     container_name: delivery_grafana
     ports:
       - '3500:3000'
+    env_file:
+      - .env
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_PUBLIC_DASHBOARDS_ENABLED=true
     volumes:
       - grafana_data:/var/lib/grafana
@@ -124,4 +122,3 @@ volumes:
   postgres_data:
   grafana_data:
   localstack_data:
-
