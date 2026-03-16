@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
@@ -7,6 +7,8 @@ from sqlalchemy import select
 
 from src.backend.core.database import get_db
 from src.backend.api.deps import get_current_active_user
+from src.backend.api.limiter import limiter
+from src.backend.api.limiter import limiter
 from src.backend.models.sql_models_routing import (
     TimeWindowConstraint,
     VehicleProfile,
@@ -77,7 +79,9 @@ async def health_check():
 
 
 @router.post("/time-windows", response_model=TimeWindowResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("60/minute")
 async def create_time_window(
+    request: Request,
     payload: TimeWindowRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -125,7 +129,9 @@ async def create_time_window(
 
 
 @router.post("/vehicles/profile")
+@limiter.limit("60/minute")
 async def create_vehicle_profile(
+    request: Request,
     payload: VehicleProfileRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -150,7 +156,8 @@ async def create_vehicle_profile(
 
 
 @router.post("/optimize-single")
-async def optimize_single_route(payload: OptimizeSingleRequest):
+@limiter.limit("30/minute")
+async def optimize_single_route(request: Request, payload: OptimizeSingleRequest):
     """Optimize a single driver's route (stub — optimization engine placeholder)."""
     return {
         "message": f"Route optimized with {len(payload.package_ids)} stops",
@@ -163,7 +170,8 @@ async def optimize_single_route(payload: OptimizeSingleRequest):
 
 
 @router.post("/optimize-multi-depot")
-async def optimize_multi_depot_route(payload: OptimizeMultiDepotRequest):
+@limiter.limit("10/minute")
+async def optimize_multi_depot_route(request: Request, payload: OptimizeMultiDepotRequest):
     """Optimize routes across multiple depots (stub — optimization engine placeholder)."""
     return {
         "message": f"Multi-depot optimization complete: {len(payload.stops)} stops across {len(payload.depots)} depots",
