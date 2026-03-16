@@ -86,6 +86,11 @@ class Settings:
     # IMAGE VERIFICATION
     IMAGE_VERIFICATION_PROVIDER: str = get_secret("IMAGE_VERIFICATION_PROVIDER", "stub")
 
+
+    # OPENTELEMETRY
+    OTEL_SERVICE_NAME: str = get_secret("OTEL_SERVICE_NAME", "delivery-intelligence-platform")
+    OTEL_SERVICE_VERSION: str = get_secret("OTEL_SERVICE_VERSION", "1.0.0")
+    OTLP_ENDPOINT: str = get_secret("OTLP_ENDPOINT", "")  # e.g. http://jaeger:4317
     # CUSTOMER TRACKING PORTAL
     PUBLIC_TRACKING_ENABLED: bool = get_secret("PUBLIC_TRACKING_ENABLED", "true").lower() == "true"
     PUBLIC_TRACKING_BASE_URL: str = get_secret("PUBLIC_TRACKING_BASE_URL", "http://localhost:5173/track")
@@ -99,3 +104,8 @@ if settings.ENV != "development" and settings.SECRET_KEY == _WEAK_KEY:
         "FATAL: SECRET_KEY is still the default placeholder. "
         "Set a strong, random SECRET_KEY environment variable before running in production."
     )
+
+    # OPENTELEMETRY TRACING
+    OTLP_ENDPOINT: str = get_secret("OTLP_ENDPOINT", "")          # e.g. http://jaeger:4318
+    OTEL_SERVICE_NAME: str = os.getenv("OTEL_SERVICE_NAME", "delivery-intelligence-platform")
+    OTEL_SERVICE_VERSION: str = os.getenv("OTEL_SERVICE_VERSION", "1.0.0")

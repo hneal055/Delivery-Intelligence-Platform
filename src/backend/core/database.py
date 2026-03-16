@@ -12,6 +12,15 @@ engine = create_async_engine(
     database_url,
     echo=False,
     future=True,
+    # Production pool tuning: support up to 20 concurrent queries per replica,
+    # with up to 10 extra connections allowed during traffic spikes.
+    # pool_timeout: raise after 30 s waiting for a free connection (not block forever).
+    # pool_recycle: discard connections older than 30 min to avoid PG idle-in-transaction kills.
+    pool_size=20,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=1800,
+    pool_pre_ping=True,   # validates connections before use — survives PG restarts
 )
 
 # Create session factory

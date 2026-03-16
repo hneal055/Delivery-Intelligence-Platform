@@ -1,0 +1,13 @@
+{{- if .Values.configMap.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "delivery-platform.fullname" . }}-config
+  labels:
+    {{- include "delivery-platform.labels" . | nindent 4 }}
+data:
+  ENV: {{ .Values.env.ENV | quote }}
+  LOG_LEVEL: {{ .Values.env.LOG_LEVEL | quote }}
+  NOTIFICATIONS_ENABLED: {{ .Values.env.NOTIFICATIONS_ENABLED | quote }}
+  OTLP_ENDPOINT: {{ .Values.env.OTLP_ENDPOINT | quote }}
+{{- end }}

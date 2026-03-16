@@ -1,0 +1,81 @@
+# Alertmanager configuration for Delivery Intelligence Platform
+# Mount as a ConfigMap or volume at /etc/alertmanager/alertmanager.yml
+global:
+  resolve_timeout: 5m
+  # SMTP settings — override via environment or Kubernetes Secret
+  smtp_smarthost: "${SMTP_HOST}:587"
+  smtp_from: "alerts@deliveryplatform.internal"
+  smtp_auth_username: "${SMTP_USER}"
+  smtp_auth_password: "${SMTP_PASSWORD}"
+  smtp_require_tls: true
+
+templates:
+  - "/etc/alertmanager/templates/*.tmpl"
+
+# ── Routing tree ─────────────────────────────────────────────────────────────
+route:
+  group_by: ["alertname", "handler", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: ops-email              # default
+
+  routes:
+    # Critical alerts page the on-call via Slack immediately
+    - matchers:
+        - severity = "critical"
+      receiver: slack-oncall
+      repeat_interval: 30m
+      continue: true               # also send email
+
+    # Operations-team alerts (low driver count, etc.)
+    - matchers:
+        - team = "operations"
+      receiver: ops-email
+      group_wait: 2m               # a little grace period
+
+    # Silence noisy Redis-down during scheduled maintenance windows
+    # (add inhibit rule or use amtool silence for one-off windows)
+
+# ── Inhibition rules ─────────────────────────────────────────────────────────
+inhibit_rules:
+  # If Postgres or Redis is down, suppress derived application alerts
+  - source_matchers:
+      - alertname = "PostgresDown"
+    target_matchers:
+      - alertname = "High5xxErrorRate"
+    equal: ["instance"]
+  - source_matchers:
+      - alertname = "RedisDown"
+    target_matchers:
+      - alertname = "High5xxErrorRate"
+    equal: []
+
+# ── Receivers ────────────────────────────────────────────────────────────────
+receivers:
+  - name: ops-email
+    email_configs:
+      - to: "ops-team@deliveryplatform.internal"
+        send_resolved: true
+        headers:
+          Subject: "[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} — Delivery Platform"
+        html: |
+          {{ range .Alerts }}
+          <b>Alert:</b> {{ .Annotations.summary }}<br/>
+          <b>Description:</b> {{ .Annotations.description }}<br/>
+          <b>Labels:</b> {{ range .Labels.SortedPairs }} {{ .Name }}={{ .Value }} {{ end }}<br/>
+          {{ end }}
+
+  - name: slack-oncall
+    slack_configs:
+      - api_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#platform-alerts"
+        send_resolved: true
+        title: "{{ .Status | toUpper }}: {{ .GroupLabels.alertname }}"
+        text: >-
+          {{ range .Alerts -}}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ end }}
+        color: |-
+          {{ if eq .Status "firing" }}danger{{ else }}good{{ end }}

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: delivery-platform
+description: >
+  Delivery Intelligence Platform — FastAPI backend with PostGIS, Redis pub/sub,
+  OpenTelemetry tracing, and async SQLAlchemy.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - delivery
+  - logistics
+  - fastapi
+  - postgresql
+home: https://github.com/your-org/delivery-intelligence-platform
+maintainers:
+  - name: Platform Team
+    email: platform@deliveryplatform.internal
+dependencies: []

@@ -1,0 +1,129 @@
+# values.yaml — default values for delivery-platform Helm chart
+# Override per environment with -f values-prod.yaml or --set key=value
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/your-org/delivery-platform
+  pullPolicy: IfNotPresent
+  tag: ""          # Defaults to appVersion when empty
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: api.deliveryplatform.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: delivery-platform-tls
+      hosts:
+        - api.deliveryplatform.example.com
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Environment variables injected into the container
+# Sensitive values should come from the 'secret' section below.
+env:
+  ENV: production
+  LOG_LEVEL: "INFO"
+  NOTIFICATIONS_ENABLED: "true"
+  OTLP_ENDPOINT: ""               # e.g. http://jaeger-collector:4317
+
+# Non-sensitive config values rendered into a ConfigMap
+configMap:
+  enabled: true
+
+# Secret values — base64-encode or use external-secrets operator
+secret:
+  # Set these via --set or a values-prod.yaml that is NOT committed to VCS
+  DATABASE_URL: ""
+  SECRET_KEY: ""
+  REDIS_URL: ""
+  SMTP_HOST: ""
+  SMTP_USER: ""
+  SMTP_PASSWORD: ""
+
+# Migration init-container runs `alembic upgrade head` before the main pod starts
+migrations:
+  enabled: true
+  image: ""   # defaults to main image
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - delivery-platform
+          topologyKey: kubernetes.io/hostname

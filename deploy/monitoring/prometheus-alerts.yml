@@ -1,0 +1,123 @@
+# Prometheus AlertRule definitions for Delivery Intelligence Platform
+# Apply with:  kubectl apply -f deploy/monitoring/prometheus-alerts.yml
+# Or reference in prometheus.yml rule_files section.
+groups:
+  - name: delivery_platform.api
+    interval: 30s
+    rules:
+      # ── Latency ──────────────────────────────────────────────────────────
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, handler) (
+              rate(http_request_duration_seconds_bucket{job="delivery-platform"}[5m])
+            )
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High p95 latency on {{ $labels.handler }}"
+          description: >
+            The 95th-percentile request latency for handler {{ $labels.handler }}
+            has been above 2 s for 5 minutes (current: {{ $value | humanizeDuration }}).
+            Investigate slow DB queries, Redis timeouts, or CPU contention.
+
+      # ── Error rate ────────────────────────────────────────────────────────
+      - alert: High5xxErrorRate
+        expr: |
+          sum by (handler) (
+            rate(http_responses_total{job="delivery-platform", status=~"5.."}[5m])
+          )
+          /
+          sum by (handler) (
+            rate(http_responses_total{job="delivery-platform"}[5m])
+          ) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "High 5xx rate on {{ $labels.handler }}"
+          description: >
+            More than 1 % of requests to {{ $labels.handler }} are returning 5xx
+            for the past 2 minutes (rate: {{ $value | humanizePercentage }}).
+            Check application logs for tracebacks.
+
+      # ── No active drivers ─────────────────────────────────────────────────
+      - alert: NoActiveDrivers
+        expr: |
+          sum(delivery_active_drivers_total{job="delivery-platform"}) == 0
+        for: 10m
+        labels:
+          severity: warning
+          team: operations
+        annotations:
+          summary: "No active drivers reported"
+          description: >
+            The delivery_active_drivers_total gauge has been 0 for 10 minutes.
+            This may indicate a telemetry gap or an operational issue.
+
+  - name: delivery_platform.infrastructure
+    interval: 30s
+    rules:
+      # ── Redis unavailability ──────────────────────────────────────────────
+      - alert: RedisDown
+        expr: |
+          up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis instance is unreachable"
+          description: >
+            The Redis target has been down for 1 minute.
+            Rate-limiting, pub/sub notifications, and session caching are degraded.
+
+      # ── PostgreSQL unavailability ─────────────────────────────────────────
+      - alert: PostgresDown
+        expr: |
+          up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "PostgreSQL is unreachable"
+          description: >
+            The PostgreSQL target has been down for 1 minute.
+            All persistent operations are failing.
+
+      # ── Disk usage ────────────────────────────────────────────────────────
+      - alert: HighDiskUsage
+        expr: |
+          (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"})
+          / node_filesystem_size_bytes{mountpoint="/"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Disk usage above 85 % on {{ $labels.instance }}"
+          description: >
+            Root filesystem on {{ $labels.instance }} is {{ $value | humanizePercentage }}
+            full.  Clean up old media/proof-of-delivery images or expand storage.
+
+      # ── Pod restarts ──────────────────────────────────────────────────────
+      - alert: FrequentPodRestarts
+        expr: |
+          increase(kube_pod_container_status_restarts_total{
+            namespace="delivery-platform"
+          }[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Pod {{ $labels.pod }} restarting frequently"
+          description: >
+            Container {{ $labels.container }} in pod {{ $labels.pod }} has
+            restarted {{ $value }} times in the last 15 minutes.  Check for
+            OOMKill, crash loops, or misconfiguration.
