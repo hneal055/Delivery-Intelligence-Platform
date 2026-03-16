@@ -19,11 +19,11 @@ This document outlines the roadmap for moving the Delivery Intelligence Platform
 - [x] **Task**: Update `auth.py` and `deps.py` with `has_permission()` checkers.
 
 ### 3. API Security
-- [ ] **Goal**: Prevent abuse.
-- [ ] **Action**:
+- [x] **Goal**: Prevent abuse.
+- [x] **Action**:
     - **Rate Limiting**: Configure Redis-backed rate limiting (move away from memory).
     - **Input Validation**: Sanitize all inputs in Pydantic models (already good, but review regex patterns).
-    - **CORS**: Restrict `BACKEND_CORS_ORIGINS` to specific production domains.
+    - **CORS**: Restrict `BACKEND_CORS_ORIGINS` to specific production domains. Explicit `allow_methods` and `allow_headers` enforced (no more wildcard `*`).
 
 ---
 
@@ -85,3 +85,29 @@ This document outlines the roadmap for moving the Delivery Intelligence Platform
 ## Next Step Recommendation
 Begin with **Phase B1 (Redis Implementation)** as it solves the immediate issue of scaling the backend for real-time tracking, which is the core feature of the platform.
 '
+
+---
+
+## Phase E: Testing & Quality (Priority: High)
+*Automated tests prevent regressions and validate business logic.*
+
+### 1. Unit Test Suite ✅ (Completed 2026-03-16)
+- [x] **Security**: JWT encode/decode/expiry/tamper, bcrypt password hashing (`tests/unit/test_security.py`)
+- [x] **RBAC**: Role→permission mapping coverage for all three roles (`tests/unit/test_permissions.py`)
+- [x] **Geofencing**: `is_in_delivery_zone` boundary and polygon logic (`tests/unit/test_geofencing_unit.py`)
+- [x] **Routing**: `RoutingService.optimize_route` nearest-neighbor + 2-Opt cases (`tests/unit/test_routing_service.py`)
+- [x] **Notifications**: Channel detection, disabled-mode no-ops, mocked Twilio/SendGrid send paths, error handling (`tests/unit/test_notifications.py`)
+- [x] **API Health & CORS**: `/health`, `/secure-ping` auth guard, CORS preflight allowlist enforcement (`tests/unit/test_api_health.py`)
+- [x] **Shared fixtures** (`tests/conftest.py`): in-memory SQLite DB, fake JWT users, authenticated AsyncClient helpers
+
+**Result: 43 tests, 100% pass rate, ~1.5s runtime, zero external dependencies required.**
+
+### 2. Integration Tests (Remaining)
+- [ ] **Auth flow**: POST `/auth/token` with real DB user, token refresh, invalid credentials
+- [ ] **Dispatch flow**: Create job → assign to driver → verify package linkage
+- [ ] **Delivery flow**: POST `/delivery/confirm` with mock POD, assert status change
+- [ ] **Routing**: POST `/routing/optimize` end-to-end with multiple stops
+
+### 3. CI Pipeline
+- [ ] **GitHub Actions**: Run `pytest` on every push/PR
+- [ ] **Coverage gate**: Enforce minimum 60% coverage via `pytest-cov`

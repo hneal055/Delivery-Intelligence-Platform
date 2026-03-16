@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from arq import create_pool
 from arq.connections import RedisSettings
+from typing import Optional
 
 from src.backend.api.limiter import limiter
 from src.backend.api.routes import delivery
@@ -29,7 +30,6 @@ from src.backend.services.redis_manager import manager as ws_manager
 from src.backend.core.logging_config import configure_logging
 import logging
 import asyncio
-import requests
 
 # Configure Logging
 configure_logging()
@@ -38,12 +38,24 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title=settings.PROJECT_NAME)
 
 # --- CORS Configuration ---
+# Explicit allowlists prevent overly-permissive cross-origin requests.
+# Credentials (cookies/Authorization headers) are only allowed from known origins.
+_CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_CORS_ALLOWED_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "Accept",
+    "Origin",
+    "X-Requested-With",
+    "X-DIAD-Token",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=_CORS_ALLOWED_METHODS,
+    allow_headers=_CORS_ALLOWED_HEADERS,
 )
 
 # Rate Limiter
@@ -116,56 +128,51 @@ async def init_data():
                     )
                     created_users += 1
 
-                # Driver profile (used by simulator — must use explicit D001 IDs)
+                # Driver profile (used by simulator -- must use explicit D001 IDs)
                 result = await db.execute(select(Driver).where(Driver.id == driver_id))
-                if not result.scalars().first():
+                existing_driver = result.scalars().first()
+                if not existing_driver:
                     db.add(Driver(
                         id=driver_id,
-                        name=f"Driver {i}",
+                        name=f"Driver {i:03d}",
                         status="active",
-                        vehicle_id=f"V-{i:03d}",
-                        current_lat=41.8781,   # Chicago default
-                        current_lon=-87.6298,
                     ))
                     created_profiles += 1
 
             await db.commit()
-
             if created_users or created_profiles:
-                logger.info(f"Seeding complete: +{created_users} driver users, +{created_profiles} driver profiles")
+                logger.info(f"Seeding complete: {created_users} users, {created_profiles} driver profiles created")
             else:
-                logger.info("Seed data already present — no changes made")
+                logger.info("Seed data already present, skipping")
 
         except Exception as e:
-            logger.error(f"Error initializing data: {e}")
+            logger.error(f"Error during init_data: {e}")
+            await db.rollback()
 
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting up Delivery Intelligence Platform...")
-
-    # Init ARQ Redis Pool
-    if settings.REDIS_URL:
-        try:
-            app.state.arq_pool = await create_pool(
-                RedisSettings(host="redis", port=6379, database=0)
-            )
-            logger.info("ARQ Redis pool initialized")
-        except Exception as e:
-            logger.error(f"Failed to init ARQ pool: {e}")
-            app.state.arq_pool = None
-
+    logger.info("Starting up...")
     await init_data()
-    await ws_manager.connect()
     asyncio.create_task(update_active_drivers())
+    logger.info("Startup complete")
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    if hasattr(app.state, "arq_pool") and app.state.arq_pool:
-        await app.state.arq_pool.close()
+@app.get("/health")
+async def health_check():
+    return {"status": "online"}
 
 
-@app.get("/")
+_DEV_DEVICE_TOKEN = "dev-secret-key-123"
+
+
+@app.post("/secure-ping")
+async def secure_ping(x_diad_token: Optional[str] = Header(default=None, alias="X-DIAD-Token")):
+    if x_diad_token != _DEV_DEVICE_TOKEN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid device token")
+    return {"msg": "Device Authenticated"}
+
+
+@app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")

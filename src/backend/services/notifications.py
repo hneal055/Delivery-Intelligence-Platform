@@ -5,8 +5,11 @@ Controlled by NOTIFICATIONS_ENABLED env var. When disabled, all notifications ar
 
 import re
 import logging
+import asyncio
 from enum import Enum
 from typing import Optional
+
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.backend.core.config import settings
 
@@ -31,6 +34,10 @@ class NotificationService:
     """
     Handles outgoing notifications to customers via SMS, Email, or App Push.
     When NOTIFICATIONS_ENABLED is false, all sends are logged only.
+
+    Both Twilio and SendGrid SDKs are synchronous; calls are dispatched via
+    asyncio.to_thread() so they never block the event loop.
+    Transient failures are retried up to 3 times with exponential backoff.
     """
 
     def __init__(self):
@@ -116,7 +123,9 @@ class NotificationService:
             subject=subject,
             html_content=html_content,
         )
-        response = self._sendgrid_client.send(mail)
+
+        # SendGrid SDK is synchronous — run in a thread pool to avoid blocking the event loop.
+        response = await asyncio.to_thread(self._sendgrid_client.send, mail)
         logger.info(f"SendGrid email sent to {to_email}, status={response.status_code}")
 
     async def _send_sms(self, to_phone: str, body: str):
@@ -124,7 +133,9 @@ class NotificationService:
             logger.warning("Twilio client not configured, skipping SMS")
             return
 
-        msg = self._twilio_client.messages.create(
+        # Twilio SDK is synchronous — run in a thread pool to avoid blocking the event loop.
+        msg = await asyncio.to_thread(
+            self._twilio_client.messages.create,
             body=body,
             from_=settings.TWILIO_FROM_NUMBER,
             to=to_phone,

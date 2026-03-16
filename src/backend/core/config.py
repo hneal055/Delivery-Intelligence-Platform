@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import List
 
 def get_secret(key: str, default: str = "") -> str:
@@ -15,16 +16,20 @@ def get_secret(key: str, default: str = "") -> str:
                 return f.read().strip()
         except Exception:
             pass # Fallback to env var if file read fails
-    
+
     # 2. Check for standard env var
     return os.getenv(key, default)
+
+
+_WEAK_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY_IN_PRODUCTION"
+
 
 class Settings:
     ENV: str = os.getenv("ENV", "development")
     PROJECT_NAME: str = "Delivery Intelligence Platform"
 
     # SECURITY
-    SECRET_KEY: str = get_secret("SECRET_KEY", "CHANGE_THIS_TO_A_SUPER_SECRET_KEY_IN_PRODUCTION")
+    SECRET_KEY: str = get_secret("SECRET_KEY", _WEAK_KEY)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
@@ -84,4 +89,12 @@ class Settings:
     PUBLIC_TRACKING_ENABLED: bool = get_secret("PUBLIC_TRACKING_ENABLED", "true").lower() == "true"
     PUBLIC_TRACKING_BASE_URL: str = get_secret("PUBLIC_TRACKING_BASE_URL", "http://localhost:5173/track")
 
+
 settings = Settings()
+
+# Enforce strong secret key in non-development environments
+if settings.ENV != "development" and settings.SECRET_KEY == _WEAK_KEY:
+    raise RuntimeError(
+        "FATAL: SECRET_KEY is still the default placeholder. "
+        "Set a strong, random SECRET_KEY environment variable before running in production."
+    )

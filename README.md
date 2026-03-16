@@ -116,10 +116,32 @@ Auto-configure your local IP for mobile testing:
 See [src/mobile/README.md](src/mobile/README.md) for detailed mobile app documentation.
 
 ### 6. Run Tests
-Execute the unit test suite:
+Execute the unit test suite (no database or external services required):
 ```bash
 pytest
 ```
+
+Run with coverage report:
+```bash
+pytest --cov=src --cov-report=term-missing
+```
+
+Run a specific module:
+```bash
+pytest tests/unit/test_security.py -v
+```
+
+**Test suite** (`tests/unit/`):
+| File | Coverage |
+|------|----------|
+| `test_security.py` | JWT encode/decode/expiry, bcrypt hashing |
+| `test_permissions.py` | RBAC role → permission mapping |
+| `test_geofencing_unit.py` | `is_in_delivery_zone` polygon logic |
+| `test_routing_service.py` | Nearest-neighbour + 2-Opt optimizer |
+| `test_notifications.py` | Channel detection, Twilio/SendGrid mocked send paths |
+| `test_api_health.py` | Health endpoint, secure-ping auth, CORS preflight |
+| `test_api_basics.py` | Core API endpoint smoke tests |
+| `test_routing_api.py` | Route optimization API |
 
 
 ## Troubleshooting
@@ -135,3 +157,4 @@ If you encounter unexpected WebSocket disconnects with the backend:
 - Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your PC's LAN IP
 - Ensure firewall allows connections on port 8000
 - Use `.\configure-mobile-env.ps1` for automatic IP detection
+
