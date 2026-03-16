@@ -55,3 +55,7 @@ arq>=0.25.0
 GeoAlchemy2>=0.14.0
 
 structlog>=24.0.0
+
+pillow>=10.0.0  # POD image verification
+pytest-asyncio>=0.23.0  # async test support
+aiosqlite>=0.19.0  # async SQLite driver for unit tests

@@ -31,7 +31,8 @@ class Settings:
     # SECURITY
     SECRET_KEY: str = get_secret("SECRET_KEY", _WEAK_KEY)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = get_secret(
