@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,15 +15,16 @@ from src.backend.api.limiter import limiter
 from src.backend.api.routes import delivery
 from src.backend.api.routes import routing
 from src.backend.api.routes import auth
-from src.backend.api.routes import analytics  # Phase 4
+from src.backend.api.routes import analytics
 from src.backend.api.routes import websocket
 from src.backend.api.routes import dispatch
 from src.backend.api.routes import tracking
 from src.backend.api.routes import advanced_routing
 from src.backend.core.config import settings
+from src.backend.core.tracing import setup_tracing
 from src.backend.api.metrics import ACTIVE_DRIVERS
 from src.backend.services.heartbeat import heartbeat_service
-from src.backend.core.database import AsyncSessionLocal
+from src.backend.core.database import AsyncSessionLocal, engine
 from src.backend.services.user_service import get_user_by_username, create_user
 from src.backend.models.domain import UserCreate, UserRole
 from src.backend.models.sql_models import Driver
@@ -34,46 +36,6 @@ import asyncio
 # Configure Logging
 configure_logging()
 logger = logging.getLogger(__name__)
-
-app = FastAPI(title=settings.PROJECT_NAME)
-
-# --- CORS Configuration ---
-# Explicit allowlists prevent overly-permissive cross-origin requests.
-# Credentials (cookies/Authorization headers) are only allowed from known origins.
-_CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-_CORS_ALLOWED_HEADERS = [
-    "Authorization",
-    "Content-Type",
-    "Accept",
-    "Origin",
-    "X-Requested-With",
-    "X-DIAD-Token",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=_CORS_ALLOWED_METHODS,
-    allow_headers=_CORS_ALLOWED_HEADERS,
-)
-
-# Rate Limiter
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-# Prometheus Metrics
-Instrumentator().instrument(app).expose(app)
-
-# Include Routers
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(routing.router)
-app.include_router(delivery.router)
-app.include_router(analytics.router)
-app.include_router(websocket.router)
-app.include_router(dispatch.router)
-app.include_router(tracking.router)
-app.include_router(advanced_routing.router)
 
 
 async def update_active_drivers():
@@ -150,12 +112,72 @@ async def init_data():
             await db.rollback()
 
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: replaces deprecated @app.on_event handlers."""
     logger.info("Starting up...")
+    await ws_manager.connect()
     await init_data()
-    asyncio.create_task(update_active_drivers())
+    driver_metric_task = asyncio.create_task(update_active_drivers())
     logger.info("Startup complete")
+
+    yield  # ← application runs here
+
+    logger.info("Shutting down...")
+    driver_metric_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await driver_metric_task
+    await ws_manager.disconnect()
+    logger.info("Shutdown complete")
+
+
+app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+
+# --- OpenTelemetry Tracing ---
+# Called immediately after app creation so all route registrations are captured.
+setup_tracing(
+    app,
+    service_name=settings.OTEL_SERVICE_NAME,
+    service_version=settings.OTEL_SERVICE_VERSION,
+    otlp_endpoint=settings.OTLP_ENDPOINT or None,
+    db_engine=engine,
+)
+
+# --- CORS Configuration ---
+_CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_CORS_ALLOWED_HEADERS = [
+    "Authorization",
+    "Content-Type",
+    "Accept",
+    "Origin",
+    "X-Requested-With",
+    "X-DIAD-Token",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=_CORS_ALLOWED_METHODS,
+    allow_headers=_CORS_ALLOWED_HEADERS,
+)
+
+# Rate Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Prometheus Metrics
+Instrumentator().instrument(app).expose(app)
+
+# Include Routers
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(routing.router)
+app.include_router(delivery.router)
+app.include_router(analytics.router)
+app.include_router(websocket.router)
+app.include_router(dispatch.router)
+app.include_router(tracking.router)
+app.include_router(advanced_routing.router)
 
 
 @app.get("/health")

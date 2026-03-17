@@ -39,9 +39,7 @@ jobs:
 
       - name: Lint with flake8
         run: |
-          # Fail on syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Warnings only for style issues
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run unit tests with coverage
@@ -77,27 +75,68 @@ jobs:
           path: coverage.xml
 
   # ──────────────────────────────────────────────────────────────────────────
+  helm-lint:
+    name: Helm Lint & Template Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: helm lint
+        run: |
+          helm lint deploy/helm/delivery-platform/ \
+            --set secret.SECRET_KEY=dummy \
+            --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
+            --set secret.REDIS_URL=redis://host:6379
+
+      - name: helm template (dry-run render)
+        run: |
+          helm template delivery-platform deploy/helm/delivery-platform/ \
+            --set secret.SECRET_KEY=dummy \
+            --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
+            --set secret.REDIS_URL=redis://host:6379 \
+            --debug > /dev/null
+
+      - name: helm template with prod values
+        run: |
+          helm template delivery-platform deploy/helm/delivery-platform/ \
+            -f deploy/helm/delivery-platform/values-prod.yaml \
+            --set secret.SECRET_KEY=dummy \
+            --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
+            --set secret.REDIS_URL=redis://host:6379 \
+            --debug > /dev/null
+
+  # ──────────────────────────────────────────────────────────────────────────
   build-push:
     name: Build & Push Docker Image
-    needs: test
+    needs: [test, helm-lint]
     runs-on: ubuntu-latest
-    # Only push on direct pushes to main (not PRs)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
       contents: read
       packages: write
-      id-token: write   # for signing with cosign (optional future step)
+      id-token: write   # required by cosign OIDC keyless signing
 
     outputs:
       image_digest: ${{ steps.push.outputs.digest }}
-      image_tag: ${{ steps.meta.outputs.tags }}
+      image_ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: "v2.2.4"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -106,7 +145,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata (tags, labels)
+      - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -132,14 +171,23 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
 
+      - name: Sign image with cosign (keyless OIDC)
+        # Sigstore keyless signing: no private key stored in GitHub Secrets.
+        # Verification: cosign verify --certificate-identity-regexp="github.com/hneal055"
+        #                             --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+        #                             ghcr.io/hneal055/delivery-intelligence-platform@<digest>
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+
   # ──────────────────────────────────────────────────────────────────────────
   migrate:
     name: Run Database Migrations
     needs: build-push
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # Migrations run inside the freshly pushed image so schema changes
-    # are applied BEFORE the new pods start rolling out.
     environment: production
 
     steps:
@@ -164,5 +212,5 @@ jobs:
             -e SECRET_KEY \
             -e ENV \
             -e REDIS_URL \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-push.outputs.image_digest }} \
+            ${{ needs.build-push.outputs.image_ref }} \
             alembic upgrade head

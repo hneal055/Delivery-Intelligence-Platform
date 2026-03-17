@@ -1,0 +1,91 @@
+# values-prod.yaml — production overrides for delivery-platform Helm chart
+# USAGE:
+#   helm upgrade --install delivery-platform deploy/helm/delivery-platform/ \
+#     -f deploy/helm/delivery-platform/values-prod.yaml \
+#     --set secret.SECRET_KEY="$(kubectl get secret app-secrets -o jsonpath='{.data.SECRET_KEY}' | base64 -d)"
+#
+# RECOMMENDED: use External Secrets Operator or Sealed Secrets rather than
+# --set for any value that contains a credential.
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/hneal055/delivery-intelligence-platform
+  pullPolicy: IfNotPresent
+  tag: ""            # Resolved from Chart.appVersion at deploy time; override with sha tag for immutable deploys
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+# ── Ingress ──────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: api.deliveryplatform.com          # ← change to your domain
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: delivery-platform-tls
+      hosts:
+        - api.deliveryplatform.com
+
+# ── Resource limits (right-size after load testing) ──────────────────────────
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+# ── Horizontal Pod Autoscaler ─────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 65
+  targetMemoryUtilizationPercentage: 75
+
+# ── Non-sensitive runtime config ──────────────────────────────────────────────
+env:
+  ENV: production
+  LOG_LEVEL: "WARNING"
+  NOTIFICATIONS_ENABLED: "true"
+  OTLP_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# NEVER commit real values here. Populate via one of:
+#   a) External Secrets Operator syncing from AWS Secrets Manager / Vault
+#   b) Sealed Secrets (kubeseal encrypt then commit the SealedSecret)
+#   c) helm upgrade --set secret.X=$(vault kv get -field=X secret/delivery-platform)
+secret:
+  DATABASE_URL: ""          # postgresql+asyncpg://user:pass@postgres-host:5432/deliverydb
+  SECRET_KEY: ""            # 64+ random bytes, e.g. openssl rand -hex 32
+  REDIS_URL: ""             # redis://:password@redis-host:6379/0
+  SMTP_HOST: ""
+  SMTP_USER: ""
+  SMTP_PASSWORD: ""
+
+# ── Migrations init-container ─────────────────────────────────────────────────
+migrations:
+  enabled: true
+
+# ── Pod disruption budget (set separately, not in this chart yet) ─────────────
+# kubectl apply -f deploy/k8s/pdb.yaml
+
+# ── Node affinity: prefer nodes labelled workload=backend ────────────────────
+nodeSelector:
+  workload: backend
+
+tolerations:
+  - key: "workload"
+    operator: "Equal"
+    value: "backend"
+    effect: "NoSchedule"

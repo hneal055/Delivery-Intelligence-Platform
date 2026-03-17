@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import httpx
 import logging
@@ -7,6 +8,7 @@ logger = logging.getLogger("GeofenceTest")
 
 API_BASE_URL = "http://localhost:8002"
 
+@pytest.mark.skip(reason="manual smoke-test against live server; run with: python tests/test_geofencing.py")
 async def test_geofencing():
     async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=10.0) as client:
         # 1. Login
