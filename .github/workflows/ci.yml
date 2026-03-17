@@ -34,8 +34,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --require-hashes -r requirements.txt
 
       - name: Lint with flake8
         run: |
@@ -87,9 +87,25 @@ jobs:
         with:
           version: "3.14.0"
 
-      - name: helm lint
+      - name: helm lint (default values)
         run: |
           helm lint deploy/helm/delivery-platform/ \
+            --set secret.SECRET_KEY=dummy \
+            --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
+            --set secret.REDIS_URL=redis://host:6379
+
+      - name: helm lint (staging values)
+        run: |
+          helm lint deploy/helm/delivery-platform/ \
+            -f deploy/helm/delivery-platform/values-staging.yaml \
+            --set secret.SECRET_KEY=dummy \
+            --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
+            --set secret.REDIS_URL=redis://host:6379
+
+      - name: helm lint (prod values)
+        run: |
+          helm lint deploy/helm/delivery-platform/ \
+            -f deploy/helm/delivery-platform/values-prod.yaml \
             --set secret.SECRET_KEY=dummy \
             --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
             --set secret.REDIS_URL=redis://host:6379
@@ -97,15 +113,6 @@ jobs:
       - name: helm template (dry-run render)
         run: |
           helm template delivery-platform deploy/helm/delivery-platform/ \
-            --set secret.SECRET_KEY=dummy \
-            --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
-            --set secret.REDIS_URL=redis://host:6379 \
-            --debug > /dev/null
-
-      - name: helm template with prod values
-        run: |
-          helm template delivery-platform deploy/helm/delivery-platform/ \
-            -f deploy/helm/delivery-platform/values-prod.yaml \
             --set secret.SECRET_KEY=dummy \
             --set secret.DATABASE_URL=postgresql+asyncpg://u:p@host/db \
             --set secret.REDIS_URL=redis://host:6379 \
@@ -126,9 +133,14 @@ jobs:
     outputs:
       image_digest: ${{ steps.push.outputs.digest }}
       image_ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+      image_tag: sha-${{ steps.vars.outputs.sha_short }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Compute short SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -172,10 +184,6 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Sign image with cosign (keyless OIDC)
-        # Sigstore keyless signing: no private key stored in GitHub Secrets.
-        # Verification: cosign verify --certificate-identity-regexp="github.com/hneal055"
-        #                             --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
-        #                             ghcr.io/hneal055/delivery-intelligence-platform@<digest>
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
@@ -183,9 +191,102 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
 
   # ──────────────────────────────────────────────────────────────────────────
-  migrate:
-    name: Run Database Migrations
+  deploy-staging:
+    name: Deploy to Staging
     needs: build-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging   # requires GitHub Environment "staging" to be configured
+                           # with STAGING_KUBECONFIG, STAGING_DATABASE_URL, etc.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy to staging namespace
+        env:
+          IMAGE_TAG: ${{ needs.build-push.outputs.image_tag }}
+        run: |
+          helm upgrade --install delivery-platform-staging \
+            deploy/helm/delivery-platform/ \
+            -f deploy/helm/delivery-platform/values-staging.yaml \
+            --set image.tag="${IMAGE_TAG}" \
+            --set secret.SECRET_KEY="${{ secrets.STAGING_SECRET_KEY }}" \
+            --set secret.DATABASE_URL="${{ secrets.STAGING_DATABASE_URL }}" \
+            --set secret.REDIS_URL="${{ secrets.STAGING_REDIS_URL }}" \
+            --namespace staging \
+            --create-namespace \
+            --wait \
+            --timeout 5m
+
+      - name: Smoke test staging deployment
+        run: |
+          # Wait for ingress to be reachable then hit /health
+          STAGING_URL="https://staging.api.deliveryplatform.com"
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "${STAGING_URL}/health" || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            [ "$STATUS" = "200" ] && echo "Staging is healthy" && exit 0
+            sleep 10
+          done
+          echo "Staging smoke test failed after 2 minutes"
+          exit 1
+
+  # ──────────────────────────────────────────────────────────────────────────
+  load-test:
+    name: Load Test (Staging)
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+    # Non-blocking: load test results are uploaded as artifacts; the workflow
+    # continues to prod deploy. Set continue-on-error: false to gate on SLOs.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install locust
+        run: pip install locust>=2.25.0
+
+      - name: Run load test against staging (2 min, 30 users)
+        run: |
+          locust \
+            -f tests/load/locustfile.py \
+            --host https://staging.api.deliveryplatform.com \
+            --users 30 \
+            --spawn-rate 5 \
+            --run-time 2m \
+            --headless \
+            --html tests/load/report.html \
+            --csv tests/load/results
+
+      - name: Upload load test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-report
+          path: tests/load/
+
+  # ──────────────────────────────────────────────────────────────────────────
+  migrate:
+    name: Run Database Migrations (Production)
+    needs: [build-push, deploy-staging]   # staging must succeed before prod migrations run
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
@@ -219,9 +320,6 @@ jobs:
   e2e:
     name: E2E Tests (PostgreSQL + PostGIS)
     runs-on: ubuntu-latest
-    # E2E runs in parallel with build-push, only on main pushes.
-    # Failure is non-blocking (continue-on-error) so a flaky PostGIS service
-    # container does not gate the deployment — review results in the CI summary.
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     continue-on-error: true
@@ -266,8 +364,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --require-hashes -r requirements.txt
 
       - name: Wait for PostGIS to be ready
         run: |

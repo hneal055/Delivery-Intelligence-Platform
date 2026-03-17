@@ -1,0 +1,6 @@
+# requirements-dev.in — development-only tools (load testing, debugging).
+# These are NOT installed in the production Docker image.
+# To regenerate the lockfile:
+#   pip-compile --allow-unsafe --generate-hashes requirements-dev.in
+-r requirements.in
+locust>=2.25.0

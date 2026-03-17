@@ -1,0 +1,85 @@
+# values-staging.yaml — staging environment overrides for delivery-platform Helm chart
+#
+# USAGE:
+#   helm upgrade --install delivery-platform-staging deploy/helm/delivery-platform/ \
+#     -f deploy/helm/delivery-platform/values-staging.yaml \
+#     --set image.tag="sha-<commit>" \
+#     --set secret.SECRET_KEY="${STAGING_SECRET_KEY}" \
+#     --set secret.DATABASE_URL="${STAGING_DATABASE_URL}" \
+#     --set secret.REDIS_URL="${STAGING_REDIS_URL}" \
+#     --namespace staging --create-namespace
+#
+# Staging differs from production:
+#   - 1 replica (cost-saving; no HA needed)
+#   - Smaller resource limits
+#   - No HPA
+#   - staging.deliveryplatform.com subdomain
+#   - letsencrypt-staging issuer (avoids rate-limit exhaustion)
+#   - ENV=staging triggers structured logging but not production alerting
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/hneal055/delivery-intelligence-platform
+  pullPolicy: Always   # Always pull in staging so every commit is visible immediately
+  tag: ""              # CI sets this to sha-<short_sha>
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    cert-manager.io/cluster-issuer: letsencrypt-staging   # staging issuer — won't rate-limit
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: staging.api.deliveryplatform.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: delivery-platform-staging-tls
+      hosts:
+        - staging.api.deliveryplatform.com
+
+# ── Resources (smaller — staging does not need prod sizing) ───────────────────
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# ── No autoscaling in staging ─────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+
+# ── Runtime config ────────────────────────────────────────────────────────────
+env:
+  ENV: staging
+  LOG_LEVEL: "INFO"          # verbose logs for debugging
+  NOTIFICATIONS_ENABLED: "false"   # never send real SMS/email from staging
+  OTLP_ENDPOINT: ""          # no OTel collector in staging by default
+
+# ── Secrets (populated by CI via GitHub Environment: staging secrets) ─────────
+# NEVER commit real values here.
+secret:
+  DATABASE_URL: ""    # STAGING_DATABASE_URL GitHub secret
+  SECRET_KEY: ""      # STAGING_SECRET_KEY   GitHub secret
+  REDIS_URL: ""       # STAGING_REDIS_URL    GitHub secret
+  SMTP_HOST: ""
+  SMTP_USER: ""
+  SMTP_PASSWORD: ""
+
+# ── Migrations always run in staging ──────────────────────────────────────────
+migrations:
+  enabled: true
+
+# ── No node affinity needed in staging ────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
