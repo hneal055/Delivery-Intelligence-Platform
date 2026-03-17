@@ -1,3 +1,6 @@
+import os
+# Disable OTel SDK during tests to prevent background exporter thread noise on teardown
+os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 """
 Shared pytest fixtures for the Delivery Intelligence Platform test suite.
 
@@ -150,3 +153,4 @@ async def client_anon(test_db):
         yield ac
 
     app.dependency_overrides.clear()
+

@@ -1,4 +1,4 @@
-~~~~`<#
+<#
 .SYNOPSIS
 Daily startup script for Delivery Intelligence Platform.
 Automates the process of pulling updates, starting backend services,
@@ -97,7 +97,39 @@ else {
     Write-Warning "Frontend path $frontendPath not found."
 }
 
-# 5. Start Mobile App (Expo)
+# 5. Configure Mobile Environment (auto-detect LAN IP for physical device)
+Write-Step "Configuring Mobile Environment..."
+if (Test-Path ".\configure-mobile-env.ps1") {
+    try {
+        # Prefer physical Wi-Fi; exclude virtual adapters (vEthernet, WSL, Hyper-V, Bluetooth, link-local)
+        $localIP = (Get-NetIPAddress -AddressFamily IPv4 |
+            Where-Object {
+                $_.InterfaceAlias -match '^Wi-Fi' -and
+                $_.IPAddress -notmatch '^169\.254' -and
+                $_.IPAddress -notmatch '^172\.'
+            } |
+            Select-Object -First 1).IPAddress
+        if ($localIP) {
+            $envContent = "EXPO_PUBLIC_API_HOST=$localIP`nEXPO_PUBLIC_API_PORT=8002`n"
+            $envPath = Join-Path $RepoRoot "src\mobile\.env"
+            # Preserve existing EXPO_PUBLIC_AUTH_TOKEN and EXPO_PUBLIC_DRIVER_ID lines
+            if (Test-Path $envPath) {
+                $existing = Get-Content $envPath | Where-Object { $_ -match "^EXPO_PUBLIC_AUTH_TOKEN|^EXPO_PUBLIC_DRIVER_ID" }
+                if ($existing) { $envContent += ($existing -join "`n") + "`n" }
+            }
+            Set-Content -Path $envPath -Value $envContent.TrimEnd()
+            Write-Host "Mobile API target: http://$localIP`:8002" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "Could not detect LAN IP. Mobile .env unchanged."
+        }
+    }
+    catch {
+        Write-Warning "Mobile env update failed: $_"
+    }
+}
+
+# 6. Start Mobile App (Expo)
 Write-Step "Launching Mobile App (Expo)..."
 $mobilePath = Join-Path $RepoRoot "src\mobile"
 if (Test-Path $mobilePath) {
