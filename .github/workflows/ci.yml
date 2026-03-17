@@ -214,3 +214,77 @@ jobs:
             -e REDIS_URL \
             ${{ needs.build-push.outputs.image_ref }} \
             alembic upgrade head
+
+  # ──────────────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E Tests (PostgreSQL + PostGIS)
+    runs-on: ubuntu-latest
+    # E2E runs in parallel with build-push, only on main pushes.
+    # Failure is non-blocking (continue-on-error) so a flaky PostGIS service
+    # container does not gate the deployment — review results in the CI summary.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
+
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4-alpine
+        env:
+          POSTGRES_USER: delivery
+          POSTGRES_PASSWORD: delivery
+          POSTGRES_DB: delivery_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U delivery -d delivery_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      E2E_DATABASE_URL: postgresql+asyncpg://delivery:delivery@localhost:5432/delivery_e2e
+      SECRET_KEY: e2e-test-secret-key
+      ENV: development
+      REDIS_URL: ""
+      NOTIFICATIONS_ENABLED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Wait for PostGIS to be ready
+        run: |
+          for i in $(seq 1 20); do
+            pg_isready -h localhost -U delivery -d delivery_e2e && break
+            echo "Waiting for PostGIS ($i/20)..."
+            sleep 3
+          done
+
+      - name: Run E2E tests against real PostGIS
+        run: |
+          python -m pytest tests/e2e/ -m e2e -v --tb=short
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: "*.xml"
+          if-no-files-found: ignore

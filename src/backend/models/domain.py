@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict
 from datetime import datetime
 
@@ -16,6 +16,8 @@ class VehicleSection(str, Enum):
     REAR = "Rear"
 
 class Package(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     destination: Location
     status: str = "pending"
@@ -24,20 +26,16 @@ class Package(BaseModel):
     priority: str = "standard"
     scheduled_window_start: Optional[datetime] = None
     scheduled_window_end: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 class Driver(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     current_location: Optional[Location] = None
     vehicle_id: Optional[str] = None
     shift_start: Optional[datetime] = None
     shift_end: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 class TruckManifest(BaseModel):
     vehicle_id: str
@@ -59,11 +57,10 @@ class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     is_active: bool = True
-    
-    class Config:
-        from_attributes = True
 
 class Token(BaseModel):
     access_token: str
@@ -98,13 +95,12 @@ class DispatchJobCreate(BaseModel):
     package_id: Optional[str] = None
 
 class DispatchJob(DispatchJobCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     status: str = "pending"
     created_at: datetime
     completed_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
 
 class AvailabilityCreate(BaseModel):
     driver_id: str
@@ -120,4 +116,3 @@ class LocationUpdate(BaseModel):
     heading: Optional[float] = None
     battery_level: Optional[float] = None
     timestamp: Optional[datetime] = None
-
