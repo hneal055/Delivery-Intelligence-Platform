@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
+# setuptools/wheel must be installed first on python:3.12-slim (no longer bundled)
+RUN pip install --no-cache-dir setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code

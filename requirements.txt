@@ -6,11 +6,11 @@ uvicorn[standard]>=0.29.0
 pydantic>=2.7.0
 
 # Data Analysis & ML
-pandas==2.1.3
-numpy==1.25.2
-scikit-learn==1.3.2
-geopandas==0.14.0
-shapely==2.0.2
+pandas>=2.2.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+geopandas>=0.14.3
+shapely>=2.0.6
 
 # Testing & Development
 pytest==7.4.3
@@ -35,7 +35,7 @@ python-multipart>=0.0.9
 # Security
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
-bcrypt==3.2.2
+bcrypt>=4.1.0
 
 # Database
 sqlalchemy>=2.0.0
@@ -59,3 +59,11 @@ structlog>=24.0.0
 pillow>=10.0.0  # POD image verification
 pytest-asyncio>=0.23.0  # async test support
 aiosqlite>=0.19.0  # async SQLite driver for unit tests
+
+# OpenTelemetry Tracing
+opentelemetry-api>=1.24.0
+opentelemetry-sdk>=1.24.0
+opentelemetry-instrumentation-fastapi>=0.45b0
+opentelemetry-instrumentation-sqlalchemy>=0.45b0
+opentelemetry-instrumentation-redis>=0.45b0
+opentelemetry-exporter-otlp-proto-http>=1.24.0

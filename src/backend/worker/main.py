@@ -1,30 +1,29 @@
 import logging
-import sys
+from urllib.parse import urlparse
 from arq import cron
+from arq.connections import RedisSettings
 from src.backend.core.config import settings
 from src.backend.worker.tasks import startup, shutdown, send_notification_task
 
 # Configure logging for the worker process
 logging.basicConfig(level=logging.INFO)
 
-# Redis Settings
-REDIS_SETTINGS = {
-    "host": "redis",
-    "port": 6379,
-    "database": 0, # Use DB 0 same as backend
-}
+# Build RedisSettings from REDIS_URL (e.g. redis://:password@host:port/db)
+def _redis_settings_from_url(url: str) -> RedisSettings:
+    parsed = urlparse(url)
+    return RedisSettings(
+        host=parsed.hostname or "redis",
+        port=parsed.port or 6379,
+        database=int((parsed.path or "/0").lstrip("/") or 0),
+        password=parsed.password or None,
+    )
 
-# Parse host/port from settings.REDIS_URL if available
-if settings.REDIS_URL:
-    # Basic parsing for "redis://host:port/db"
-    # Note: arq expects a RedisSettings object or dict, but not a full connection string directly in standard run commands
-    # We will let the arq CLI or the Worker class handle it using the dict above for now.
-    # In a real dynamic setup, we would parse settings.REDIS_URL properly.
-    pass
+REDIS_SETTINGS = _redis_settings_from_url(
+    settings.REDIS_URL or "redis://redis:6379/0"
+)
 
 class WorkerSettings:
     functions = [send_notification_task]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = REDIS_SETTINGS
-
