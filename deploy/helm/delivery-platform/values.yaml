@@ -127,3 +127,61 @@ affinity:
                 values:
                   - delivery-platform
           topologyKey: kubernetes.io/hostname
+# ── Network Policies ──────────────────────────────────────────────────────────
+# When enabled, deploys a default-deny NetworkPolicy plus per-pod-role allow
+# rules implementing zero-trust microsegmentation:
+#
+#   API pods   → ingress: nginx controller + Prometheus scraper only
+#              → egress: PostgreSQL, Redis, HTTPS (Mapbox/S3), OTel collector
+#
+#   Worker pods → ingress: NONE (workers are pure consumers)
+#               → egress: Redis (job queue), PostgreSQL, HTTPS + SMTP 587
+#
+# Requires a CNI plugin that enforces NetworkPolicy (Calico, Cilium, Weave, etc.)
+# Standard managed k8s offerings (EKS+Calico, GKE Dataplane V2, AKS) work out
+# of the box.  Kind/Minikube need --network-policy flag or Calico add-on.
+networkPolicy:
+  # Set to true once your cluster CNI supports NetworkPolicy enforcement.
+  # Keep false in local dev (Kind without Calico, plain Minikube).
+  enabled: false
+
+  # Ingress controller — namespace + pod label that identifies nginx pods.
+  # Adjust if you use a different controller name or namespace.
+  ingressController:
+    namespace: ingress-nginx
+    podSelector:
+      app.kubernetes.io/name: ingress-nginx
+
+  # Prometheus scraper — namespace + pod label for your Prometheus instance.
+  monitoring:
+    enabled: true
+    namespace: monitoring
+    podSelector:
+      app.kubernetes.io/name: prometheus
+
+  # PostgreSQL access rules.
+  # inCluster: true  — PostgreSQL runs as a pod in the same cluster
+  #   (e.g. Bitnami chart: app.kubernetes.io/name=postgresql)
+  # inCluster: false — external managed database (RDS, Cloud SQL, AlloyDB)
+  #   Set externalCIDR to the VPC CIDR block that contains the DB endpoint.
+  postgresql:
+    inCluster: true
+    podSelector:
+      app.kubernetes.io/name: postgresql
+    port: 5432
+    externalCIDR: ""    # e.g. "10.0.1.0/24" — only used when inCluster=false
+
+  # Redis access rules (same inCluster/externalCIDR pattern as postgresql).
+  redis:
+    inCluster: true
+    podSelector:
+      app.kubernetes.io/name: redis
+    port: 6379
+    externalCIDR: ""    # e.g. "10.0.2.0/24" — ElastiCache subnet CIDR
+
+  # Worker pod rules.
+  # Enable when the ARQ worker is deployed as a separate Deployment in this
+  # release with label app.kubernetes.io/component=worker.
+  # (Worker pods inherit the base selectorLabels from _helpers.tpl)
+  worker:
+    enabled: false

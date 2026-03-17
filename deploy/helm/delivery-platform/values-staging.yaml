@@ -83,3 +83,32 @@ migrations:
 # ── No node affinity needed in staging ────────────────────────────────────────
 nodeSelector: {}
 tolerations: []
+
+# ── Network Policies ──────────────────────────────────────────────────────────
+# Staging mirrors production policy — policies are enabled but externalCIDR
+# values are populated by CI from GitHub Environment secrets.
+networkPolicy:
+  enabled: true
+
+  ingressController:
+    namespace: ingress-nginx
+    podSelector:
+      app.kubernetes.io/name: ingress-nginx
+
+  monitoring:
+    enabled: false      # no Prometheus stack in staging by default
+
+  postgresql:
+    inCluster: false
+    podSelector: {}
+    port: 5432
+    externalCIDR: ""    # ← set via --set networkPolicy.postgresql.externalCIDR in CI
+
+  redis:
+    inCluster: false
+    podSelector: {}
+    port: 6379
+    externalCIDR: ""    # ← set via --set networkPolicy.redis.externalCIDR in CI
+
+  worker:
+    enabled: false

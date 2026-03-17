@@ -1,0 +1,325 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $fullname := include "delivery-platform.fullname" . }}
+{{- $labels := include "delivery-platform.labels" . }}
+{{- $selectorLabels := include "delivery-platform.selectorLabels" . }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. Default deny — block ALL ingress and egress for every pod in this
+#    namespace.  Each subsequent policy opens exactly the minimum required
+#    ports.  This is the "closed by default" zero-trust foundation.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-default-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector: {}          # matches ALL pods in the namespace
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. DNS egress — every pod needs kube-dns for service discovery
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-allow-dns-egress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector: {}          # all pods in namespace
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. API — ingress from the nginx ingress controller only
+#    (all external traffic enters via the ingress, not directly)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-api-allow-ingress-nginx
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressController.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.podSelector | nindent 14 }}
+      ports:
+        - port: 8000
+          protocol: TCP
+{{- if .Values.networkPolicy.monitoring.enabled }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. API — ingress from Prometheus scraper for /metrics
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-api-allow-prometheus-scrape
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoring.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.monitoring.podSelector | nindent 14 }}
+      ports:
+        - port: 8000
+          protocol: TCP
+{{- end }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. API — egress to PostgreSQL
+#    inCluster: true  → pod selector (Bitnami/CloudNative-PG labels)
+#    inCluster: false → ipBlock CIDR (RDS, Cloud SQL, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-api-egress-postgresql
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.networkPolicy.postgresql.inCluster }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.postgresql.podSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.networkPolicy.postgresql.port }}
+          protocol: TCP
+    {{- else }}
+    - to:
+        - ipBlock:
+            cidr: {{ required "networkPolicy.postgresql.externalCIDR is required when inCluster is false" .Values.networkPolicy.postgresql.externalCIDR }}
+      ports:
+        - port: {{ .Values.networkPolicy.postgresql.port }}
+          protocol: TCP
+    {{- end }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. API — egress to Redis
+#    inCluster: true  → pod selector (Bitnami Redis labels)
+#    inCluster: false → ipBlock CIDR (ElastiCache, Upstash, etc.)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-api-egress-redis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.networkPolicy.redis.inCluster }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.redis.podSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.networkPolicy.redis.port }}
+          protocol: TCP
+    {{- else }}
+    - to:
+        - ipBlock:
+            cidr: {{ required "networkPolicy.redis.externalCIDR is required when inCluster is false" .Values.networkPolicy.redis.externalCIDR }}
+      ports:
+        - port: {{ .Values.networkPolicy.redis.port }}
+          protocol: TCP
+    {{- end }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. API — egress to external HTTPS (Mapbox directions API, S3 proof upload)
+#    and OTel collector (4317 gRPC within cluster)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-api-egress-external
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS — Mapbox API, S3, external health endpoints
+    - ports:
+        - port: 443
+          protocol: TCP
+    # OTel gRPC collector (in-cluster, e.g. otel-collector.observability.svc)
+    - ports:
+        - port: 4317
+          protocol: TCP
+{{- if .Values.networkPolicy.worker.enabled }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Worker — deny all ingress
+#    ARQ workers are pure consumers: they dequeue jobs from Redis and write
+#    results to PostgreSQL/S3.  No process should open connections to a worker.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-worker-deny-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+      app.kubernetes.io/component: worker
+  policyTypes:
+    - Ingress
+  # No ingress rules → all inbound connections blocked
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. Worker — egress to Redis (job queue: dequeue tasks, publish events)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-worker-egress-redis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+      app.kubernetes.io/component: worker
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.networkPolicy.redis.inCluster }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.redis.podSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.networkPolicy.redis.port }}
+          protocol: TCP
+    {{- else }}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.redis.externalCIDR }}
+      ports:
+        - port: {{ .Values.networkPolicy.redis.port }}
+          protocol: TCP
+    {{- end }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. Worker — egress to PostgreSQL (read/write delivery state)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-worker-egress-postgresql
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+      app.kubernetes.io/component: worker
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.networkPolicy.postgresql.inCluster }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.postgresql.podSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.networkPolicy.postgresql.port }}
+          protocol: TCP
+    {{- else }}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.postgresql.externalCIDR }}
+      ports:
+        - port: {{ .Values.networkPolicy.postgresql.port }}
+          protocol: TCP
+    {{- end }}
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. Worker — egress to external services
+#     S3 (proof image upload) — HTTPS 443
+#     Twilio REST API (SMS notifications) — HTTPS 443
+#     SMTP relay (email notifications) — STARTTLS 587
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-worker-egress-external
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+      app.kubernetes.io/component: worker
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS: S3, Twilio REST API
+    - ports:
+        - port: 443
+          protocol: TCP
+    # SMTP STARTTLS: email notification relay
+    - ports:
+        - port: 587
+          protocol: TCP
+{{- end }}
+{{- end }}

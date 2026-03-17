@@ -89,3 +89,42 @@ tolerations:
     operator: "Equal"
     value: "backend"
     effect: "NoSchedule"
+# ── Network Policies ──────────────────────────────────────────────────────────
+# Production uses RDS (PostgreSQL) and ElastiCache (Redis) — both are external
+# to the cluster.  Set externalCIDR to the VPC subnet CIDR that contains each
+# managed service endpoint.  These values are intentionally left empty here;
+# populate them via --set or an external-secrets-managed values file.
+#
+# Example:
+#   --set networkPolicy.postgresql.externalCIDR="10.0.1.0/24"
+#   --set networkPolicy.redis.externalCIDR="10.0.2.0/24"
+networkPolicy:
+  enabled: true
+
+  ingressController:
+    namespace: ingress-nginx
+    podSelector:
+      app.kubernetes.io/name: ingress-nginx
+
+  monitoring:
+    enabled: true
+    namespace: monitoring
+    podSelector:
+      app.kubernetes.io/name: prometheus
+
+  # RDS — external, not in-cluster
+  postgresql:
+    inCluster: false
+    podSelector: {}
+    port: 5432
+    externalCIDR: ""    # ← set to RDS subnet CIDR, e.g. "10.0.1.0/24"
+
+  # ElastiCache — external, not in-cluster
+  redis:
+    inCluster: false
+    podSelector: {}
+    port: 6379
+    externalCIDR: ""    # ← set to ElastiCache subnet CIDR, e.g. "10.0.2.0/24"
+
+  worker:
+    enabled: false      # enable when worker Deployment is added to this chart
