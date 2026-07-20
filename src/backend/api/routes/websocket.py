@@ -53,7 +53,7 @@ async def dispatch_ws(websocket: WebSocket, token: str = Query(...)):
             except json.JSONDecodeError:
                 await websocket.send_json({"type": "error", "message": "Invalid JSON"})
     except WebSocketDisconnect:
-        manager.disconnect(user_id, websocket)
+        manager.disconnect_client(user_id, websocket)
 
 
 @router.websocket("/ws/driver/{driver_id}")
@@ -96,5 +96,6 @@ async def driver_ws(websocket: WebSocket, driver_id: str, token: str = Query(...
             except json.JSONDecodeError:
                 await websocket.send_json({"type": "error", "message": "Invalid JSON"})
     except WebSocketDisconnect:
-        manager.disconnect(driver_id, websocket)
+        manager.disconnect_client(driver_id, websocket)
+
 

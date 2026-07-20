@@ -1,0 +1,12 @@
+.git
+.github
+.claude
+.expo
+node_modules
+src/web
+src/mobile
+docs
+notebooks
+tests
+dummy_image.jpg
+*.ps1

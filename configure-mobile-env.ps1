@@ -5,8 +5,12 @@ $ErrorActionPreference = "Stop"
 Write-Host "`n=== Mobile App Environment Setup ===" -ForegroundColor Cyan
 
 # Get primary Wi-Fi/Ethernet adapter IP
-$localIP = Get-NetIPAddress -AddressFamily IPv4 | 
-    Where-Object { $_.InterfaceAlias -match 'Wi-Fi|Ethernet' -and $_.IPAddress -notmatch '^169\.254' } |
+$localIP = Get-NetIPAddress -AddressFamily IPv4 |
+    Where-Object {
+        $_.InterfaceAlias -match '^Wi-Fi' -and
+        $_.IPAddress -notmatch '^169\.254' -and
+        $_.IPAddress -notmatch '^172\.'
+    } |
     Select-Object -First 1 -ExpandProperty IPAddress
 
 if (-not $localIP) {
@@ -33,12 +37,12 @@ if (Test-Path $envPath) {
 
 # Backend API Configuration
 EXPO_PUBLIC_API_HOST=$localIP
-EXPO_PUBLIC_API_PORT=8000
+EXPO_PUBLIC_API_PORT=8002
 "@ | Set-Content -Path $envPath
 
 Write-Host "`n✓ Updated $envPath" -ForegroundColor Green
 Write-Host "`nBackend URL: " -NoNewline
-Write-Host "http://$localIP:8000" -ForegroundColor Cyan
+Write-Host "http://$localIP:8002" -ForegroundColor Cyan
 
 Write-Host "`nNext Steps:" -ForegroundColor Yellow
 Write-Host "1. Ensure your iPhone is on the same Wi-Fi network"

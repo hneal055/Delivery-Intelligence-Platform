@@ -8,67 +8,44 @@ from fastapi import (
     BackgroundTasks,
     Request,
 )
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
+import time
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
-import asyncio
-import traceback
-import logging
-
-from src.backend.models.domain import Location, Driver, User
+from src.backend.models.domain import Location, User
 from src.analytics.geofencing.engine import geofence_engine
 from src.analytics.image_analysis.verifier import image_verifier
-from src.backend.api.deps import get_current_active_user, PermissionChecker
-from src.backend.services.notifications import notification_service, NotificationEvent
+from src.backend.api.deps import get_current_active_user
+from src.backend.services.notifications import (
+    notification_service,
+    NotificationEvent,
+)
 from src.backend.services import delivery_service
-from src.backend.services.storage import proof_storage, LocalStorageBackend
 from src.backend.api.limiter import limiter
-from src.backend.api.metrics import DELIVERIES_COMPLETED
-from src.backend.services.heartbeat import heartbeat_service
+from src.backend.api.metrics import driver_heartbeats, DELIVERIES_COMPLETED
 from src.backend.core.database import get_db
-from src.backend.core.permissions import Permission
-
-logger = logging.getLogger(__name__)
+from src.backend.core.storage import proof_storage, is_safe_filename
 
 router = APIRouter(prefix="/delivery", tags=["delivery"])
 
 
 @router.get("/recent-proofs")
-async def get_recent_proofs(
-    current_user: User = Depends(PermissionChecker(Permission.VIEW_ALL_PACKAGES)),
-) -> List[dict]:
-    """List recent proof-of-delivery photos. Requires manager or admin role."""
-    files = await asyncio.to_thread(proof_storage.list_files)
-    results = []
-    for entry in files:
-        key = entry["key"]
-        parts = key.rsplit(".", 1)[0].split("_")
-        pkg_id    = parts[0] if len(parts) > 0 else "Unknown"
-        driver_id = parts[1] if len(parts) > 1 else "Unknown"
-        results.append({
-            "packageId": pkg_id,
-            "driverId": driver_id,
-            "timestamp": entry["last_modified"].isoformat() if hasattr(entry["last_modified"], "isoformat") else str(entry["last_modified"]),
-            "filename": key,
-            "url": proof_storage.get_url(key),
-        })
-    return results
+async def get_recent_proofs() -> List[dict]:
+    return await proof_storage.list_recent(limit=50)
 
 
 @router.get("/proof/{filename}")
-async def get_proof_image(
-    filename: str,
-    current_user: User = Depends(PermissionChecker(Permission.VIEW_ALL_PACKAGES)),
-):
-    """Retrieve a proof-of-delivery image. Requires manager or admin role."""
-    if isinstance(proof_storage, LocalStorageBackend):
-        path = proof_storage.get_file_path(filename)
-        if not path:
-            raise HTTPException(status_code=404, detail="Image not found")
-        return FileResponse(path, media_type="image/jpeg")
-    url = proof_storage.get_url(filename)
-    return RedirectResponse(url=url)
+async def get_proof_image(filename: str):
+    if not is_safe_filename(filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    data = await proof_storage.get_proof(filename)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    media_type = (
+        "image/png" if filename.lower().endswith(".png") else "image/jpeg"
+    )
+    return Response(content=data, media_type=media_type)
 
 
 class LocationVerifyRequest(BaseModel):
@@ -82,12 +59,15 @@ class LocationVerifyRequest(BaseModel):
 async def verify_location(
     request: Request,
     payload: LocationVerifyRequest,
-    current_user: User = Depends(PermissionChecker(Permission.UPDATE_OWN_LOCATION)),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Verify the driver is close enough to the delivery address."""
-    driver_id = payload.driver_id if payload.driver_id != "unknown" else current_user.username
-    await heartbeat_service.update(driver_id)
+    driver_id = (
+        payload.driver_id
+        if payload.driver_id != "unknown"
+        else current_user.username
+    )
+    driver_heartbeats[driver_id] = time.time()
 
     await delivery_service.update_driver_location(
         db,
@@ -98,83 +78,91 @@ async def verify_location(
 
     is_valid, distance = geofence_engine.verify_delivery_location(
         (payload.current_location.lat, payload.current_location.lon),
-        (payload.target_delivery_location.lat, payload.target_delivery_location.lon),
+        (
+            payload.target_delivery_location.lat,
+            payload.target_delivery_location.lon,
+        ),
     )
 
     if is_valid:
-        return {"message": "Location Verified", "allowed": True, "distance": distance}
+        return {
+            "message": "Location Verified",
+            "allowed": True,
+            "distance": distance,
+        }
     return {
-        "message": f"Driver is too far ({distance:.2f}m) from delivery point",
+        "message": "Driver is too far ({0:.2f}m) from delivery point".format(
+            distance
+        ),
         "allowed": False,
         "distance": distance,
     }
 
 
 @router.post("/confirm")
-@limiter.limit("60/minute")
 async def confirm_delivery(
-    request: Request,
     package_id: str = Form(...),
     driver_id: str = Form(...),
     photo: UploadFile = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user: User = Depends(PermissionChecker(Permission.UPDATE_PACKAGE_STATUS)),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Submit proof of delivery. Requires driver role."""
-    try:
-        await heartbeat_service.update(driver_id)
+    driver_heartbeats[driver_id] = time.time()
 
-        content = await photo.read()
+    # 1. Read the uploaded photo
+    content = await photo.read()
 
-        storage_key = f"{package_id}_{driver_id}.jpg"
-        await asyncio.to_thread(proof_storage.upload, storage_key, content, "image/jpeg")
+    # 2. Persist the proof FIRST -- it is legal evidence and must survive
+    #    even if the quality check below rejects it and asks for a retake.
+    saved_filename = await proof_storage.save_proof(
+        package_id, driver_id, content
+    )
 
-        is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)
-        if not is_valid_image:
-            raise HTTPException(status_code=400, detail=f"Invalid Proof of Delivery: {reason}")
+    # 3. Quality check (blur/darkness). Reject so the driver retakes,
+    #    but the original stays in storage.
+    is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)
+    if not is_valid_image:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Proof of Delivery: {0}".format(reason),
+        )
 
-        await delivery_service.update_package_status(db, package_id, "delivered", driver_id)
-        DELIVERIES_COMPLETED.inc()
+    # 4. Mark delivered
+    await delivery_service.update_package_status(
+        db, package_id, "delivered", driver_id
+    )
+    DELIVERIES_COMPLETED.inc()
 
-        if hasattr(request.app.state, "arq_pool") and request.app.state.arq_pool:
-            logger.info("Enqueuing notification task via ARQ")
-            await request.app.state.arq_pool.enqueue_job(
-                "send_notification_task",
-                "customer_placeholder",
-                "email@example.com",
-                NotificationEvent.DELIVERY_COMPLETED.value,
-            )
-        else:
-            logger.info("Enqueuing notification via BackgroundTasks (fallback)")
-            background_tasks.add_task(
-                notification_service.send_notification,
-                "customer_placeholder",
-                "email@example.com",
-                NotificationEvent.DELIVERY_COMPLETED,
-            )
+    # 5. Async customer notification
+    background_tasks.add_task(
+        notification_service.send_notification,
+        "customer_placeholder",
+        "email@example.com",
+        NotificationEvent.DELIVERY_COMPLETED,
+    )
 
-        return {"status": "success", "package_id": package_id}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error executing delivery confirmation for {package_id}: {e}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    return {
+        "status": "success",
+        "package_id": package_id,
+        "proof": saved_filename,
+    }
 
 
 @router.post("/exception")
-@limiter.limit("60/minute")
 async def report_exception(
-    request: Request,
     package_id: str = Form(...),
     driver_id: str = Form(...),
     reason: str = Form(...),
-    current_user: User = Depends(PermissionChecker(Permission.UPDATE_PACKAGE_STATUS)),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Report a delivery exception. Requires driver role."""
-    await heartbeat_service.update(driver_id)
-    await delivery_service.update_package_status(db, package_id, "exception", driver_id)
-    return {"status": "exception_reported", "package_id": package_id, "reason": reason}
+    driver_heartbeats[driver_id] = time.time()
+    await delivery_service.update_package_status(
+        db, package_id, "exception", driver_id
+    )
+    return {
+        "status": "exception_reported",
+        "package_id": package_id,
+        "reason": reason,
+    }

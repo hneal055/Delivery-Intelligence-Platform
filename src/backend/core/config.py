@@ -2,110 +2,106 @@ import os
 import sys
 from typing import List
 
-def get_secret(key: str, default: str = "") -> str:
-    """
-    Retrieve secret from environment variable or file.
-    Prioritizes <KEY>_FILE environment variable which points to a file containing the secret.
-    This is standard for Docker Swarm and Kubernetes secrets.
-    """
-    # 1. Check for file-based secret
-    file_path = os.getenv(f"{key}_FILE")
-    if file_path and os.path.exists(file_path):
-        try:
-            with open(file_path, "r") as f:
-                return f.read().strip()
-        except Exception:
-            pass # Fallback to env var if file read fails
 
-    # 2. Check for standard env var
-    return os.getenv(key, default)
-
-
-_WEAK_KEY = "CHANGE_THIS_TO_A_SUPER_SECRET_KEY_IN_PRODUCTION"
+def _parse_origins(raw: str) -> List[str]:
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 class Settings:
-    ENV: str = os.getenv("ENV", "development")
     PROJECT_NAME: str = "Delivery Intelligence Platform"
 
+    # ENVIRONMENT: "development" (default) or "production"
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").lower()
+    IS_PRODUCTION: bool = ENVIRONMENT == "production"
+
     # SECURITY
-    SECRET_KEY: str = get_secret("SECRET_KEY", _WEAK_KEY)
+    DEV_SECRET_PLACEHOLDER: str = "dev-only-secret-do-not-use-in-production"
+    SECRET_KEY: str = os.getenv("SECRET_KEY", DEV_SECRET_PLACEHOLDER)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-    REFRESH_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480")
+    )
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = get_secret(
-        "BACKEND_CORS_ORIGINS",
-        "http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:8081,http://localhost:8082,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:8081,http://127.0.0.1:8082"
-    ).split(",")
+    # No wildcard default. In development we allow common local dev ports.
+    # In production, BACKEND_CORS_ORIGINS MUST be set explicitly
+    # (comma-separated, e.g. "https://dispatch.example.com").
+    _DEV_ORIGINS: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:8081,http://127.0.0.1:8081,"
+        "http://localhost:8082,http://127.0.0.1:8082,"
+        "http://localhost:3000,http://127.0.0.1:3000"
+    )
+    BACKEND_CORS_ORIGINS: List[str] = _parse_origins(
+        os.getenv("BACKEND_CORS_ORIGINS", _DEV_ORIGINS)
+    )
 
     # DATABASE
-    DATABASE_URL: str = get_secret("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/delivery_db")
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/delivery_db",
+    )
 
-    # S3 / PROOF STORAGE
-    PROOF_STORAGE: str = get_secret("PROOF_STORAGE", "local")  # "local" or "s3"
-    AWS_ACCESS_KEY_ID: str = get_secret("AWS_ACCESS_KEY_ID", "")
-    AWS_SECRET_ACCESS_KEY: str = get_secret("AWS_SECRET_ACCESS_KEY", "")
-    AWS_REGION: str = get_secret("AWS_REGION", "us-east-1")
-    S3_BUCKET_NAME: str = get_secret("S3_BUCKET_NAME", "delivery-proofs")
-    S3_ENDPOINT_URL: str = get_secret("S3_ENDPOINT_URL", "")  # For LocalStack
+    # CLOUDFLARE R2 (proof-of-delivery photo storage)
+    # When all four are set, the R2 backend is used automatically.
+    R2_ACCOUNT_ID: str = os.getenv("R2_ACCOUNT_ID", "")
+    R2_ACCESS_KEY_ID: str = os.getenv("R2_ACCESS_KEY_ID", "")
+    R2_SECRET_ACCESS_KEY: str = os.getenv("R2_SECRET_ACCESS_KEY", "")
+    R2_BUCKET_NAME: str = os.getenv("R2_BUCKET_NAME", "")
 
-    # NOTIFICATIONS
-    NOTIFICATIONS_ENABLED: bool = get_secret("NOTIFICATIONS_ENABLED", "false").lower() == "true"
-    TWILIO_ACCOUNT_SID: str = get_secret("TWILIO_ACCOUNT_SID", "")
-    TWILIO_AUTH_TOKEN: str = get_secret("TWILIO_AUTH_TOKEN", "")
-    TWILIO_FROM_NUMBER: str = get_secret("TWILIO_FROM_NUMBER", "")
-    SENDGRID_API_KEY: str = get_secret("SENDGRID_API_KEY", "")
-    SENDGRID_FROM_EMAIL: str = get_secret("SENDGRID_FROM_EMAIL", "noreply@example.com")
-
-    # REDIS
-    REDIS_URL: str = get_secret("REDIS_URL", "")  # Empty = disabled, fallback to in-memory
-
-    # MAPBOX
-    MAPBOX_ACCESS_TOKEN: str = get_secret("MAPBOX_ACCESS_TOKEN", "")  # Empty = disabled
-
-    # FIREBASE CLOUD MESSAGING
-    FIREBASE_CREDENTIALS_JSON: str = get_secret("FIREBASE_CREDENTIALS_JSON", "")
-
-    # WEATHER
-    OPENWEATHER_API_KEY: str = get_secret("OPENWEATHER_API_KEY", "")
-
-    # OIDC (Auth0 / Keycloak)
-    OIDC_ENABLED: bool = get_secret("OIDC_ENABLED", "false").lower() == "true"
-    OIDC_ISSUER_URL: str = get_secret("OIDC_ISSUER_URL", "")
-    OIDC_CLIENT_ID: str = get_secret("OIDC_CLIENT_ID", "")
-    OIDC_CLIENT_SECRET: str = get_secret("OIDC_CLIENT_SECRET", "")
-    OIDC_ROLE_CLAIM: str = get_secret("OIDC_ROLE_CLAIM", "roles")
-
-    # TELEMATICS (Samsara / Geotab)
-    TELEMATICS_PROVIDER: str = get_secret("TELEMATICS_PROVIDER", "none")
-    TELEMATICS_API_KEY: str = get_secret("TELEMATICS_API_KEY", "")
-    TELEMATICS_API_URL: str = get_secret("TELEMATICS_API_URL", "")
-
-    # IMAGE VERIFICATION
-    IMAGE_VERIFICATION_PROVIDER: str = get_secret("IMAGE_VERIFICATION_PROVIDER", "stub")
-
-
-    # OPENTELEMETRY
-    OTEL_SERVICE_NAME: str = get_secret("OTEL_SERVICE_NAME", "delivery-intelligence-platform")
-    OTEL_SERVICE_VERSION: str = get_secret("OTEL_SERVICE_VERSION", "1.0.0")
-    OTLP_ENDPOINT: str = get_secret("OTLP_ENDPOINT", "")  # e.g. http://jaeger:4317
-    # CUSTOMER TRACKING PORTAL
-    PUBLIC_TRACKING_ENABLED: bool = get_secret("PUBLIC_TRACKING_ENABLED", "true").lower() == "true"
-    PUBLIC_TRACKING_BASE_URL: str = get_secret("PUBLIC_TRACKING_BASE_URL", "http://localhost:5173/track")
+    @property
+    def r2_configured(self) -> bool:
+        return bool(
+            self.R2_ACCOUNT_ID
+            and self.R2_ACCESS_KEY_ID
+            and self.R2_SECRET_ACCESS_KEY
+            and self.R2_BUCKET_NAME
+        )
 
 
 settings = Settings()
 
-# Enforce strong secret key in non-development environments
-if settings.ENV != "development" and settings.SECRET_KEY == _WEAK_KEY:
-    raise RuntimeError(
-        "FATAL: SECRET_KEY is still the default placeholder. "
-        "Set a strong, random SECRET_KEY environment variable before running in production."
-    )
 
-    # OPENTELEMETRY TRACING
-    OTLP_ENDPOINT: str = get_secret("OTLP_ENDPOINT", "")          # e.g. http://jaeger:4318
-    OTEL_SERVICE_NAME: str = os.getenv("OTEL_SERVICE_NAME", "delivery-intelligence-platform")
-    OTEL_SERVICE_VERSION: str = os.getenv("OTEL_SERVICE_VERSION", "1.0.0")
+# ---------------------------------------------------------------------------
+# Production fail-fast checks.
+# The app REFUSES to start in production with unsafe configuration.
+# ---------------------------------------------------------------------------
+if settings.IS_PRODUCTION:
+    _problems = []
+
+    if (
+        settings.SECRET_KEY == Settings.DEV_SECRET_PLACEHOLDER
+        or len(settings.SECRET_KEY) < 32
+    ):
+        _problems.append(
+            "SECRET_KEY must be set to a strong random value (32+ characters)."
+        )
+
+    if not os.getenv("BACKEND_CORS_ORIGINS"):
+        _problems.append(
+            "BACKEND_CORS_ORIGINS must be set to your dashboard URL(s)."
+        )
+
+    if "*" in settings.BACKEND_CORS_ORIGINS:
+        _problems.append("BACKEND_CORS_ORIGINS must not contain '*'.")
+
+    if not os.getenv("DATABASE_URL"):
+        _problems.append("DATABASE_URL must be set.")
+
+    if not settings.r2_configured:
+        # Warning only: local disk is EPHEMERAL on Railway. Proof photos
+        # will be LOST on every redeploy until R2 is configured.
+        sys.stderr.write(
+            "WARNING: R2 storage is not configured. Proof-of-delivery photos "
+            "will be stored on ephemeral local disk and lost on redeploy. "
+            "Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, "
+            "and R2_BUCKET_NAME.\n"
+        )
+
+    if _problems:
+        sys.stderr.write(
+            "FATAL: refusing to start in production with unsafe settings:\n"
+        )
+        for _p in _problems:
+            sys.stderr.write("  - " + _p + "\n")
+        sys.exit(1)
