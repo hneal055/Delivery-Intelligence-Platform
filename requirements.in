@@ -41,7 +41,7 @@ python-multipart>=0.0.9
 # Security
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
-bcrypt>=4.1.0
+bcrypt==4.0.1
 
 # Database
 sqlalchemy>=2.0.0
@@ -74,3 +74,4 @@ opentelemetry-instrumentation-sqlalchemy>=0.45b0
 opentelemetry-instrumentation-redis>=0.45b0
 opentelemetry-exporter-otlp-proto-http>=1.24.0
 
+httpx

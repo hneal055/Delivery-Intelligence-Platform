@@ -12,6 +12,7 @@ class Settings:
 
     # ENVIRONMENT: "development" (default) or "production"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").lower()
+    ENV: str = ENVIRONMENT  # alias for compatibility
     IS_PRODUCTION: bool = ENVIRONMENT == "production"
 
     # SECURITY
@@ -39,8 +40,38 @@ class Settings:
     # DATABASE
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/delivery_db",
+        "postgresql://postgres:[REDACTED]@localhost:5432/delivery_db",
     )
+
+    # REDIS
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+    # NOTIFICATIONS
+    NOTIFICATIONS_ENABLED: bool = os.getenv("NOTIFICATIONS_ENABLED", "false").lower() == "true"
+    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_FROM_NUMBER: str = os.getenv("TWILIO_FROM_NUMBER", "")
+    SENDGRID_API_KEY: str = os.getenv("SENDGRID_API_KEY", "")
+    SENDGRID_FROM_EMAIL: str = os.getenv("SENDGRID_FROM_EMAIL", "noreply@diplatform.local")
+
+    # OPENTELEMETRY
+    OTEL_SERVICE_NAME: str = os.getenv("OTEL_SERVICE_NAME", "delivery-platform-backend")
+    OTEL_SERVICE_VERSION: str = os.getenv("OTEL_SERVICE_VERSION", "1.0.0")
+    OTLP_ENDPOINT: str = os.getenv("OTLP_ENDPOINT", "")
+
+    # MAPBOX
+    MAPBOX_ACCESS_TOKEN: str = os.getenv("MAPBOX_ACCESS_TOKEN", "")
+
+    # TOMTOM (real-time traffic + routing)
+    # When set, package creation uses real traffic-adjusted ETAs instead of
+    # synthetic random values. Falls back gracefully to synthetic data if
+    # unset or if the API call fails, so this is never a hard dependency.
+    TOMTOM_API_KEY: str = os.getenv("TOMTOM_API_KEY", "")
+
+    # OIDC (Optional)
+    OIDC_ENABLED: bool = os.getenv("OIDC_ENABLED", "false").lower() == "true"
+    OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "")
+    OIDC_CLIENT_ID: str = os.getenv("OIDC_CLIENT_ID", "")
 
     # CLOUDFLARE R2 (proof-of-delivery photo storage)
     # When all four are set, the R2 backend is used automatically.
@@ -57,6 +88,10 @@ class Settings:
             and self.R2_SECRET_ACCESS_KEY
             and self.R2_BUCKET_NAME
         )
+
+    @property
+    def tomtom_configured(self) -> bool:
+        return bool(self.TOMTOM_API_KEY)
 
 
 settings = Settings()
@@ -96,6 +131,14 @@ if settings.IS_PRODUCTION:
             "will be stored on ephemeral local disk and lost on redeploy. "
             "Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, "
             "and R2_BUCKET_NAME.\n"
+        )
+
+    if not settings.tomtom_configured:
+        # Warning only: traffic data falls back to synthetic values without it.
+        sys.stderr.write(
+            "WARNING: TOMTOM_API_KEY is not configured. Package ETAs and "
+            "traffic conditions will use synthetic placeholder data instead "
+            "of real traffic. Set TOMTOM_API_KEY to enable real traffic data.\n"
         )
 
     if _problems:

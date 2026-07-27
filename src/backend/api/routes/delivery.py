@@ -11,7 +11,7 @@ from fastapi import (
 from fastapi.responses import Response
 from pydantic import BaseModel
 import time
-from typing import List
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.backend.models.domain import Location, User
 from src.analytics.geofencing.engine import geofence_engine
@@ -104,6 +104,8 @@ async def confirm_delivery(
     package_id: str = Form(...),
     driver_id: str = Form(...),
     photo: UploadFile = File(...),
+    dest_lat: Optional[float] = Form(None),
+    dest_lon: Optional[float] = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
@@ -128,9 +130,12 @@ async def confirm_delivery(
             detail="Invalid Proof of Delivery: {0}".format(reason),
         )
 
-    # 4. Mark delivered
+    # 4. Mark delivered. dest_lat/dest_lon are optional -- when provided
+    #    (e.g. by the fleet simulator or a real dispatch flow), they enable
+    #    real traffic-adjusted ETA calculation via TomTom instead of the
+    #    synthetic fallback.
     await delivery_service.update_package_status(
-        db, package_id, "delivered", driver_id
+        db, package_id, "delivered", driver_id, dest_lat=dest_lat, dest_lon=dest_lon
     )
     DELIVERIES_COMPLETED.inc()
 

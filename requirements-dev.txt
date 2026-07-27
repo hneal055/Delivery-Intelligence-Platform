@@ -1,0 +1,6 @@
+# requirements-dev.txt - Development and testing only (not installed in Docker)
+pytest>=8.0.0
+pytest-cov>=5.0.0
+pytest-asyncio>=0.24.0
+black>=24.0.0
+flake8>=7.0.0

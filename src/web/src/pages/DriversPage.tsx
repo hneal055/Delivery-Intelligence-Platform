@@ -1,4 +1,4 @@
-import { Table, Badge, Title, Stack, TextInput, Select, Group } from "@mantine/core";
+import { Table, Badge, Title, Stack, TextInput, Select, Group, Switch } from "@mantine/core";
 import { useState, useMemo } from "react";
 import { useDrivers } from "../hooks/useDrivers";
 
@@ -6,19 +6,25 @@ export function DriversPage() {
   const { data: drivers = [], isLoading } = useDrivers();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [onlineOnly, setOnlineOnly] = useState(false);
 
   const filtered = useMemo(() => {
-    return drivers.filter((d) => {
+    const result = drivers.filter((d) => {
       const matchesSearch = !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.id.toLowerCase().includes(search.toLowerCase());
       const matchesStatus = !statusFilter || d.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesOnline = !onlineOnly || d.is_online;
+      return matchesSearch && matchesStatus && matchesOnline;
     });
-  }, [drivers, search, statusFilter]);
+    // Online drivers first, then alphabetical by name within each group
+    return [...result].sort((a, b) => {
+      if (a.is_online !== b.is_online) return a.is_online ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [drivers, search, statusFilter, onlineOnly]);
 
   return (
     <Stack>
       <Title order={3}>Drivers</Title>
-
       <Group>
         <TextInput
           placeholder="Search by name or ID..."
@@ -36,8 +42,12 @@ export function DriversPage() {
             { value: "inactive", label: "Inactive" },
           ]}
         />
+        <Switch
+          label="Online only"
+          checked={onlineOnly}
+          onChange={(e) => setOnlineOnly(e.currentTarget.checked)}
+        />
       </Group>
-
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>

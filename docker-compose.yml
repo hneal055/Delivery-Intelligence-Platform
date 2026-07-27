@@ -20,10 +20,10 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/delivery_db
       - BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
       interval: 30s
       timeout: 10s
-      start_period: 20s
+      start_period: 40s
       retries: 3
     restart: always
     depends_on:
@@ -41,7 +41,7 @@ services:
       - PYTHONPATH=/app
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/delivery_db
-    command: arq src.backend.worker.main.WorkerSettings
+    command: python -m arq src.backend.worker.main.WorkerSettings
     healthcheck:
       disable: true
     restart: always
@@ -124,5 +124,3 @@ volumes:
   postgres_data:
   grafana_data:
   localstack_data:
-
-

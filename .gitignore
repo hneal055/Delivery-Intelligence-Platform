@@ -66,3 +66,8 @@ nul
 # Explicitly track the example file even though .env is ignored
 !.env.example
 
+
+# ML model artifacts (regenerated, never committed)
+*.joblib
+
+Delivery_Intelligence_Platform_Operational_Manual.md.pdf

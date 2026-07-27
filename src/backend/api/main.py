@@ -185,6 +185,16 @@ async def health_check():
     return {"status": "online"}
 
 
+@app.get("/health/ready")
+async def readiness_check():
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(select(1))
+        return {"status": "ready"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
+
+
 _DEV_DEVICE_TOKEN = "dev-secret-key-123"
 
 
