@@ -1087,3 +1087,28 @@ Platform Version: 2.0
 📱 App Updates: Check App Store/Play Store regularly
 
 ═══════════════════════════════════════════════════════════════════════
+
+
+═══════════════════════════════════════════════════════════════════════
+RECENT PLATFORM UPDATES (July 2026)
+═══════════════════════════════════════════════════════════════════════
+
+LIVE MAP / GPS TRACKING - Now showing real routes
+  Driver positions on the map now reflect genuine travel between
+  real delivery stops across the full service area, instead of
+  small local movements. Expect to see longer, realistic routes on
+  the tracking map as drivers travel to each assigned stop.
+
+TRAFFIC-AWARE ETAs
+  Where configured, delivery ETAs now factor in real, live traffic
+  conditions rather than a general estimate. If traffic data is
+  temporarily unavailable, the system automatically falls back to
+  a standard estimate so ETAs are never blank or missing.
+
+DRIVER PANEL - Online sorting and filtering
+  The Drivers list now shows online drivers first by default, and
+  includes an "Online only" toggle to quickly narrow the list down
+  to active drivers when you don't need to see the full roster.
+
+
+═══════════════════════════════════════════════════════════════════════
