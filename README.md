@@ -25,7 +25,7 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Web Dashboard**: React 19, TypeScript, Vite, Mantine UI, Leaflet Maps
 *   **Mobile**: React Native, Expo
 *   **Data & ML**: Pandas, Scikit-learn, Shapely, GeoAlchemy2, PostGIS
-*   **External APIs**: TomTom Routing/Traffic API (optional — real traffic-adjusted ETAs; system falls back to synthetic data if unset)
+*   **External APIs**: TomTom Routing/Traffic API (optional - real traffic-adjusted ETAs; system falls back to synthetic data if unset)
 *   **Infrastructure**: Docker Compose, PostgreSQL + PostGIS, Redis, LocalStack (S3)
 *   **Visualization**: Grafana, Prometheus
 *   **Testing**: Pytest
@@ -40,7 +40,7 @@ Copy the environment template and fill in real values before first run:
 cp .env.example .env
 ```
 
-At minimum, set `SECRET_KEY`, `POSTGRES_PASSWORD`, and `REDIS_PASSWORD` to your own values — never use the placeholders in a shared or non-local environment. Optionally set `TOMTOM_API_KEY` (free tier available at `developer.tomtom.com`) to enable real traffic-adjusted ETAs; without it, the platform runs normally using synthetic traffic estimates.
+At minimum, set `SECRET_KEY`, `POSTGRES_PASSWORD`, and `REDIS_PASSWORD` to your own values - never use the placeholders in a shared or non-local environment. Optionally set `TOMTOM_API_KEY` (free tier available at `developer.tomtom.com`) to enable real traffic-adjusted ETAs; without it, the platform runs normally using synthetic traffic estimates.
 
 ### 1. Daily Development Startup
 Run the daily startup script to launch the entire stack (backend, frontend, mobile, and simulation):
@@ -71,7 +71,7 @@ If you only need backend services without frontend:
 .\start_platform.ps1
 ```
 
-**Note:** any change under `src/backend/` requires rebuilding the backend image before it takes effect — the container does not hot-reload:
+**Note:** any change under `src/backend/` requires rebuilding the backend image before it takes effect - the container does not hot-reload:
 ```powershell
 docker-compose build backend
 docker-compose up -d --force-recreate backend
@@ -84,7 +84,7 @@ The startup script automatically launches the simulation in a new window. To run
 .\run_simulation.ps1 -Drivers 50
 ```
 
-*Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it. A burst of `429 Too Many Requests` during login at startup is expected — the backend rate-limits logins to 10/minute, and this self-resolves within seconds as drivers stagger in.*
+*Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it. A burst of `429 Too Many Requests` during login at startup is expected - the backend rate-limits logins to 10/minute, and this self-resolves within seconds as drivers stagger in.*
 
 ### 4. Run Dispatcher Web UI
 
@@ -154,7 +154,7 @@ pytest tests/unit/test_security.py -v
 | File | Coverage |
 |------|----------|
 | `test_security.py` | JWT encode/decode/expiry, bcrypt hashing |
-| `test_permissions.py` | RBAC role ? permission mapping |
+| `test_permissions.py` | RBAC role -> permission mapping |
 | `test_geofencing_unit.py` | `is_in_delivery_zone` polygon logic |
 | `test_routing_service.py` | Nearest-neighbour + 2-Opt optimizer |
 | `test_notifications.py` | Channel detection, Twilio/SendGrid mocked send paths |
@@ -171,7 +171,7 @@ If you encounter unexpected WebSocket disconnects with the backend:
 2. The docker-compose configuration forces the 'asyncio' event loop ('uvicorn ... --loop asyncio') to resolve compatibility issues with 'uvloop' in this environment.
 
 ### Backend changes not taking effect
-Docker's build cache can report a layer as `CACHED` even after real source changes, if BuildKit's content hash happens to match. Don't trust the build log alone — after rebuilding, verify the actual file content landed inside the running container before assuming a fix didn't work:
+Docker's build cache can report a layer as `CACHED` even after real source changes, if BuildKit's content hash happens to match. Don't trust the build log alone - after rebuilding, verify the actual file content landed inside the running container before assuming a fix didn't work:
 ```powershell
 docker exec delivery_backend cat src/backend/services/<file>.py | Select-String -Pattern "<something unique to your change>"
 ```
