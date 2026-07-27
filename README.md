@@ -1,3 +1,4 @@
+
 # Delivery Intelligence Platform (Private)
 
 ## Overview
@@ -8,26 +9,38 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 ## Core Features
 *   **Smart Inventory Tracking**: Real-time package mapping to vehicle sections using `Pydantic` models.
 *   **Geospatial Intelligence**: Automated geofencing (using `Shapely` & `Geopandas`) to verify driver location against delivery targets.
-*   **Automated Verification**: Proof-of-delivery validation (Photo/Signature) to reduce error rates.
+*   **Automated Verification**: Proof-of-delivery validation (Photo/Signature) to reduce error rates, including automated image quality checks (resolution, brightness, sharpness).
+*   **Real Traffic & ETA Intelligence**: Live traffic-adjusted travel time and distance via the TomTom Routing API, factored into delivery ETAs. Falls back gracefully to a synthetic estimate if no API key is configured or the service is unavailable, so this is never a hard dependency.
 *   **Dynamic Routing**: Instructions and route updates dispatched directly to driver DIAD devices.
 *   **Real-time Analytics**: Grafana dashboards for fleet monitoring and operational metrics.
 *   **Mobile Driver App**: React Native application for drivers to receive routes, predict ETA (ML-powered), and capture delivery proof.
-*   **ML ETA Prediction**: Random Forest Regressor model providing real-time arrival estimates considering distance and traffic load.
+*   **ML ETA Prediction**: Random Forest Regressor model providing real-time arrival estimates considering distance and traffic load (real traffic data when TomTom is configured, synthetic otherwise).
 *   **Dispatch & Scheduling**: Job creation, assignment, and Kanban board for managing dispatch workflows.
 *   **GPS Tracking**: Real-time driver map with route history playback and speed controls.
 *   **Proof of Delivery Gallery**: Filterable gallery of delivery proof images with detail views.
 *   **Equipment / Barcode Scanning**: Camera-based barcode scanning for equipment check-in/out tracking.
 
 ## Technical Stack
-*   **Backend**: Python 3.9+, FastAPI, Uvicorn, Arq (Async Worker)
+*   **Backend**: Python 3.12, FastAPI, Uvicorn, Arq (Async Worker)
 *   **Web Dashboard**: React 19, TypeScript, Vite, Mantine UI, Leaflet Maps
 *   **Mobile**: React Native, Expo
 *   **Data & ML**: Pandas, Scikit-learn, Shapely, GeoAlchemy2, PostGIS
+*   **External APIs**: TomTom Routing/Traffic API (optional — real traffic-adjusted ETAs; system falls back to synthetic data if unset)
 *   **Infrastructure**: Docker Compose, PostgreSQL + PostGIS, Redis, LocalStack (S3)
 *   **Visualization**: Grafana, Prometheus
 *   **Testing**: Pytest
 
 ## Quick Start Guide
+
+### 0. Environment Setup
+
+Copy the environment template and fill in real values before first run:
+
+```powershell
+cp .env.example .env
+```
+
+At minimum, set `SECRET_KEY`, `POSTGRES_PASSWORD`, and `REDIS_PASSWORD` to your own values — never use the placeholders in a shared or non-local environment. Optionally set `TOMTOM_API_KEY` (free tier available at `developer.tomtom.com`) to enable real traffic-adjusted ETAs; without it, the platform runs normally using synthetic traffic estimates.
 
 ### 1. Daily Development Startup
 Run the daily startup script to launch the entire stack (backend, frontend, mobile, and simulation):
@@ -45,9 +58,9 @@ This automated script:
 - Starts mobile Expo server
 
 Once complete, access the services at:
-*   **API Docs**: `http://localhost:8000/docs`
+*   **API Docs**: `http://localhost:8002/docs`
 *   **Web Dashboard**: `http://localhost:5173`
-*   **Grafana**: `http://localhost:3500` (Login: `admin` / `new_bizness123`)
+*   **Grafana**: `http://localhost:3500` (Login: `admin` / see `GF_SECURITY_ADMIN_PASSWORD` in your `.env`)
 *   **Prometheus**: `http://localhost:9090`
 
 ### 2. Backend & Infrastructure Only
@@ -58,6 +71,12 @@ If you only need backend services without frontend:
 .\start_platform.ps1
 ```
 
+**Note:** any change under `src/backend/` requires rebuilding the backend image before it takes effect — the container does not hot-reload:
+```powershell
+docker-compose build backend
+docker-compose up -d --force-recreate backend
+```
+
 ### 3. Fleet Simulation
 The startup script automatically launches the simulation in a new window. To run it manually or add additional load:
 
@@ -65,7 +84,7 @@ The startup script automatically launches the simulation in a new window. To run
 .\run_simulation.ps1 -Drivers 50
 ```
 
-*Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it.*
+*Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it. A burst of `429 Too Many Requests` during login at startup is expected — the backend rate-limits logins to 10/minute, and this self-resolves within seconds as drivers stagger in.*
 
 ### 4. Run Dispatcher Web UI
 
@@ -89,22 +108,22 @@ Auto-configure your local IP for mobile testing:
 
 #### Manual Setup
 1. Copy environment template:
-   ```bash
+```bash
    cd src/mobile
    cp .env.example .env
-   ```
+```
 
 2. Edit `.env` and set your PC's LAN IP:
-   ```env
+```env
    EXPO_PUBLIC_API_HOST=192.168.1.100  # Your PC's IP
    EXPO_PUBLIC_API_PORT=8000
-   ```
+```
 
 3. Start Expo dev server:
-   ```bash
+```bash
    npm install
    npm start
-   ```
+```
 
 4. Scan QR code with Expo Go app on your iPhone/Android device
 
@@ -135,7 +154,7 @@ pytest tests/unit/test_security.py -v
 | File | Coverage |
 |------|----------|
 | `test_security.py` | JWT encode/decode/expiry, bcrypt hashing |
-| `test_permissions.py` | RBAC role â†’ permission mapping |
+| `test_permissions.py` | RBAC role ? permission mapping |
 | `test_geofencing_unit.py` | `is_in_delivery_zone` polygon logic |
 | `test_routing_service.py` | Nearest-neighbour + 2-Opt optimizer |
 | `test_notifications.py` | Channel detection, Twilio/SendGrid mocked send paths |
@@ -151,10 +170,15 @@ If you encounter unexpected WebSocket disconnects with the backend:
 1. Ensure 'uvicorn[standard]' is installed in backend dependencies.
 2. The docker-compose configuration forces the 'asyncio' event loop ('uvicorn ... --loop asyncio') to resolve compatibility issues with 'uvloop' in this environment.
 
+### Backend changes not taking effect
+Docker's build cache can report a layer as `CACHED` even after real source changes, if BuildKit's content hash happens to match. Don't trust the build log alone — after rebuilding, verify the actual file content landed inside the running container before assuming a fix didn't work:
+```powershell
+docker exec delivery_backend cat src/backend/services/<file>.py | Select-String -Pattern "<something unique to your change>"
+```
+
 ### Mobile App Connection Issues
 - Verify backend is running and accessible
 - Check `.env` file in `src/mobile/` has correct IP address
 - Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your PC's LAN IP
 - Ensure firewall allows connections on port 8000
 - Use `.\configure-mobile-env.ps1` for automatic IP detection
-
