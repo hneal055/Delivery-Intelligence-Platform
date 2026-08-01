@@ -1,8 +1,7 @@
-
 # Delivery Intelligence Platform (Private)
 
 ## Overview
-The **Delivery Intelligence Platform** is a real-time, intelligent delivery management system designed to optimize the "last mile" of logistics. It serves as a central brain for fleet management, preventing misdeliveries, optimizing driver efficiency, and enhancing customer satisfaction through advanced monitoring, data-driven workflows, and AI verification.
+The **Delivery Intelligence Platform** is a real-time, intelligent delivery management system designed to optimize the "last mile" of logistics. It serves as a central brain for fleet management, p[...]
 
 > **Note**: This is a private, proprietary repository. Source code distribution is restricted.
 
@@ -10,11 +9,11 @@ The **Delivery Intelligence Platform** is a real-time, intelligent delivery mana
 *   **Smart Inventory Tracking**: Real-time package mapping to vehicle sections using `Pydantic` models.
 *   **Geospatial Intelligence**: Automated geofencing (using `Shapely` & `Geopandas`) to verify driver location against delivery targets.
 *   **Automated Verification**: Proof-of-delivery validation (Photo/Signature) to reduce error rates, including automated image quality checks (resolution, brightness, sharpness).
-*   **Real Traffic & ETA Intelligence**: Live traffic-adjusted travel time and distance via the TomTom Routing API, factored into delivery ETAs. Falls back gracefully to a synthetic estimate if no API key is configured or the service is unavailable, so this is never a hard dependency.
+*   **Real Traffic & ETA Intelligence**: Live traffic-adjusted travel time and distance via the TomTom Routing API, factored into delivery ETAs. Falls back gracefully to a synthetic estimate if no[...]
 *   **Dynamic Routing**: Instructions and route updates dispatched directly to driver DIAD devices.
 *   **Real-time Analytics**: Grafana dashboards for fleet monitoring and operational metrics.
 *   **Mobile Driver App**: React Native application for drivers to receive routes, predict ETA (ML-powered), and capture delivery proof.
-*   **ML ETA Prediction**: Random Forest Regressor model providing real-time arrival estimates considering distance and traffic load (real traffic data when TomTom is configured, synthetic otherwise).
+*   **ML ETA Prediction**: Random Forest Regressor model providing real-time arrival estimates considering distance and traffic load (real traffic data when TomTom is configured, synthetic otherwi[...]
 *   **Dispatch & Scheduling**: Job creation, assignment, and Kanban board for managing dispatch workflows.
 *   **GPS Tracking**: Real-time driver map with route history playback and speed controls.
 *   **Proof of Delivery Gallery**: Filterable gallery of delivery proof images with detail views.
@@ -40,7 +39,7 @@ Copy the environment template and fill in real values before first run:
 cp .env.example .env
 ```
 
-At minimum, set `SECRET_KEY`, `POSTGRES_PASSWORD`, and `REDIS_PASSWORD` to your own values - never use the placeholders in a shared or non-local environment. Optionally set `TOMTOM_API_KEY` (free tier available at `developer.tomtom.com`) to enable real traffic-adjusted ETAs; without it, the platform runs normally using synthetic traffic estimates.
+At minimum, set `SECRET_KEY`, `POSTGRES_PASSWORD`, and `REDIS_PASSWORD` to your own values - never use the placeholders in a shared or non-local environment. Optionally set `TOMTOM_API_KEY` (free [...] 
 
 ### 1. Daily Development Startup
 Run the daily startup script to launch the entire stack (backend, frontend, mobile, and simulation):
@@ -84,7 +83,7 @@ The startup script automatically launches the simulation in a new window. To run
 .\run_simulation.ps1 -Drivers 50
 ```
 
-*Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it. A burst of `429 Too Many Requests` during login at startup is expected - the backend rate-limits logins to 10/minute, and this self-resolves within seconds as drivers stagger in.*
+*Note: The simulation runs indefinitely. Press `Ctrl+C` to stop it. A burst of `429 Too Many Requests` during login at startup is expected - the backend rate-limits logins to 10/minute, and this s[...]
 
 ### 4. Run Dispatcher Web UI
 
@@ -94,7 +93,7 @@ npm install
 npm run dev
 ```
 
-Access at `http://localhost:5173`. Login with `dispatcher1` / `dispatcherpassword`.
+Access at `http://localhost:5173`. Login with `<DEMO_USERNAME>` / `<DEMO_PASSWORD>`.
 
 Pages: Dashboard, Scheduling, Drivers, Packages, Proof Gallery, Tracking, Equipment.
 
@@ -130,7 +129,7 @@ Auto-configure your local IP for mobile testing:
 **Requirements:**
 - Phone and PC must be on the same Wi-Fi network
 - Backend must be running (`.\start_platform.ps1`)
-- Test credentials: `driver1` / `driverpassword`
+- Test credentials: `<DEMO_USERNAME>` / `<DEMO_PASSWORD>`
 
 See [src/mobile/README.md](src/mobile/README.md) for detailed mobile app documentation.
 
@@ -161,24 +160,3 @@ pytest tests/unit/test_security.py -v
 | `test_api_health.py` | Health endpoint, secure-ping auth, CORS preflight |
 | `test_api_basics.py` | Core API endpoint smoke tests |
 | `test_routing_api.py` | Route optimization API |
-
-
-## Troubleshooting
-
-### WebSocket Disconnects (Docker/Windows)
-If you encounter unexpected WebSocket disconnects with the backend:
-1. Ensure 'uvicorn[standard]' is installed in backend dependencies.
-2. The docker-compose configuration forces the 'asyncio' event loop ('uvicorn ... --loop asyncio') to resolve compatibility issues with 'uvloop' in this environment.
-
-### Backend changes not taking effect
-Docker's build cache can report a layer as `CACHED` even after real source changes, if BuildKit's content hash happens to match. Don't trust the build log alone - after rebuilding, verify the actual file content landed inside the running container before assuming a fix didn't work:
-```powershell
-docker exec delivery_backend cat src/backend/services/<file>.py | Select-String -Pattern "<something unique to your change>"
-```
-
-### Mobile App Connection Issues
-- Verify backend is running and accessible
-- Check `.env` file in `src/mobile/` has correct IP address
-- Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your PC's LAN IP
-- Ensure firewall allows connections on port 8000
-- Use `.\configure-mobile-env.ps1` for automatic IP detection
