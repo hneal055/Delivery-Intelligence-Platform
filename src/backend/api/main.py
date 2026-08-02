@@ -15,6 +15,7 @@ from src.backend.api.limiter import limiter
 from src.backend.api.routes import delivery
 from src.backend.api.routes import routing
 from src.backend.api.routes import auth
+from src.backend.api.routes import oidc
 from src.backend.api.routes import analytics
 from src.backend.api.routes import websocket
 from src.backend.api.routes import dispatch
@@ -171,6 +172,7 @@ Instrumentator().instrument(app).expose(app)
 
 # Include Routers
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(oidc.router)
 app.include_router(routing.router)
 app.include_router(delivery.router)
 app.include_router(analytics.router)
