@@ -77,6 +77,11 @@ class Settings:
     OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "")
     OIDC_CLIENT_ID: str = os.getenv("OIDC_CLIENT_ID", "")
 
+    # Microsoft Entra ID
+    OIDC_CLIENT_SECRET: str = os.getenv("OIDC_CLIENT_SECRET", "")
+    OIDC_TENANT_ID: str = os.getenv("OIDC_TENANT_ID", "")
+    OIDC_REDIRECT_URI: str = os.getenv("OIDC_REDIRECT_URI", "")
+
     # CLOUDFLARE R2 (proof-of-delivery photo storage)
     # When all four are set, the R2 backend is used automatically.
     R2_ACCOUNT_ID: str = os.getenv("R2_ACCOUNT_ID", "")
