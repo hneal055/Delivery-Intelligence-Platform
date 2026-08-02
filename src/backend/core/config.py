@@ -2,6 +2,10 @@ import os
 import sys
 from typing import List
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _parse_origins(raw: str) -> List[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
