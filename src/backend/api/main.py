@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -133,7 +135,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
-
+# Session support required by Authlib OIDC
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+)
 # --- OpenTelemetry Tracing ---
 # Called immediately after app creation so all route registrations are captured.
 setup_tracing(

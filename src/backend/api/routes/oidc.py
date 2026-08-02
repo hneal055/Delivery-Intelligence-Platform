@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-
+from fastapi import APIRouter, HTTPException, Request
+from src.backend.core.oidc_client import oauth
 from src.backend.core.config import settings
 
 router = APIRouter(
@@ -37,9 +37,9 @@ async def oidc_config():
 
 
 @router.get("/login")
-async def oidc_login():
+async def oidc_login(request: Request):
     """
-    Placeholder Microsoft Entra ID login endpoint.
+    Redirect user to Microsoft Entra ID login.
     """
 
     if not settings.OIDC_ENABLED:
@@ -48,20 +48,8 @@ async def oidc_login():
             detail="OIDC authentication is disabled",
         )
 
-    return {
-        "message": "OIDC login endpoint ready",
-        "issuer_url": settings.OIDC_ISSUER_URL,
-        "client_id": settings.OIDC_CLIENT_ID,
-        "redirect_uri": settings.OIDC_REDIRECT_URI,
-    }
-
-
-@router.get("/callback")
-async def oidc_callback():
-    """
-    Placeholder callback endpoint for OIDC authorization flow.
-    """
-
-    return {
-        "message": "OIDC callback endpoint reached",
-    }
+    return await oauth.microsoft.authorize_redirect(
+        request,
+        settings.OIDC_REDIRECT_URI,
+    
+ 
