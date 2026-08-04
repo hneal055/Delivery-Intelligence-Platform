@@ -3,6 +3,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
 import uuid
+from datetime import datetime
+
+from sqlalchemy import Column, String, DateTime, Text
 
 from src.backend.core.database import Base
 from src.backend.models.domain import UserRole
@@ -12,7 +15,6 @@ def generate_uuid():
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=True)

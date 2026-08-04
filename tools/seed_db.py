@@ -25,7 +25,7 @@ FLEET_LARGE = 50
 
 SYSTEM_ACCOUNTS = [
     {"username": "admin",       "password": "adminpassword",      "email": "admin@diplatform.com",       "role": UserRole.ADMIN},
-    {"username": "dispatcher1", "password": "dispatcherpassword",  "email": "dispatcher1@diplatform.com", "role": UserRole.MANAGER},
+    {"username": "dispatcher1", "password": "dispatcherpassword",  "email": "dispatcher1@diplatform.com", "role": UserRole.DISPATCHER},
 ]
 
 

@@ -89,6 +89,15 @@ class Settings:
     R2_SECRET_ACCESS_KEY: str = os.getenv("R2_SECRET_ACCESS_KEY", "")
     R2_BUCKET_NAME: str = os.getenv("R2_BUCKET_NAME", "")
 
+    # S3-compatible proof storage (src/backend/services/storage.py).
+    # "local" or "s3"; production refuses "local".
+    PROOF_STORAGE: str = os.getenv("PROOF_STORAGE", "local").lower()
+    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    AWS_REGION: str = os.getenv("AWS_REGION", "us-east-1")
+    S3_BUCKET_NAME: str = os.getenv("S3_BUCKET_NAME", "")
+    S3_ENDPOINT_URL: str = os.getenv("S3_ENDPOINT_URL", "")
+
     @property
     def r2_configured(self) -> bool:
         return bool(

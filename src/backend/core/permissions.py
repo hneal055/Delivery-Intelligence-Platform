@@ -28,6 +28,16 @@ ROLE_PERMISSIONS: Dict[UserRole, Set[Permission]] = {
         Permission.VIEW_ASSIGNED_PACKAGES,
         Permission.UPDATE_PACKAGE_STATUS,
     },
+    # Dispatchers run the job queue: create/assign/track jobs and read the
+    # reports panel, but no equipment administration (see DISPATCHER_USER_MANUAL).
+    # Strictly narrower than MANAGER.
+    UserRole.DISPATCHER: {
+        Permission.VIEW_OWN_PROFILE,
+        Permission.VIEW_ALL_DRIVERS,
+        Permission.VIEW_ALL_PACKAGES,
+        Permission.MANAGE_JOBS,
+        Permission.VIEW_ANALYTICS,
+    },
     UserRole.MANAGER: {
         Permission.VIEW_OWN_PROFILE,
         Permission.VIEW_ALL_DRIVERS,

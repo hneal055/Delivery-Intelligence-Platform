@@ -43,6 +43,31 @@ class TestRolePermissions:
         manager_perms = ROLE_PERMISSIONS[UserRole.MANAGER]
         assert driver_perms != manager_perms
 
+    def test_dispatcher_can_manage_jobs(self):
+        assert Permission.MANAGE_JOBS in ROLE_PERMISSIONS[UserRole.DISPATCHER]
+
+    def test_dispatcher_can_view_drivers_and_packages(self):
+        """Assigning drivers to jobs requires seeing both."""
+        dispatcher_perms = ROLE_PERMISSIONS[UserRole.DISPATCHER]
+        assert Permission.VIEW_ALL_DRIVERS in dispatcher_perms
+        assert Permission.VIEW_ALL_PACKAGES in dispatcher_perms
+
+    def test_dispatcher_cannot_manage_equipment_or_users(self):
+        dispatcher_perms = ROLE_PERMISSIONS[UserRole.DISPATCHER]
+        assert Permission.MANAGE_EQUIPMENT not in dispatcher_perms
+        assert Permission.MANAGE_USERS not in dispatcher_perms
+
+    def test_dispatcher_permissions_are_strict_subset_of_manager(self):
+        dispatcher_perms = ROLE_PERMISSIONS[UserRole.DISPATCHER]
+        manager_perms = ROLE_PERMISSIONS[UserRole.MANAGER]
+        assert dispatcher_perms < manager_perms
+
+    def test_every_role_has_a_permission_set(self):
+        """A role missing from ROLE_PERMISSIONS is silently denied everything."""
+        for role in UserRole:
+            assert role in ROLE_PERMISSIONS, f"Role has no permissions: {role}"
+            assert ROLE_PERMISSIONS[role], f"Role has empty permissions: {role}"
+
     def test_update_own_location_only_for_driver_and_admin(self):
         """Managers should not update driver locations on behalf of drivers."""
         assert Permission.UPDATE_OWN_LOCATION not in ROLE_PERMISSIONS[UserRole.MANAGER]

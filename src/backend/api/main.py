@@ -3,7 +3,7 @@ from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-
+from src.backend.api.routes import users
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -186,7 +186,7 @@ app.include_router(websocket.router)
 app.include_router(dispatch.router)
 app.include_router(tracking.router)
 app.include_router(advanced_routing.router)
-
+app.include_router(users.router)
 
 @app.get("/health")
 async def health_check():
