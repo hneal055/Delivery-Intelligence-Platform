@@ -1,0 +1,17 @@
+Delivery Intelligence Platform
+User Role Audit Summary
+========================================
+
+Audit Date: 2026_08_05_125308
+Total Users: 53
+
+Role Breakdown
+--------------------
+ADMIN: 2
+DISPATCHER: 1
+MANAGER: 50
+
+Account Status
+--------------------
+Active Users: 53
+Inactive Users: 0
