@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import smtplib
+import os
 from collections import Counter
 from datetime import datetime
 from email.message import EmailMessage
@@ -15,21 +16,67 @@ from src.backend.core.database import AsyncSessionLocal
 from src.backend.models.sql_models import User
 
 
-# Set to True after SMTP settings are configured
-SEND_EMAIL = False
+# Leave False until SMTP login testing succeeds
+SEND_EMAIL = True
 
-SMTP_SERVER = "smtp.office365.com"
+SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-SENDER_EMAIL = "reports@yourcompany.com"
-SENDER_PASSWORD = "YOUR_PASSWORD"
+SENDER_EMAIL = os.getenv("AUDIT_EMAIL")
+SENDER_PASSWORD = os.getenv("AUDIT_PASSWORD")
 
 RECIPIENT_EMAILS = [
     "howard@scenereaderstudio.com"
 ]
 
 
-def send_email(summary_file, latest_file):
+def test_smtp_connection():
+    try:
+        with smtplib.SMTP(
+            SMTP_SERVER,
+            SMTP_PORT,
+        ) as server:
+
+            server.starttls()
+
+            print(
+                "\n✅ SMTP connection successful"
+            )
+
+    except Exception as exc:
+        print(
+            f"\n❌ SMTP connection failed: {exc}"
+        )
+
+
+def test_smtp_login():
+    try:
+        with smtplib.SMTP(
+            SMTP_SERVER,
+            SMTP_PORT,
+        ) as server:
+
+            server.starttls()
+
+            server.login(
+                SENDER_EMAIL,
+                SENDER_PASSWORD,
+            )
+
+            print(
+                "\n✅ SMTP login successful"
+            )
+
+    except Exception as exc:
+        print(
+            f"\n❌ SMTP login failed: {exc}"
+        )
+
+
+def send_email(
+    summary_file,
+    latest_file,
+):
     message = EmailMessage()
 
     message["Subject"] = (
@@ -38,14 +85,25 @@ def send_email(summary_file, latest_file):
 
     message["From"] = SENDER_EMAIL
 
-    message["To"] = ", ".join(RECIPIENT_EMAILS)
+    message["To"] = ", ".join(
+        RECIPIENT_EMAILS
+    )
 
-    with open(summary_file, "r", encoding="utf-8") as file:
+    with open(
+        summary_file,
+        "r",
+        encoding="utf-8",
+    ) as file:
+
         body = file.read()
 
     message.set_content(body)
 
-    with open(latest_file, "rb") as file:
+    with open(
+        latest_file,
+        "rb",
+    ) as file:
+
         message.add_attachment(
             file.read(),
             maintype="application",
@@ -55,7 +113,7 @@ def send_email(summary_file, latest_file):
 
     with smtplib.SMTP(
         SMTP_SERVER,
-        SMTP_PORT
+        SMTP_PORT,
     ) as server:
 
         server.starttls()
@@ -67,28 +125,39 @@ def send_email(summary_file, latest_file):
 
         server.send_message(message)
 
+
 def preview_email(summary_file):
     print("\nEMAIL PREVIEW")
     print("=" * 60)
 
-    with open(summary_file, "r", encoding="utf-8") as file:
+    with open(
+        summary_file,
+        "r",
+        encoding="utf-8",
+    ) as file:
+
         print(file.read())
 
     print("=" * 60)
+
+
 async def main():
     async with AsyncSessionLocal() as db:
 
-        result = await db.execute(select(User))
+        result = await db.execute(
+            select(User)
+        )
+
         users = result.scalars().all()
 
         timestamp = datetime.now().strftime(
-    "%Y_%m_%d_%H%M%S"
-)
+            "%Y_%m_%d_%H%M%S"
+        )
 
         reports_dir = Path("reports")
         reports_dir.mkdir(exist_ok=True)
 
-        # Historical report
+        # Historical audit report
         csv_file = (
             reports_dir
             / f"user_role_audit_{timestamp}.csv"
@@ -98,7 +167,7 @@ async def main():
             csv_file,
             "w",
             newline="",
-            encoding="utf-8"
+            encoding="utf-8",
         ) as file:
 
             writer = csv.writer(file)
@@ -124,7 +193,7 @@ async def main():
                     ]
                 )
 
-        # Latest report
+        # Latest summary report
         latest_file = (
             reports_dir
             / "user_role_summary_latest.csv"
@@ -134,7 +203,7 @@ async def main():
             latest_file,
             "w",
             newline="",
-            encoding="utf-8"
+            encoding="utf-8",
         ) as file:
 
             writer = csv.writer(file)
@@ -173,7 +242,7 @@ async def main():
         with open(
             summary_file,
             "w",
-            encoding="utf-8"
+            encoding="utf-8",
         ) as file:
 
             file.write(
@@ -184,7 +253,9 @@ async def main():
                 "User Role Audit Summary\n"
             )
 
-            file.write("=" * 40 + "\n\n")
+            file.write(
+                "=" * 40 + "\n\n"
+            )
 
             file.write(
                 f"Audit Date: {timestamp}\n"
@@ -221,18 +292,31 @@ async def main():
                 if not user.is_active
             )
 
-            file.write("\nAccount Status\n")
-            file.write("-" * 20 + "\n")
+            file.write(
+                "\nAccount Status\n"
+            )
+
+            file.write(
+                "-" * 20 + "\n"
+            )
+
             file.write(
                 f"Active Users: {active_users}\n"
             )
+
             file.write(
                 f"Inactive Users: {inactive_users}\n"
             )
 
+            file.write(
+                "\nGenerated by role_audit_export.py\n"
+            )
+
         print("\nROLE SUMMARY")
         print("=" * 40)
-        print(f"Total Users : {len(users)}")
+        print(
+            f"Total Users : {len(users)}"
+        )
 
         for role, count in sorted(
             role_counts.items()
@@ -242,25 +326,31 @@ async def main():
             )
 
         print("=" * 40)
+
         print(
             f"Historical Report : {csv_file}"
         )
+
         print(
             f"Latest Report     : {latest_file}"
         )
+
         print(
             f"Email Summary     : {summary_file}"
         )
 
         preview_email(summary_file)
 
+        test_smtp_connection()
+
+        test_smtp_login()
+
         if SEND_EMAIL:
             send_email(
                 summary_file,
                 latest_file,
             )
-            print("Email sent.")
-            
+            print("\n✅ Email sent.")
 
 
 if __name__ == "__main__":
