@@ -70,7 +70,11 @@ async def get_user(
 
     async with AsyncSessionLocal() as db:
 
-        
+        result = await db.execute(
+            select(User).where(
+                User.id == user_id
+            )
+        )
 
         user = result.scalars().first()
 
@@ -98,9 +102,7 @@ async def update_user_role(
 
     require_admin(request)
 
-    valid_roles = {
-        role.value for role in UserRole
-    }
+    valid_roles = {role.value for role in UserRole}
 
     new_role = role_update.role.lower()
 
@@ -110,28 +112,22 @@ async def update_user_role(
             detail=(
                 "Invalid role. Must be one of: "
                 + ", ".join(
-                    sorted(r.upper() for r in valid_roles)
+                    sorted(role.upper() for role in valid_roles)
                 )
             ),
         )
 
     async with AsyncSessionLocal() as db:
 
-        print(f"UPDATE ROLE REQUEST FOR: {user_id}")
-        print(f"ROLE CHANGE TO: {new_role}")
+        result = await db.execute(
+            select(User).where(
+                User.id == user_id
+            )
+        )
 
-        result = await db.execute(select(User))
+        user = result.scalars().first()
 
-users = result.scalars().all()
-
-return {
-    "requested_id": user_id,
-    "database_user_count": len(users),
-    "first_user_id": users[0].id if users else None,
-}
-
-
-    if not user:
+        if not user:
             raise HTTPException(
                 status_code=404,
                 detail="User not found",
@@ -144,6 +140,6 @@ return {
 
         return {
             "message": "Role updated",
-            "user_id": str(user.id),
+            "user_id": user.id,
             "role": user.role,
         }
