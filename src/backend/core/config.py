@@ -68,6 +68,13 @@ class Settings:
     # unset or if the API call fails, so this is never a hard dependency.
     TOMTOM_API_KEY: str = os.getenv("TOMTOM_API_KEY", "")
 
+    # Device token used for dev device secure-ping. In production provide DEVICE_TOKEN.
+    DEVICE_TOKEN: str = os.getenv("DEVICE_TOKEN", "")
+
+    # If true, the app will run init_data() at startup to create demo users/profiles.
+    # Defaults to false for safety in production.
+    INIT_SEED: bool = os.getenv("INIT_SEED", "false").lower() == "true"
+
     # OIDC (Optional)
     OIDC_ENABLED: bool = os.getenv("OIDC_ENABLED", "false").lower() == "true"
     OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "")
