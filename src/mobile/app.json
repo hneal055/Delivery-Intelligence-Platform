@@ -10,11 +10,32 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Background location keeps your delivery tracking active while the app is in the background."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Camera is required to capture proof of delivery photos and scan package barcodes."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.deliveryintelligence.driver",
       "buildNumber": "1",
-      "deploymentTarget": "16.0",
       "infoPlist": {
         "NSCameraUsageDescription": "Camera is required to capture proof of delivery photos.",
         "NSPhotoLibraryUsageDescription": "Photo library access is needed to attach delivery proof images.",
@@ -26,7 +47,8 @@
         ],
         "NSLocationTemporaryUsageDescriptionDictionary": {
           "DeliveryVerification": "Precise location is needed to confirm you are at the delivery address."
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -39,7 +61,7 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "CAMERA",
-        "READ_EXTERNAL_STORAGE"
+        "RECORD_AUDIO"
       ]
     },
     "extra": {

@@ -1,40 +1,43 @@
+import asyncio
 from contextlib import asynccontextmanager, suppress
-from fastapi import FastAPI, Header, HTTPException, status
-from fastapi.responses import RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
-from src.backend.api.routes import users
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from prometheus_fastapi_instrumentator import Instrumentator
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from arq import create_pool
-from arq.connections import RedisSettings
+import logging
 from typing import Optional
 
+from arq import create_pool
+from arq.connections import RedisSettings
+from fastapi import FastAPI, Header, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.middleware.sessions import SessionMiddleware
+
 from src.backend.api.limiter import limiter
-from src.backend.api.routes import delivery
-from src.backend.api.routes import routing
-from src.backend.api.routes import auth
-from src.backend.api.routes import oidc
-from src.backend.api.routes import analytics
-from src.backend.api.routes import websocket
-from src.backend.api.routes import dispatch
-from src.backend.api.routes import tracking
-from src.backend.api.routes import advanced_routing
-from src.backend.core.config import settings
-from src.backend.core.tracing import setup_tracing
 from src.backend.api.metrics import ACTIVE_DRIVERS
-from src.backend.services.heartbeat import heartbeat_service
+from src.backend.api.routes import (
+    advanced_routing,
+    analytics,
+    auth,
+    delivery,
+    dispatch,
+    oidc,
+    routing,
+    tracking,
+    users,
+    websocket,
+)
+from src.backend.core.config import settings
 from src.backend.core.database import AsyncSessionLocal, engine
-from src.backend.services.user_service import get_user_by_username, create_user
+from src.backend.core.logging_config import configure_logging
+from src.backend.core.tracing import setup_tracing
 from src.backend.models.domain import UserCreate, UserRole
 from src.backend.models.sql_models import Driver
+from src.backend.services.heartbeat import heartbeat_service
 from src.backend.services.redis_manager import manager as ws_manager
-from src.backend.core.logging_config import configure_logging
-import logging
-import asyncio
+from src.backend.services.user_service import create_user, get_user_by_username
 
 # Configure Logging
 configure_logging()
@@ -62,7 +65,11 @@ async def init_data():
                 logger.info("Seeding: admin user")
                 await create_user(
                     db,
-                    UserCreate(username="admin", password="adminpassword", email="admin@diplatform.com"),
+                    UserCreate(
+                        username="admin",
+                        password="adminpassword",
+                        email="admin@diplatform.com",
+                    ),
                     role=UserRole.ADMIN,
                 )
 
@@ -71,7 +78,11 @@ async def init_data():
                 logger.info("Seeding: dispatcher1 user")
                 await create_user(
                     db,
-                    UserCreate(username="dispatcher1", password="dispatcherpassword", email="dispatcher1@diplatform.com"),
+                    UserCreate(
+                        username="dispatcher1",
+                        password="dispatcherpassword",
+                        email="dispatcher1@diplatform.com",
+                    ),
                     role=UserRole.MANAGER,
                 )
 
@@ -88,7 +99,11 @@ async def init_data():
                 if not existing_user:
                     await create_user(
                         db,
-                        UserCreate(username=username, password="driverpassword", email=f"{username}@diplatform.com"),
+                        UserCreate(
+                            username=username,
+                            password="driverpassword",
+                            email=f"{username}@diplatform.com",
+                        ),
                         role=UserRole.DRIVER,
                     )
                     created_users += 1
@@ -97,16 +112,20 @@ async def init_data():
                 result = await db.execute(select(Driver).where(Driver.id == driver_id))
                 existing_driver = result.scalars().first()
                 if not existing_driver:
-                    db.add(Driver(
-                        id=driver_id,
-                        name=f"Driver {i:03d}",
-                        status="active",
-                    ))
+                    db.add(
+                        Driver(
+                            id=driver_id,
+                            name=f"Driver {i:03d}",
+                            status="active",
+                        )
+                    )
                     created_profiles += 1
 
             await db.commit()
             if created_users or created_profiles:
-                logger.info(f"Seeding complete: {created_users} users, {created_profiles} driver profiles created")
+                logger.info(
+                    f"Seeding complete: {created_users} users, {created_profiles} driver profiles created"
+                )
             else:
                 logger.info("Seed data already present, skipping")
 
@@ -135,38 +154,30 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+
+# --- CORS Configuration ---
+# allow_origin_regex permits localhost, local network IPs (192.168.x.x), and tunneling tools
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^https?://.*",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Session support required by Authlib OIDC
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
 )
+
 # --- OpenTelemetry Tracing ---
-# Called immediately after app creation so all route registrations are captured.
 setup_tracing(
     app,
     service_name=settings.OTEL_SERVICE_NAME,
     service_version=settings.OTEL_SERVICE_VERSION,
     otlp_endpoint=settings.OTLP_ENDPOINT or None,
     db_engine=engine,
-)
-
-# --- CORS Configuration ---
-_CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-_CORS_ALLOWED_HEADERS = [
-    "Authorization",
-    "Content-Type",
-    "Accept",
-    "Origin",
-    "X-Requested-With",
-    "X-DIAD-Token",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=_CORS_ALLOWED_METHODS,
-    allow_headers=_CORS_ALLOWED_HEADERS,
 )
 
 # Rate Limiter
@@ -188,6 +199,7 @@ app.include_router(tracking.router)
 app.include_router(advanced_routing.router)
 app.include_router(users.router)
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "online"}
@@ -200,16 +212,23 @@ async def readiness_check():
             await db.execute(select(1))
         return {"status": "ready"}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        )
 
 
 _DEV_DEVICE_TOKEN = "dev-secret-key-123"
 
 
 @app.post("/secure-ping")
-async def secure_ping(x_diad_token: Optional[str] = Header(default=None, alias="X-DIAD-Token")):
+async def secure_ping(
+    x_diad_token: Optional[str] = Header(default=None, alias="X-DIAD-Token"),
+):
     if x_diad_token != _DEV_DEVICE_TOKEN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid device token")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid device token"
+        )
     return {"msg": "Device Authenticated"}
 
 

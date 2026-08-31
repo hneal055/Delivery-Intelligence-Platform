@@ -1,31 +1,48 @@
 {
   "cli": {
-    "version": ">= 12.0.0",
-    "appVersionSource": "local"
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": false,
-        "resourceClass": "m-medium"
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_HOST": "192.168.12.196",
+        "EXPO_PUBLIC_API_PORT": "8002"
+      }
+    },
+    "development-device": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_HOST": "192.168.12.196",
         "EXPO_PUBLIC_API_PORT": "8002"
       }
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "ios": {
-        "resourceClass": "m-medium"
+        "simulator": false
       }
     },
     "production": {
-      "autoIncrement": true,
-      "ios": {
-        "resourceClass": "m-medium"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {
