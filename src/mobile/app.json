@@ -30,7 +30,8 @@
         {
           "cameraPermission": "Camera is required to capture proof of delivery photos and scan package barcodes."
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "ios": {
       "supportsTablet": true,
