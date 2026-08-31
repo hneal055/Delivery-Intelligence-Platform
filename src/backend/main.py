@@ -192,3 +192,44 @@ async def get_sample_driver_route(driver_id: str):
         return optimize_stop_sequence(41.8786, -87.6403, sample_stops)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---------------------------------------------------------
+# Equipment & Asset Tracking Endpoints
+# ---------------------------------------------------------
+class EquipmentActionPayload(BaseModel):
+    barcode_or_id: str
+    driver_id: str
+    action: str  # "CHECK_OUT" | "CHECK_IN"
+    battery_level: Optional[int] = None
+    odometer_miles: Optional[int] = None
+    notes: Optional[str] = None
+
+@app.get("/equipment/list")
+async def list_equipment():
+    from services.equipment import get_all_equipment
+    return get_all_equipment()
+
+@app.post("/equipment/action")
+async def process_equipment_action(payload: EquipmentActionPayload):
+    from services.equipment import check_out_equipment, check_in_equipment
+    if payload.action.upper() == "CHECK_OUT":
+        res = check_out_equipment(payload.barcode_or_id, payload.driver_id)
+    else:
+        res = check_in_equipment(
+            payload.barcode_or_id,
+            payload.driver_id,
+            payload.battery_level,
+            payload.odometer_miles,
+            payload.notes,
+        )
+    if res.get("status") == "error":
+        raise HTTPException(status_code=400, detail=res.get("message"))
+    return res
+
+@app.get("/equipment/scan/{barcode}")
+async def scan_equipment_barcode(barcode: str):
+    from services.equipment import get_equipment_by_barcode_or_id
+    item = get_equipment_by_barcode_or_id(barcode)
+    if not item:
+        raise HTTPException(status_code=404, detail="Equipment asset not found.")
+    return item

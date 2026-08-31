@@ -36,6 +36,18 @@ export function AppShell() {
             active={location.pathname === "/"}
           />
           <NavLink
+            label="Fleet Analytics"
+            component={RouterNavLink}
+            to="/analytics"
+            active={location.pathname === "/analytics"}
+          />
+          <NavLink
+            label="Tracking"
+            component={RouterNavLink}
+            to="/tracking"
+            active={location.pathname === "/tracking"}
+          />
+          <NavLink
             label="Scheduling"
             component={RouterNavLink}
             to="/scheduling"
@@ -58,12 +70,6 @@ export function AppShell() {
             component={RouterNavLink}
             to="/proofs"
             active={location.pathname === "/proofs"}
-          />
-          <NavLink
-            label="Tracking"
-            component={RouterNavLink}
-            to="/tracking"
-            active={location.pathname === "/tracking"}
           />
           <NavLink
             label="Equipment"
