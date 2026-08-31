@@ -1,74 +1,61 @@
 {
   "expo": {
-    "name": "Delivery Intelligence Platform",
-    "slug": "delivery-intelligence-platform",
-    "scheme": "deliveryintelligence",
+    "name": "Delivery Intelligence",
+    "slug": "delivery-intelligence-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1e293b"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.deliveryintelligence.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan package barcodes and capture proof of delivery photos.",
+        "NSLocationWhenInUseUsageDescription": "This app requires location access to track driver route telemetry and verify geofence arrivals."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1e293b"
+      },
+      "package": "com.deliveryintelligence.mobile",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
     "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "deploymentTarget": "16.0"
-          }
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Background location keeps your delivery tracking active while the app is in the background."
-        }
-      ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Camera is required to capture proof of delivery photos and scan package barcodes."
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access camera for barcode scanning and delivery photo capture."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#2563eb"
         }
       ],
       "expo-sqlite"
     ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.deliveryintelligence.driver",
-      "buildNumber": "1",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Camera is required to capture proof of delivery photos.",
-        "NSPhotoLibraryUsageDescription": "Photo library access is needed to attach delivery proof images.",
-        "NSLocationWhenInUseUsageDescription": "Location is used to verify delivery positions and calculate accurate ETAs.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location keeps your delivery tracking active while the app is in the background.",
-        "UIBackgroundModes": [
-          "location",
-          "fetch"
-        ],
-        "NSLocationTemporaryUsageDescriptionDictionary": {
-          "DeliveryVerification": "Precise location is needed to confirm you are at the delivery address."
-        },
-        "ITSAppUsesNonExemptEncryption": false
-      }
-    },
-    "android": {
-      "package": "com.deliveryintelligence.driver",
-      "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
-      },
-      "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "CAMERA",
-        "RECORD_AUDIO"
-      ]
-    },
     "extra": {
       "eas": {
-        "projectId": "2c68aa63-c2ce-42ef-b312-d7ede483973c"
+        "projectId": "d4face41-fbd2-473a-9f6f-0b496a15e20c"
       }
-    }
+    },
+    "owner": "hneal1038"
   }
 }
