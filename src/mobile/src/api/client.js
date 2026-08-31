@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import { getToken, handleUnauthorized } from "./tokenProvider";
 
 const HOST = process.env.EXPO_PUBLIC_API_HOST || "192.168.12.196";
-const PORT = process.env.EXPO_PUBLIC_API_PORT || "8002";
+const PORT = process.env.EXPO_PUBLIC_API_PORT || "8000";
 
 // Tunnel detection
 const isTunnel =
@@ -16,11 +16,9 @@ const isSecure = PORT === "443" || isTunnel;
 const httpProto = isSecure ? "https" : "http";
 const wsProto = isSecure ? "wss" : "ws";
 
-// Strip standard default ports from the host string
 const portSuffix =
   PORT === "443" || PORT === "80" || isTunnel ? "" : `:${PORT}`;
 
-// Determine base URL dynamically per platform
 const getWebHost = () => {
   if (typeof window !== "undefined" && window.location?.hostname) {
     return window.location.hostname;
@@ -40,13 +38,12 @@ export const WS_BASE =
 
 const client = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: 15000,
   headers: {
     Accept: "application/json",
   },
 });
 
-// Request Interceptor: Attach JWT Bearer Token
 client.interceptors.request.use(
   async (config) => {
     try {
@@ -62,7 +59,6 @@ client.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Handle 401 Unauthorized globally
 client.interceptors.response.use(
   (response) => response,
   (error) => {
