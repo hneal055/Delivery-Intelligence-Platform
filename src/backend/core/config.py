@@ -2,6 +2,10 @@ import os
 import sys
 from typing import List
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _parse_origins(raw: str) -> List[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
@@ -73,12 +77,26 @@ class Settings:
     OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "")
     OIDC_CLIENT_ID: str = os.getenv("OIDC_CLIENT_ID", "")
 
+    # Microsoft Entra ID
+    OIDC_CLIENT_SECRET: str = os.getenv("OIDC_CLIENT_SECRET", "")
+    OIDC_TENANT_ID: str = os.getenv("OIDC_TENANT_ID", "")
+    OIDC_REDIRECT_URI: str = os.getenv("OIDC_REDIRECT_URI", "")
+
     # CLOUDFLARE R2 (proof-of-delivery photo storage)
     # When all four are set, the R2 backend is used automatically.
     R2_ACCOUNT_ID: str = os.getenv("R2_ACCOUNT_ID", "")
     R2_ACCESS_KEY_ID: str = os.getenv("R2_ACCESS_KEY_ID", "")
     R2_SECRET_ACCESS_KEY: str = os.getenv("R2_SECRET_ACCESS_KEY", "")
     R2_BUCKET_NAME: str = os.getenv("R2_BUCKET_NAME", "")
+
+    # S3-compatible proof storage (src/backend/services/storage.py).
+    # "local" or "s3"; production refuses "local".
+    PROOF_STORAGE: str = os.getenv("PROOF_STORAGE", "local").lower()
+    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    AWS_REGION: str = os.getenv("AWS_REGION", "us-east-1")
+    S3_BUCKET_NAME: str = os.getenv("S3_BUCKET_NAME", "")
+    S3_ENDPOINT_URL: str = os.getenv("S3_ENDPOINT_URL", "")
 
     @property
     def r2_configured(self) -> bool:

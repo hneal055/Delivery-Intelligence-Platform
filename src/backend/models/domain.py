@@ -45,6 +45,7 @@ class TruckManifest(BaseModel):
 # --- Security Models ---
 class UserRole(str, Enum):
     DRIVER = "driver"
+    DISPATCHER = "dispatcher"
     MANAGER = "manager"
     ADMIN = "admin"
 

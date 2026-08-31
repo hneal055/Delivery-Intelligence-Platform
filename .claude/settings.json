@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(\\(Get-Command python\\).Source; & \"c:\\\\Projects\\\\DELIVERYINTELLIGENCEPLATFORM\\\\venv\\\\Scripts\\\\python.exe\" -c \"import authlib, httpx; print\\('ok', authlib.__version__, httpx.__version__\\)\")",
+      "PowerShell(docker-compose ps 2>$null)",
+      "PowerShell(docker-compose exec -T backend python -c \"import httpx, authlib; print\\('ok', httpx.__version__, authlib.__version__\\)\" 2>&1)",
+      "PowerShell(py -0p 2>&1)",
+      "PowerShell(Get-Command python, python3 -All -ErrorAction SilentlyContinue)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(\"C:/Users/Administrator/AppData/Local/Programs/Python/Python310/python.exe\" -c \"from src.backend.api.main import app\")",
+      "Bash(./.venv/Scripts/python.exe -c \"import starlette, authlib; print\\('local starlette', starlette.__version__, '| authlib', authlib.__version__\\)\")",
+      "Bash(curl -s -o /dev/null -w \"status=%{http_code}\\\\nredirect=%{redirect_url}\\\\n\" --max-time 30 \"http://localhost:8002/oidc/login\")",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/unit/test_permissions.py -q)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/unit tests/integration -q -p no:cacheprovider)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/unit/test_storage_backend.py -q -p no:cacheprovider)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/unit tests/integration -q -p no:cacheprovider --ignore=tests/unit/test_storage_backend.py)",
+      "Bash(docker-compose exec -T backend python -c ' *)",
+      "Bash(./.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('src/backend/api/routes/users.py'\\).read\\(\\)\\); print\\('users.py parses OK'\\)\")",
+      "Bash(curl -s --max-time 15 \"http://localhost:8002/openapi.json\")",
+      "Bash(./.venv/Scripts/python.exe -c \"import sys,json; p=json.load\\(sys.stdin\\)['paths']; print\\([k for k in p if k.startswith\\('/users'\\)] or 'NONE — /users endpoints are not served'\\)\")",
+      "Bash(curl -s --max-time 15 \"http://127.0.0.1:8001/openapi.json\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 4 \"http://127.0.0.1:8001/health\")",
+      "Bash(./.venv/Scripts/python.exe -m uvicorn src.backend.api.main:app --host 127.0.0.1 --port 8001)",
+      "Bash(curl -s -o /dev/null -w \"%{redirect_url}\\\\n\" --max-time 30 \"http://127.0.0.1:8001/oidc/login\")",
+      "Bash(curl -s -o /dev/null -w \"login with shared password -> %{http_code}\\\\n\" --max-time 20 -X POST \"http://localhost:8002/auth/token\" -H \"Content-Type: application/x-www-form-urlencoded\" -d \"username=howard@scenereaderstudio.com&password=ENTRA_MANAGED_USER\")",
+      "Bash(curl -s -o /dev/null -w \"shared password now -> %{http_code} \\(401 = closed\\)\\\\n\" --max-time 20 -X POST \"http://localhost:8002/auth/token\" -H \"Content-Type: application/x-www-form-urlencoded\" -d \"username=howard@scenereaderstudio.com&password=ENTRA_MANAGED_USER\")",
+      "Bash(curl -s --max-time 6 \"http://127.0.0.1:8001/health\")",
+      "Bash(curl -s --max-time 6 \"http://127.0.0.1:8001/oidc/health\")",
+      "Bash(curl -s -o /dev/null -w \"%{redirect_url}\" --max-time 30 \"http://127.0.0.1:8001/oidc/login\")"
+    ]
+  }
+}

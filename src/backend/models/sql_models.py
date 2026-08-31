@@ -1,8 +1,21 @@
-from sqlalchemy import Column, String, Boolean, Float, DateTime, ForeignKey, Integer
+
+from sqlalchemy import (
+    Column,
+    String,
+    Boolean,
+    Float,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Text,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
 import uuid
+from datetime import datetime
+
+
 
 from src.backend.core.database import Base
 from src.backend.models.domain import UserRole
@@ -12,7 +25,6 @@ def generate_uuid():
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(String, primary_key=True, default=generate_uuid)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=True)
@@ -146,3 +158,62 @@ class DeviceToken(Base):
     token = Column(String, unique=True, nullable=False)
     platform = Column(String, default="android")  # ios, android, web
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(
+        String,
+        primary_key=True,
+        default=generate_uuid,
+    )
+
+    timestamp_utc = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+
+    actor_email = Column(
+        String,
+        nullable=False,
+        index=True,
+    )
+
+    actor_role = Column(
+        String,
+        nullable=True,
+    )
+
+    action = Column(
+        String,
+        nullable=False,
+        index=True,
+    )
+
+    target_user = Column(
+        String,
+        nullable=True,
+        index=True,
+    )
+
+    details = Column(
+        Text,
+        nullable=True,
+    )
+
+    ip_address = Column(
+        String,
+        nullable=True,
+    )
+
+    session_id = Column(
+        String,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

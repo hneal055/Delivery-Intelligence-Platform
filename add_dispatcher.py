@@ -22,7 +22,7 @@ async def add_dispatcher():
         new_user = User(
             username="dispatcher1",
             hashed_password=get_password_hash("dispatcherpassword"),
-            role="manager",
+            role="dispatcher",
             is_active=True
         )
         db.add(new_user)
