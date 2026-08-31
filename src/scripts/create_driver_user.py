@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import os
+import secrets
 
 # Add src to path
 sys.path.append(os.getcwd())
@@ -12,6 +13,17 @@ from src.backend.models.sql_models import User
 from sqlalchemy import select
 
 async def create_driver():
+    # Safety guard: require explicit env var to allow dev seeding
+    if os.getenv("ALLOW_DEV_SEED") != "true":
+        print("Refusing to seed driver user: set ALLOW_DEV_SEED=true to enable seeding in dev environments.")
+        return
+
+    password = os.getenv("DEV_DRIVER_PASSWORD")
+    if not password:
+        # Generate a random, single-use password and print it for the operator
+        password = secrets.token_urlsafe(12)
+        print(f"DEV_DRIVER_PASSWORD not set — generated password for seeding: {password}")
+
     async with AsyncSessionLocal() as db:
         # Check if user exists
         result = await db.execute(select(User).where(User.username == "driver1"))
@@ -24,7 +36,7 @@ async def create_driver():
         user_in = UserCreate(
             username="driver1",
             email="driver1@example.com", 
-            password="driverpassword",
+            password=password,
             role=UserRole.DRIVER
         )
         
@@ -41,4 +53,3 @@ if __name__ == "__main__":
         loop.run_until_complete(create_driver())
     finally:
         loop.close()
-
