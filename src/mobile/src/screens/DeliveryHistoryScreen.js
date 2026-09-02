@@ -4,12 +4,14 @@ import {
   Text,
   View,
   FlatList,
-  Image,
   TouchableOpacity,
-  Modal,
   ActivityIndicator,
   RefreshControl,
   SafeAreaView,
+  Image,
+  StatusBar,
+  Platform,
+  Alert,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import client from "../api/client";
@@ -18,199 +20,275 @@ export default function DeliveryHistoryScreen({ navigation }) {
   const [proofs, setProofs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [showCsvBox, setShowCsvBox] = useState(false);
+  const [csvText, setCsvText] = useState("");
 
-  const baseUrl = client?.defaults?.baseURL || "http://localhost:8000";
+  const baseUrl = client?.defaults?.baseURL || "http://10.0.2.2:8000";
 
-  const fetchProofs = useCallback(async () => {
+  const loadProofs = useCallback(async () => {
     try {
-      const response = await fetch(`${baseUrl}/delivery/recent-proofs?limit=50`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch proofs: ${response.status}`);
+      const response = await client.get("/delivery/recent-proofs", {
+        params: { limit: 50 },
+      });
+      if (response && response.data) {
+        setProofs(response.data);
       }
-      const data = await response.json();
-      setProofs(data);
     } catch (err) {
-      console.warn("[DeliveryHistory] Failed to retrieve proofs:", err.message);
+      console.warn("[DeliveryHistory] Failed to load proofs:", err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [baseUrl]);
+  }, []);
 
   useEffect(() => {
-    fetchProofs();
-  }, [fetchProofs]);
+    loadProofs();
+    const unsubscribe = navigation.addListener("focus", () => {
+      loadProofs();
+    });
+    return unsubscribe;
+  }, [navigation, loadProofs]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchProofs();
+    loadProofs();
   };
 
-  const renderItem = ({ item }) => {
-    const fullPhotoUrl = item.photo_url ? `${baseUrl}${item.photo_url}` : null;
-    const formattedDate = item.confirmed_at
-      ? new Date(item.confirmed_at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "N/A";
+  const handleExportCSV = () => {
+    if (!proofs || proofs.length === 0) {
+      Alert.alert("No Data", "No delivery proofs available to export.");
+      return;
+    }
+
+    const headers = [
+      "id",
+      "package_id",
+      "driver_id",
+      "status",
+      "timestamp",
+      "latitude",
+      "longitude",
+    ];
+
+    const rows = proofs.map((p) => [
+      p.id ?? "",
+      `"${p.package_id || ""}"`,
+      `"${p.driver_id || ""}"`,
+      `"${p.status || ""}"`,
+      `"${p.timestamp || ""}"`,
+      p.dest_lat ?? p.latitude ?? "",
+      p.dest_lon ?? p.longitude ?? "",
+    ]);
+
+    const formatted = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    setCsvText(formatted);
+    setShowCsvBox(!showCsvBox);
+  };
+
+  const renderProofItem = ({ item }) => {
+    const fullPhotoUrl = item.photo_url
+      ? item.photo_url.startsWith("http")
+        ? item.photo_url
+        : `${baseUrl}${item.photo_url}`
+      : null;
 
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={styles.packageTag}>
+          <View style={styles.packageBadge}>
             <MaterialCommunityIcons name="package-variant-closed" size={16} color="#38bdf8" />
             <Text style={styles.packageIdText}>{item.package_id}</Text>
           </View>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>{item.status}</Text>
+          <View style={styles.statusTag}>
+            <Text style={styles.statusTagText}>{item.status}</Text>
           </View>
         </View>
 
         <View style={styles.cardBody}>
-          <View style={styles.detailsColumn}>
+          <View style={styles.metaColumn}>
             <View style={styles.metaRow}>
-              <MaterialCommunityIcons name="account-circle-outline" size={15} color="#94a3b8" />
-              <Text style={styles.metaLabel}>Driver:</Text>
-              <Text style={styles.metaValue}>{item.driver_id}</Text>
+              <MaterialCommunityIcons name="account-outline" size={15} color="#94a3b8" />
+              <Text style={styles.metaText}>Driver: {item.driver_id}</Text>
             </View>
 
             <View style={styles.metaRow}>
               <MaterialCommunityIcons name="clock-outline" size={15} color="#94a3b8" />
-              <Text style={styles.metaLabel}>Time:</Text>
-              <Text style={styles.metaValue}>{formattedDate}</Text>
+              <Text style={styles.metaText}>
+                {item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : "N/A"}
+              </Text>
             </View>
 
             <View style={styles.metaRow}>
               <MaterialCommunityIcons name="map-marker-outline" size={15} color="#94a3b8" />
-              <Text style={styles.metaLabel}>Coords:</Text>
-              <Text style={styles.metaValue} numberOfLines={1}>
-                {item.dest_lat || "41.8786"}, {item.dest_lon || "-87.6403"}
-              </Text>
-            </View>
-
-            <View style={styles.metaRow}>
-              <MaterialCommunityIcons
-                name={item.signature_received ? "draw-pen" : "close-circle-outline"}
-                size={15}
-                color={item.signature_received ? "#4ade80" : "#64748b"}
-              />
-              <Text style={styles.metaLabel}>Signature:</Text>
-              <Text style={[styles.metaValue, item.signature_received && styles.signatureText]}>
-                {item.signature_received ? "Captured" : "None"}
+              <Text style={styles.metaText}>
+                {Number(item.dest_lat).toFixed(4)}, {Number(item.dest_lon).toFixed(4)}
               </Text>
             </View>
           </View>
 
-          {/* Thumbnail preview button */}
-          <TouchableOpacity
-            style={styles.thumbnailContainer}
-            disabled={!fullPhotoUrl}
-            onPress={() => fullPhotoUrl && setSelectedPhoto(fullPhotoUrl)}
-          >
-            {fullPhotoUrl ? (
-              <>
-                <Image source={{ uri: fullPhotoUrl }} style={styles.thumbnail} />
-                <View style={styles.expandIconBadge}>
-                  <MaterialCommunityIcons name="arrow-expand" size={12} color="#ffffff" />
-                </View>
-              </>
-            ) : (
-              <View style={styles.noPhotoPlaceholder}>
-                <MaterialCommunityIcons name="camera-off-outline" size={24} color="#64748b" />
-                <Text style={styles.noPhotoText}>No Photo</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {fullPhotoUrl ? (
+            <Image source={{ uri: fullPhotoUrl }} style={styles.thumbnail} />
+          ) : (
+            <View style={styles.noPhotoThumbnail}>
+              <MaterialCommunityIcons name="image-off-outline" size={20} color="#64748b" />
+            </View>
+          )}
         </View>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Top Bar */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Delivery Proof Log</Text>
-        <TouchableOpacity style={styles.refreshIconButton} onPress={onRefresh}>
-          <MaterialCommunityIcons name="refresh" size={22} color="#38bdf8" />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {/* Top Header with Safe Top Padding */}
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Delivery Proof Log</Text>
+            <Text style={styles.headerSubtitle}>
+              {proofs.length} verified records in system
+            </Text>
+          </View>
 
-      {/* Main List */}
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#38bdf8" />
-          <Text style={styles.loadingText}>Loading delivery proofs...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={proofs}
-          keyExtractor={(item) => String(item.id || item.package_id + item.confirmed_at)}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
-          }
-          ListEmptyComponent={
-            <View style={styles.centerContainer}>
-              <MaterialCommunityIcons name="cube-outline" size={48} color="#475569" />
-              <Text style={styles.emptyTitle}>No Proofs Logged</Text>
-              <Text style={styles.emptySubtitle}>
-                Completed deliveries with signature or photo documentation will appear here.
-              </Text>
-            </View>
-          }
-        />
-      )}
-
-      {/* High-Resolution Photo Viewer Modal */}
-      <Modal visible={Boolean(selectedPhoto)} transparent={true} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalContent}>
+          <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setSelectedPhoto(null)}
+              style={styles.exportButton}
+              onPress={handleExportCSV}
+              activeOpacity={0.6}
             >
-              <MaterialCommunityIcons name="close" size={24} color="#ffffff" />
+              <MaterialCommunityIcons name="file-delimited-outline" size={16} color="#0f172a" />
+              <Text style={styles.exportButtonText}>
+                {showCsvBox ? "Hide CSV" : "Export CSV"}
+              </Text>
             </TouchableOpacity>
 
-            {selectedPhoto && (
-              <Image
-                source={{ uri: selectedPhoto }}
-                style={styles.fullImage}
-                resizeMode="contain"
-              />
-            )}
-          </SafeAreaView>
+            <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+              <MaterialCommunityIcons name="refresh" size={20} color="#38bdf8" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </Modal>
+
+        {/* In-Line CSV Export Preview Box */}
+        {showCsvBox && (
+          <View style={styles.csvBox}>
+            <View style={styles.csvBoxHeader}>
+              <Text style={styles.csvBoxTitle}>Exported CSV Data ({proofs.length} rows)</Text>
+              <TouchableOpacity onPress={() => setShowCsvBox(false)}>
+                <MaterialCommunityIcons name="close" size={18} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.csvText} selectable={true}>
+              {csvText}
+            </Text>
+            <Text style={styles.copyNotice}>Tip: Long-press text above to copy.</Text>
+          </View>
+        )}
+
+        {/* Proofs Feed */}
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#38bdf8" />
+            <Text style={styles.loadingText}>Fetching delivery records...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={proofs}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderProofItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
+            }
+          />
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: "#0f172a",
+  },
+  container: {
+    flex: 1,
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight + 10 : 10,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#1e293b",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
     color: "#f8fafc",
   },
-  refreshIconButton: {
+  headerSubtitle: {
+    fontSize: 12,
+    color: "#94a3b8",
+    marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  exportButton: {
+    backgroundColor: "#38bdf8",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  exportButtonText: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  refreshButton: {
     padding: 6,
+  },
+  csvBox: {
+    margin: 16,
+    padding: 14,
+    backgroundColor: "#020617",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#38bdf8",
+  },
+  csvBoxHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  csvBoxTitle: {
+    color: "#38bdf8",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  csvText: {
+    fontFamily: "monospace",
+    color: "#f1f5f9",
+    fontSize: 11,
+    lineHeight: 16,
+    backgroundColor: "#0f172a",
+    padding: 8,
+    borderRadius: 6,
+  },
+  copyNotice: {
+    color: "#64748b",
+    fontSize: 10,
+    marginTop: 6,
+    textAlign: "right",
   },
   listContent: {
     padding: 16,
@@ -222,27 +300,24 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: "#334155",
+    gap: 12,
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#334155",
   },
-  packageTag: {
+  packageBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
   packageIdText: {
-    fontSize: 15,
-    fontWeight: "700",
     color: "#f8fafc",
+    fontSize: 16,
+    fontWeight: "700",
   },
-  statusBadge: {
+  statusTag: {
     backgroundColor: "rgba(34, 197, 94, 0.15)",
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -250,73 +325,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(34, 197, 94, 0.3)",
   },
-  statusText: {
+  statusTagText: {
     color: "#4ade80",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
-    letterSpacing: 0.5,
   },
   cardBody: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
+    alignItems: "center",
   },
-  detailsColumn: {
+  metaColumn: {
+    gap: 6,
     flex: 1,
-    gap: 5,
-    justifyContent: "center",
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  metaLabel: {
-    fontSize: 12,
+  metaText: {
     color: "#94a3b8",
-    width: 60,
-  },
-  metaValue: {
     fontSize: 12,
-    color: "#cbd5e1",
-    fontWeight: "500",
-  },
-  signatureText: {
-    color: "#4ade80",
-  },
-  thumbnailContainer: {
-    width: 84,
-    height: 84,
-    borderRadius: 8,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#475569",
-    position: "relative",
   },
   thumbnail: {
-    width: "100%",
-    height: "100%",
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: "#334155",
   },
-  expandIconBadge: {
-    position: "absolute",
-    bottom: 4,
-    right: 4,
-    backgroundColor: "rgba(15, 23, 42, 0.8)",
-    padding: 3,
-    borderRadius: 4,
-  },
-  noPhotoPlaceholder: {
-    width: "100%",
-    height: "100%",
+  noPhotoThumbnail: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
     backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
-  },
-  noPhotoText: {
-    fontSize: 10,
-    color: "#64748b",
-    marginTop: 3,
-    fontWeight: "500",
+    borderWidth: 1,
+    borderColor: "#334155",
   },
   centerContainer: {
     flex: 1,
@@ -328,42 +374,5 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#94a3b8",
     fontSize: 14,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#cbd5e1",
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: "#64748b",
-    textAlign: "center",
-    maxWidth: 240,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.95)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    flex: 1,
-    width: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  closeButton: {
-    position: "absolute",
-    top: 40,
-    right: 20,
-    zIndex: 10,
-    backgroundColor: "#1e293b",
-    padding: 10,
-    borderRadius: 25,
-  },
-  fullImage: {
-    width: "95%",
-    height: "80%",
-    borderRadius: 8,
   },
 });
