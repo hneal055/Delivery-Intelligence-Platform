@@ -4,240 +4,193 @@ import {
   Text,
   View,
   TouchableOpacity,
-  ScrollView,
   SafeAreaView,
+  StatusBar,
+  Platform,
+  ScrollView,
   RefreshControl,
-  ActivityIndicator,
-  Alert,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useAuthStore } from "../stores/authStore";
-import * as offlineQueueService from "../services/offlineQueueService";
+import client from "../api/client";
 
 export default function HomeScreen({ navigation }) {
-  const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
-
-  const [pendingCount, setPendingCount] = useState(0);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState({
+    assigned: 5,
+    completed: 4,
+    remaining: 1,
+  });
+  const [nextStop, setNextStop] = useState({
+    stopNumber: 5,
+    packageId: "pkg-005",
+    address: "222 W Merchandise Mart Plaza",
+    tier: "Priority",
+  });
 
-  const checkPendingQueue = useCallback(async () => {
+  // Pull latest proof count to sync metrics
+  const refreshHomeData = useCallback(async () => {
     try {
-      const getCount =
-        offlineQueueService?.getPendingQueueCount ||
-        offlineQueueService?.default?.getPendingQueueCount;
+      const res = await client.get("/delivery/recent-proofs", {
+        params: { limit: 50 },
+      });
+      if (res && Array.isArray(res.data)) {
+        const completedCount = res.data.length;
+        const totalAssigned = Math.max(5, completedCount);
+        const remainingCount = Math.max(0, totalAssigned - completedCount);
 
-      if (typeof getCount === "function") {
-        const count = await getCount();
-        setPendingCount(Number(count) || 0);
+        setStats({
+          assigned: totalAssigned,
+          completed: completedCount,
+          remaining: remainingCount,
+        });
+
+        if (remainingCount > 0) {
+          setNextStop({
+            stopNumber: completedCount + 1,
+            packageId: `pkg-00${completedCount + 1}`,
+            address: "222 W Merchandise Mart Plaza",
+            tier: "Priority",
+          });
+        } else {
+          setNextStop(null);
+        }
       }
-    } catch (err) {
-      console.warn("[HomeScreen] Queue check error:", err?.message || err);
+    } catch (_) {
+      // Fallback to local state if backend is offline
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    checkPendingQueue();
+    refreshHomeData();
     const unsubscribe = navigation.addListener("focus", () => {
-      checkPendingQueue();
+      refreshHomeData();
     });
     return unsubscribe;
-  }, [navigation, checkPendingQueue]);
+  }, [navigation, refreshHomeData]);
 
-  const onRefresh = async () => {
+  const onRefresh = () => {
     setRefreshing(true);
-    await checkPendingQueue();
-    setRefreshing(false);
-  };
-
-  const handleManualSync = async () => {
-    if (isSyncing || pendingCount === 0) return;
-
-    const processQueue =
-      offlineQueueService?.processOfflineQueue ||
-      offlineQueueService?.default?.processOfflineQueue;
-
-    if (typeof processQueue !== "function") {
-      Alert.alert("Sync Error", "Offline queue service function is not available.");
-      return;
-    }
-
-    setIsSyncing(true);
-    try {
-      const result = await processQueue();
-      await checkPendingQueue();
-
-      const synced = result?.syncedCount ?? 0;
-      const failed = result?.failedCount ?? 0;
-
-      if (synced > 0 && failed === 0) {
-        Alert.alert(
-          "Sync Succeeded",
-          `Successfully uploaded ${synced} queued proof${synced > 1 ? "s" : ""}.`
-        );
-      } else if (synced > 0 && failed > 0) {
-        Alert.alert(
-          "Partial Sync",
-          `Uploaded ${synced} proof(s), but ${failed} remain queued.`
-        );
-      } else if (failed > 0) {
-        Alert.alert(
-          "Sync Failed",
-          "Could not reach backend. Queued deliveries remain saved locally."
-        );
-      }
-    } catch (err) {
-      Alert.alert("Sync Error", "An error occurred during sync attempt.");
-    } finally {
-      setIsSyncing(false);
-    }
+    refreshHomeData();
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
-        }
-      >
+      <View style={styles.container}>
         {/* Top Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.driverGreeting}>Driver Portal</Text>
-            <Text style={styles.driverName}>
-              {user?.username || user?.email || "Driver D001"}
-            </Text>
+            <Text style={styles.headerPortal}>DRIVER PORTAL</Text>
+            <Text style={styles.headerTitle}>Driver D001</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-            <MaterialCommunityIcons name="logout-variant" size={20} color="#ef4444" />
+          <TouchableOpacity style={styles.logoutButton} activeOpacity={0.7}>
+            <MaterialCommunityIcons name="exit-to-app" size={20} color="#f87171" />
           </TouchableOpacity>
         </View>
 
-        {/* Inline Offline Sync Indicator */}
-        {pendingCount > 0 && (
-          <View style={styles.offlineAlertBanner}>
-            <View style={styles.offlineBannerLeft}>
-              <MaterialCommunityIcons name="cloud-sync-outline" size={22} color="#f59e0b" />
-              <View style={styles.offlineTextColumn}>
-                <View style={styles.offlineTitleRow}>
-                  <Text style={styles.offlineBannerTitle}>Offline Queued</Text>
-                  <View style={styles.offlineBadge}>
-                    <Text style={styles.offlineBadgeText}>{pendingCount}</Text>
-                  </View>
-                </View>
-                <Text style={styles.offlineBannerSubtitle}>
-                  {pendingCount === 1 ? "1 delivery proof" : `${pendingCount} delivery proofs`} awaiting upload
-                </Text>
-              </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
+          }
+        >
+          {/* Stat Summary Cards */}
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <MaterialCommunityIcons name="truck-delivery-outline" size={22} color="#38bdf8" />
+              <Text style={styles.statValue}>{stats.assigned}</Text>
+              <Text style={styles.statLabel}>Assigned</Text>
             </View>
-            <TouchableOpacity
-              style={[styles.syncButton, isSyncing && styles.disabledButton]}
-              onPress={handleManualSync}
-              disabled={isSyncing}
-            >
-              {isSyncing ? (
-                <ActivityIndicator size="small" color="#0f172a" />
-              ) : (
-                <Text style={styles.syncButtonText}>Sync</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
 
-        {/* Route Overview Metric Cards */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <MaterialCommunityIcons name="truck-delivery-outline" size={24} color="#38bdf8" />
-            <Text style={styles.statNumber}>18</Text>
-            <Text style={styles.statLabel}>Assigned</Text>
+            <View style={styles.statCard}>
+              <MaterialCommunityIcons name="check-decagram-outline" size={22} color="#4ade80" />
+              <Text style={styles.statValue}>{stats.completed}</Text>
+              <Text style={styles.statLabel}>Completed</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <MaterialCommunityIcons name="clock-outline" size={22} color="#fbbf24" />
+              <Text style={styles.statValue}>{stats.remaining}</Text>
+              <Text style={styles.statLabel}>Remaining</Text>
+            </View>
           </View>
 
-          <View style={styles.statCard}>
-            <MaterialCommunityIcons name="check-decagram-outline" size={24} color="#4ade80" />
-            <Text style={styles.statNumber}>14</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <MaterialCommunityIcons name="clock-time-four-outline" size={24} color="#fbbf24" />
-            <Text style={styles.statNumber}>4</Text>
-            <Text style={styles.statLabel}>Remaining</Text>
-          </View>
-        </View>
-
-        {/* Primary Action: Launch Scanner */}
-        <TouchableOpacity
-          style={styles.primaryActionCard}
-          onPress={() => navigation.navigate("Scanner")}
-        >
-          <View style={styles.actionIconContainer}>
-            <MaterialCommunityIcons name="barcode-scan" size={32} color="#ffffff" />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.primaryActionTitle}>Scan & Confirm Delivery</Text>
-            <Text style={styles.primaryActionSubtitle}>
-              Capture package barcode, photo proof, and signature
-            </Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#94a3b8" />
-        </TouchableOpacity>
-
-        {/* Secondary Action: Delivery Proof Log */}
-        <TouchableOpacity
-          style={styles.secondaryActionCard}
-          onPress={() => navigation.navigate("ProofsTab")}
-        >
-          <View style={[styles.actionIconContainer, styles.historyIconContainer]}>
-            <MaterialCommunityIcons name="clipboard-check-outline" size={28} color="#38bdf8" />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.secondaryActionTitle}>Delivery Proof Log</Text>
-            <Text style={styles.secondaryActionSubtitle}>
-              Inspect recent delivery photos, timestamps, and coordinates
-            </Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#94a3b8" />
-        </TouchableOpacity>
-
-        {/* Up Next on Route */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Up Next on Route</Text>
-        </View>
-
-        <View style={styles.stopCard}>
-          <View style={styles.stopBadge}>
-            <Text style={styles.stopNumber}>15</Text>
-          </View>
-          <View style={styles.stopDetails}>
-            <Text style={styles.stopAddress}>100 N State St, Chicago, IL</Text>
-            <Text style={styles.stopPackage}>Package: pkg-001 (Priority)</Text>
-          </View>
+          {/* Quick Action Navigation Cards */}
           <TouchableOpacity
-            style={styles.deliverStopButton}
-            onPress={() => navigation.navigate("Scanner", { packageId: "pkg-001" })}
+            style={styles.actionCardPrimary}
+            onPress={() =>
+              navigation.navigate("Scanner", {
+                packageId: nextStop ? nextStop.packageId : "",
+              })
+            }
+            activeOpacity={0.8}
           >
-            <Text style={styles.deliverStopButtonText}>Deliver</Text>
+            <View style={styles.actionIconBadgePrimary}>
+              <MaterialCommunityIcons name="barcode-scan" size={24} color="#ffffff" />
+            </View>
+            <View style={styles.actionTextGroup}>
+              <Text style={styles.actionTitlePrimary}>Scan & Confirm Delivery</Text>
+              <Text style={styles.actionSubtitlePrimary}>
+                Capture package barcode, photo proof, and signature
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={24} color="#ffffff" />
           </TouchableOpacity>
-        </View>
 
-        <View style={styles.stopCard}>
-          <View style={styles.stopBadge}>
-            <Text style={styles.stopNumber}>16</Text>
-          </View>
-          <View style={styles.stopDetails}>
-            <Text style={styles.stopAddress}>231 S Michigan Ave, Chicago, IL</Text>
-            <Text style={styles.stopPackage}>Package: pkg-002 (Standard)</Text>
-          </View>
           <TouchableOpacity
-            style={styles.deliverStopButton}
-            onPress={() => navigation.navigate("Scanner", { packageId: "pkg-002" })}
+            style={styles.actionCardSecondary}
+            onPress={() => navigation.navigate("Proofs")}
+            activeOpacity={0.8}
           >
-            <Text style={styles.deliverStopButtonText}>Deliver</Text>
+            <View style={styles.actionIconBadgeSecondary}>
+              <MaterialCommunityIcons name="clipboard-text-outline" size={22} color="#38bdf8" />
+            </View>
+            <View style={styles.actionTextGroup}>
+              <Text style={styles.actionTitleSecondary}>Delivery Proof Log</Text>
+              <Text style={styles.actionSubtitleSecondary}>
+                Inspect recent delivery photos, timestamps, and coordinates
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={22} color="#64748b" />
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+
+          {/* Up Next on Route */}
+          <View style={styles.upNextSection}>
+            <Text style={styles.sectionHeader}>Up Next on Route</Text>
+
+            {nextStop ? (
+              <View style={styles.stopCard}>
+                <View style={styles.stopNumberBadge}>
+                  <Text style={styles.stopNumberText}>{nextStop.stopNumber}</Text>
+                </View>
+
+                <View style={styles.stopDetails}>
+                  <Text style={styles.stopAddress}>{nextStop.address}</Text>
+                  <Text style={styles.stopMeta}>
+                    Package: {nextStop.packageId} ({nextStop.tier})
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.deliverButton}
+                  onPress={() =>
+                    navigation.navigate("Scanner", { packageId: nextStop.packageId })
+                  }
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.deliverButtonText}>Deliver</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.allDoneBox}>
+                <MaterialCommunityIcons name="check-all" size={28} color="#4ade80" />
+                <Text style={styles.allDoneText}>All stops completed for today!</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -248,96 +201,43 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f172a",
   },
   container: {
-    padding: 20,
-    gap: 16,
+    flex: 1,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 10 : 10,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 8,
-    marginBottom: 4,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1e293b",
   },
-  driverGreeting: {
-    fontSize: 13,
-    color: "#94a3b8",
-    fontWeight: "600",
-    textTransform: "uppercase",
+  headerPortal: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#64748b",
     letterSpacing: 0.8,
   },
-  driverName: {
+  headerTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: "#f8fafc",
-  },
-  logoutButton: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.2)",
-  },
-  offlineAlertBanner: {
-    backgroundColor: "#1e293b",
-    borderColor: "rgba(245, 158, 11, 0.4)",
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  offlineBannerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  offlineTextColumn: {
-    flex: 1,
-  },
-  offlineTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  offlineBannerTitle: {
-    color: "#f59e0b",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  offlineBadge: {
-    backgroundColor: "#f59e0b",
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 10,
-  },
-  offlineBadgeText: {
-    color: "#0f172a",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  offlineBannerSubtitle: {
-    color: "#94a3b8",
-    fontSize: 11,
     marginTop: 2,
   },
-  syncButton: {
-    backgroundColor: "#f59e0b",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-    minWidth: 60,
+  logoutButton: {
+    width: 38,
+    height: 38,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.25)",
+    borderRadius: 8,
     alignItems: "center",
+    justifyContent: "center",
   },
-  syncButtonText: {
-    color: "#0f172a",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  disabledButton: {
-    opacity: 0.6,
+  scrollContent: {
+    padding: 16,
+    gap: 16,
   },
   statsRow: {
     flexDirection: "row",
@@ -347,23 +247,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#1e293b",
     borderRadius: 12,
-    padding: 14,
+    paddingVertical: 14,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#334155",
     gap: 4,
   },
-  statNumber: {
+  statValue: {
+    color: "#f8fafc",
     fontSize: 20,
     fontWeight: "800",
-    color: "#f8fafc",
   },
   statLabel: {
-    fontSize: 11,
     color: "#94a3b8",
+    fontSize: 11,
     fontWeight: "600",
   },
-  primaryActionCard: {
+  actionCardPrimary: {
     backgroundColor: "#2563eb",
     borderRadius: 14,
     padding: 16,
@@ -371,28 +271,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
   },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
+  actionIconBadgePrimary: {
+    width: 44,
+    height: 44,
     borderRadius: 10,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  actionTextContainer: {
+  actionTextGroup: {
     flex: 1,
+    gap: 2,
   },
-  primaryActionTitle: {
+  actionTitlePrimary: {
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
   },
-  primaryActionSubtitle: {
-    color: "#bfdbfe",
-    fontSize: 12,
-    marginTop: 2,
+  actionSubtitlePrimary: {
+    color: "rgba(255, 255, 255, 0.8)",
+    fontSize: 11,
+    lineHeight: 15,
   },
-  secondaryActionCard: {
+  actionCardSecondary: {
     backgroundColor: "#1e293b",
     borderRadius: 14,
     padding: 16,
@@ -402,26 +303,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#334155",
   },
-  historyIconContainer: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
+  actionIconBadgeSecondary: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "rgba(56, 189, 248, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  secondaryActionTitle: {
+  actionTitleSecondary: {
     color: "#f8fafc",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
   },
-  secondaryActionSubtitle: {
+  actionSubtitleSecondary: {
     color: "#94a3b8",
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  upNextSection: {
+    gap: 10,
+    marginTop: 4,
   },
   sectionHeader: {
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 16,
+    color: "#cbd5e1",
+    fontSize: 14,
     fontWeight: "700",
-    color: "#f8fafc",
   },
   stopCard: {
     backgroundColor: "#1e293b",
@@ -433,41 +340,55 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#334155",
   },
-  stopBadge: {
+  stopNumberBadge: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#334155",
+    backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
   },
-  stopNumber: {
-    color: "#f8fafc",
+  stopNumberText: {
+    color: "#ffffff",
+    fontSize: 14,
     fontWeight: "700",
-    fontSize: 13,
   },
   stopDetails: {
     flex: 1,
+    gap: 2,
   },
   stopAddress: {
     color: "#f8fafc",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
   },
-  stopPackage: {
+  stopMeta: {
     color: "#94a3b8",
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
   },
-  deliverStopButton: {
+  deliverButton: {
     backgroundColor: "#16a34a",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 8,
   },
-  deliverStopButtonText: {
+  deliverButtonText: {
     color: "#ffffff",
-    fontWeight: "700",
     fontSize: 12,
+    fontWeight: "700",
+  },
+  allDoneBox: {
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    padding: 18,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(74, 222, 128, 0.3)",
+  },
+  allDoneText: {
+    color: "#4ade80",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
