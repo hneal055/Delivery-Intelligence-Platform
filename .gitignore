@@ -72,3 +72,8 @@ nul
 *.joblib
 
 Delivery_Intelligence_Platform_Operational_Manual.md.pdf
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
