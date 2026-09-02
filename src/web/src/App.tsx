@@ -9,6 +9,7 @@ import { SchedulingPage } from "./pages/SchedulingPage";
 import { ProofGalleryPage } from "./pages/ProofGalleryPage";
 import { TrackingPage } from "./pages/TrackingPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
           }
         >
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/drivers" element={<DriversPage />} />
           <Route path="/packages" element={<PackagesPage />} />
           <Route path="/scheduling" element={<SchedulingPage />} />
