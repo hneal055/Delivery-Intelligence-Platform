@@ -8,7 +8,7 @@ let initPromise = null;
 
 /**
  * Initialize SQLite database and pending deliveries table.
- * Includes column migration for photo_uri if upgrading existing database.
+ * Includes column migration for photo_uri if upgrading an existing database.
  */
 export async function initOfflineDatabase() {
   if (Platform.OS === "web") {
@@ -61,16 +61,17 @@ export async function initOfflineDatabase() {
 }
 
 /**
- * Enqueue a confirmed delivery record into SQLite (supports optional photoUri)
+ * Enqueue a confirmed delivery record into SQLite.
+ * Accepts both camelCase and snake_case properties for compatibility across all screens.
  */
-export async function queueDeliveryConfirmation({
-  packageId,
-  driverId,
-  lat = 41.8786,
-  lon = -87.6403,
-  signaturePath = "",
-  photoUri = null,
-}) {
+export async function queueDeliveryConfirmation(payload = {}) {
+  const packageId = payload.packageId || payload.package_id;
+  const driverId = payload.driverId || payload.driver_id || "D001";
+  const lat = payload.lat ?? payload.latitude ?? 41.8786;
+  const lon = payload.lon ?? payload.longitude ?? -87.6403;
+  const signaturePath = payload.signaturePath || payload.signature_path || payload.signature_data || "";
+  const photoUri = payload.photoUri || payload.photo_uri || null;
+
   if (!packageId) return false;
 
   if (Platform.OS === "web") {
@@ -88,22 +89,25 @@ export async function queueDeliveryConfirmation({
        VALUES (?, ?, ?, ?, ?, ?, 0, 'PENDING', ?)`,
       [
         String(packageId),
-        String(driverId || "D001"),
+        String(driverId),
         lat,
         lon,
         signaturePath,
-        photoUri || null,
+        photoUri,
         timestamp,
       ]
     );
 
-    console.log(`[OfflineDB] Enqueued delivery for ${packageId}`);
+    console.log(`[OfflineDB] Enqueued offline delivery for ${packageId}`);
     return true;
   } catch (err) {
     console.error(`[OfflineDB] Error enqueuing ${packageId}:`, err);
     return false;
   }
 }
+
+// Alias for backwards compatibility with ScannerScreen and earlier imports
+export const enqueueDeliveryProof = queueDeliveryConfirmation;
 
 /**
  * Retrieve count of active pending records in the queue
@@ -126,27 +130,31 @@ export async function getPendingQueueCount() {
 }
 
 /**
- * Drain and flush queued records to the backend.
- * Uses native fetch to bypass Axios multipart/form-data boundary issues on Android.
- * Attaches captured photo proof when available.
- * Prunes poison pill 4xx records so failed validations do not cause infinite loops.
+ * Drain and flush queued records to the FastAPI backend.
+ * Uses native fetch for correct multipart boundary handling.
+ * Prunes poison-pill 4xx errors to prevent endless retry loops.
  */
 export async function processOfflineQueue() {
-  if (Platform.OS === "web") return { syncedCount: 0 };
+  if (Platform.OS === "web") {
+    return { syncedCount: 0, failedCount: 0, remaining: 0 };
+  }
 
   try {
     const database = await initOfflineDatabase();
-    if (!database) return { syncedCount: 0 };
+    if (!database) {
+      return { syncedCount: 0, failedCount: 0, remaining: 0 };
+    }
 
     const pending = await database.getAllAsync(
       "SELECT * FROM pending_deliveries WHERE status = 'PENDING' ORDER BY id ASC LIMIT 10"
     );
 
     if (!pending || pending.length === 0) {
-      return { syncedCount: 0 };
+      return { syncedCount: 0, failedCount: 0, remaining: 0 };
     }
 
     let syncedCount = 0;
+    let failedCount = 0;
     const baseUrl = client?.defaults?.baseURL || "http://localhost:8000";
 
     for (const record of pending) {
@@ -158,10 +166,12 @@ export async function processOfflineQueue() {
         formData.append("dest_lon", String(record.lon ?? "-87.6403"));
         formData.append("signature_path", record.signature_path || "OFFLINE_CAPTURE");
 
-        // Attach photo file payload if a URI is saved
+        // Re-attach local binary photo proof
         if (record.photo_uri) {
           const rawUri = record.photo_uri;
-          const fileName = rawUri.split("/").pop() || `delivery_${record.package_id}.jpg`;
+          const cleanUri = rawUri.split("?")[0];
+          const fileName = cleanUri.split("/").pop() || `delivery_${record.package_id}.jpg`;
+
           formData.append("photo", {
             uri: rawUri,
             name: fileName,
@@ -169,7 +179,6 @@ export async function processOfflineQueue() {
           });
         }
 
-        // Native fetch lets the runtime generate correct multipart boundary headers
         const response = await fetch(`${baseUrl}/delivery/confirm`, {
           method: "POST",
           body: formData,
@@ -177,28 +186,29 @@ export async function processOfflineQueue() {
 
         if (!response.ok) {
           const errorText = await response.text();
-          const err = new Error(`Request failed with status code ${response.status}: ${errorText}`);
-          err.response = { status: response.status, data: errorText };
+          const err = new Error(`Request failed with status ${response.status}: ${errorText}`);
+          err.status = response.status;
           throw err;
         }
 
-        // Delete processed record upon successful 200 OK
+        // Delete processed record upon successful upload
         await database.runAsync("DELETE FROM pending_deliveries WHERE id = ?", [record.id]);
         syncedCount++;
         console.log(`[OfflineDB] Successfully synced & purged record #${record.id} (${record.package_id})`);
       } catch (err) {
-        const statusCode = err.response?.status;
-        console.warn(`[OfflineDB] Sync failed for record #${record.id} (${record.package_id}): ${err.message}`);
+        failedCount++;
+        const statusCode = err.status || err.response?.status;
+        console.warn(`[OfflineDB] Sync failed for record #${record.id} (${record.package_id}):`, err.message);
 
         if (statusCode >= 400 && statusCode < 500) {
-          // 4xx client/validation error: mark FAILED so it won't loop
-          console.error(`[OfflineDB] Client error (${statusCode}) for record #${record.id}. Marking FAILED.`);
+          // 4xx Client Validation Error -> Mark FAILED so it does not block the queue
+          console.error(`[OfflineDB] 4xx Validation Error (${statusCode}) for #${record.id}. Marking FAILED.`);
           await database.runAsync(
             "UPDATE pending_deliveries SET status = 'FAILED', attempts = attempts + 1 WHERE id = ?",
             [record.id]
           );
         } else {
-          // Network issue or 5xx server error: increment retry count
+          // Network drop, timeout, or 5xx Server Error -> increment attempt counter
           await database.runAsync(
             "UPDATE pending_deliveries SET attempts = attempts + 1 WHERE id = ?",
             [record.id]
@@ -207,10 +217,16 @@ export async function processOfflineQueue() {
       }
     }
 
-    return { syncedCount };
+    const remaining = await getPendingQueueCount();
+
+    return {
+      syncedCount,
+      failedCount,
+      remaining,
+    };
   } catch (err) {
     console.error("[OfflineDB] Critical error processing offline queue:", err);
-    return { syncedCount: 0 };
+    return { syncedCount: 0, failedCount: 0, remaining: 0 };
   }
 }
 
@@ -229,3 +245,12 @@ export async function clearOfflineQueue() {
     console.error("[OfflineDB] Failed to wipe queue:", err);
   }
 }
+
+export default {
+  initOfflineDatabase,
+  queueDeliveryConfirmation,
+  enqueueDeliveryProof,
+  getPendingQueueCount,
+  processOfflineQueue,
+  clearOfflineQueue,
+};

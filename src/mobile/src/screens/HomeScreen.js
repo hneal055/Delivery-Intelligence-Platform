@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,14 +7,12 @@ import {
   ScrollView,
   SafeAreaView,
   RefreshControl,
+  ActivityIndicator,
   Alert,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuthStore } from "../stores/authStore";
-import {
-  getPendingQueueCount,
-  processOfflineQueue,
-} from "../services/offlineQueueService";
+import * as offlineQueueService from "../services/offlineQueueService";
 
 export default function HomeScreen({ navigation }) {
   const user = useAuthStore((state) => state.user);
@@ -24,41 +22,73 @@ export default function HomeScreen({ navigation }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const checkQueue = async () => {
+  const checkPendingQueue = useCallback(async () => {
     try {
-      const count = await getPendingQueueCount();
-      setPendingCount(count);
+      const getCount =
+        offlineQueueService?.getPendingQueueCount ||
+        offlineQueueService?.default?.getPendingQueueCount;
+
+      if (typeof getCount === "function") {
+        const count = await getCount();
+        setPendingCount(Number(count) || 0);
+      }
     } catch (err) {
-      console.warn("[HomeScreen] Failed to get pending queue count:", err);
+      console.warn("[HomeScreen] Queue check error:", err?.message || err);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    checkQueue();
+    checkPendingQueue();
     const unsubscribe = navigation.addListener("focus", () => {
-      checkQueue();
+      checkPendingQueue();
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, checkPendingQueue]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await checkQueue();
+    await checkPendingQueue();
     setRefreshing(false);
   };
 
   const handleManualSync = async () => {
-    if (isSyncing) return;
+    if (isSyncing || pendingCount === 0) return;
+
+    const processQueue =
+      offlineQueueService?.processOfflineQueue ||
+      offlineQueueService?.default?.processOfflineQueue;
+
+    if (typeof processQueue !== "function") {
+      Alert.alert("Sync Error", "Offline queue service function is not available.");
+      return;
+    }
+
     setIsSyncing(true);
     try {
-      const result = await processOfflineQueue();
-      await checkQueue();
-      Alert.alert(
-        "Sync Complete",
-        `Successfully synced ${result.syncedCount || 0} queued deliveries.`
-      );
+      const result = await processQueue();
+      await checkPendingQueue();
+
+      const synced = result?.syncedCount ?? 0;
+      const failed = result?.failedCount ?? 0;
+
+      if (synced > 0 && failed === 0) {
+        Alert.alert(
+          "Sync Succeeded",
+          `Successfully uploaded ${synced} queued proof${synced > 1 ? "s" : ""}.`
+        );
+      } else if (synced > 0 && failed > 0) {
+        Alert.alert(
+          "Partial Sync",
+          `Uploaded ${synced} proof(s), but ${failed} remain queued.`
+        );
+      } else if (failed > 0) {
+        Alert.alert(
+          "Sync Failed",
+          "Could not reach backend. Queued deliveries remain saved locally."
+        );
+      }
     } catch (err) {
-      Alert.alert("Sync Error", "Failed to flush offline queue. Try again later.");
+      Alert.alert("Sync Error", "An error occurred during sync attempt.");
     } finally {
       setIsSyncing(false);
     }
@@ -85,17 +115,20 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Offline Queue Staging Status Bar */}
+        {/* Inline Offline Sync Indicator */}
         {pendingCount > 0 && (
           <View style={styles.offlineAlertBanner}>
             <View style={styles.offlineBannerLeft}>
               <MaterialCommunityIcons name="cloud-sync-outline" size={22} color="#f59e0b" />
-              <View>
-                <Text style={styles.offlineBannerTitle}>
-                  {pendingCount} Pending Offline Delivery{pendingCount > 1 ? "s" : ""}
-                </Text>
+              <View style={styles.offlineTextColumn}>
+                <View style={styles.offlineTitleRow}>
+                  <Text style={styles.offlineBannerTitle}>Offline Queued</Text>
+                  <View style={styles.offlineBadge}>
+                    <Text style={styles.offlineBadgeText}>{pendingCount}</Text>
+                  </View>
+                </View>
                 <Text style={styles.offlineBannerSubtitle}>
-                  Waiting for backend connection
+                  {pendingCount === 1 ? "1 delivery proof" : `${pendingCount} delivery proofs`} awaiting upload
                 </Text>
               </View>
             </View>
@@ -104,7 +137,11 @@ export default function HomeScreen({ navigation }) {
               onPress={handleManualSync}
               disabled={isSyncing}
             >
-              <Text style={styles.syncButtonText}>{isSyncing ? "Syncing..." : "Sync"}</Text>
+              {isSyncing ? (
+                <ActivityIndicator size="small" color="#0f172a" />
+              ) : (
+                <Text style={styles.syncButtonText}>Sync</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -147,10 +184,10 @@ export default function HomeScreen({ navigation }) {
           <MaterialCommunityIcons name="chevron-right" size={24} color="#94a3b8" />
         </TouchableOpacity>
 
-        {/* Navigation Action: View Delivery History & Proofs */}
+        {/* Secondary Action: Delivery Proof Log */}
         <TouchableOpacity
           style={styles.secondaryActionCard}
-          onPress={() => navigation.navigate("DeliveryHistory")}
+          onPress={() => navigation.navigate("ProofsTab")}
         >
           <View style={[styles.actionIconContainer, styles.historyIconContainer]}>
             <MaterialCommunityIcons name="clipboard-check-outline" size={28} color="#38bdf8" />
@@ -164,7 +201,7 @@ export default function HomeScreen({ navigation }) {
           <MaterialCommunityIcons name="chevron-right" size={24} color="#94a3b8" />
         </TouchableOpacity>
 
-        {/* Quick Route Section */}
+        {/* Up Next on Route */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Up Next on Route</Text>
         </View>
@@ -242,34 +279,57 @@ const styles = StyleSheet.create({
   },
   offlineAlertBanner: {
     backgroundColor: "#1e293b",
-    borderColor: "#f59e0b",
+    borderColor: "rgba(245, 158, 11, 0.4)",
     borderWidth: 1,
     borderRadius: 12,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
   },
   offlineBannerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     flex: 1,
+  },
+  offlineTextColumn: {
+    flex: 1,
+  },
+  offlineTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   offlineBannerTitle: {
     color: "#f59e0b",
-    fontWeight: "700",
     fontSize: 14,
+    fontWeight: "700",
+  },
+  offlineBadge: {
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+  },
+  offlineBadgeText: {
+    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "800",
   },
   offlineBannerSubtitle: {
     color: "#94a3b8",
-    fontSize: 12,
+    fontSize: 11,
+    marginTop: 2,
   },
   syncButton: {
     backgroundColor: "#f59e0b",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 6,
+    minWidth: 60,
+    alignItems: "center",
   },
   syncButtonText: {
     color: "#0f172a",

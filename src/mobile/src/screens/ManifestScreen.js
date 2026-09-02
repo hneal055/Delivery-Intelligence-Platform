@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   SafeAreaView,
+  Alert,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import client from "../api/client";
+import * as offlineQueueService from "../services/offlineQueueService";
 
 export default function ManifestScreen({ navigation }) {
   const [stops, setStops] = useState([]);
@@ -18,7 +20,26 @@ export default function ManifestScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Offline queue banner state
+  const [pendingCount, setPendingCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const baseUrl = client?.defaults?.baseURL || "http://localhost:8000";
+
+  const checkPendingQueue = useCallback(async () => {
+    try {
+      const getCount =
+        offlineQueueService?.getPendingQueueCount ||
+        offlineQueueService?.default?.getPendingQueueCount;
+
+      if (typeof getCount === "function") {
+        const count = await getCount();
+        setPendingCount(Number(count) || 0);
+      }
+    } catch (err) {
+      console.warn("[ManifestScreen] Queue check error:", err?.message || err);
+    }
+  }, []);
 
   const loadManifest = useCallback(async () => {
     try {
@@ -65,15 +86,62 @@ export default function ManifestScreen({ navigation }) {
 
   useEffect(() => {
     loadManifest();
+    checkPendingQueue();
     const unsubscribe = navigation.addListener("focus", () => {
       loadManifest();
+      checkPendingQueue();
     });
     return unsubscribe;
-  }, [navigation, loadManifest]);
+  }, [navigation, loadManifest, checkPendingQueue]);
 
   const onRefresh = () => {
     setRefreshing(true);
+    checkPendingQueue();
     loadManifest();
+  };
+
+  const handleManualSync = async () => {
+    if (isSyncing || pendingCount === 0) return;
+
+    const processQueue =
+      offlineQueueService?.processOfflineQueue ||
+      offlineQueueService?.default?.processOfflineQueue;
+
+    if (typeof processQueue !== "function") {
+      Alert.alert("Sync Error", "Offline queue service function is not available.");
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const result = await processQueue();
+      await checkPendingQueue();
+      await loadManifest();
+
+      const synced = result?.syncedCount ?? 0;
+      const failed = result?.failedCount ?? 0;
+
+      if (synced > 0 && failed === 0) {
+        Alert.alert(
+          "Sync Succeeded",
+          `Successfully uploaded ${synced} queued proof${synced > 1 ? "s" : ""}.`
+        );
+      } else if (synced > 0 && failed > 0) {
+        Alert.alert(
+          "Partial Sync",
+          `Uploaded ${synced} proof(s), but ${failed} remain queued.`
+        );
+      } else if (failed > 0) {
+        Alert.alert(
+          "Sync Failed",
+          "Could not reach backend. Queued deliveries remain saved locally."
+        );
+      }
+    } catch (err) {
+      Alert.alert("Sync Error", "An error occurred during sync attempt.");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const filteredStops = stops.filter((stop) => {
@@ -168,6 +236,37 @@ export default function ManifestScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Inline Offline Sync Indicator */}
+      {pendingCount > 0 && (
+        <View style={styles.offlineAlertBanner}>
+          <View style={styles.offlineBannerLeft}>
+            <MaterialCommunityIcons name="cloud-sync-outline" size={22} color="#f59e0b" />
+            <View style={styles.offlineTextColumn}>
+              <View style={styles.offlineTitleRow}>
+                <Text style={styles.offlineBannerTitle}>Offline Queued</Text>
+                <View style={styles.offlineBadge}>
+                  <Text style={styles.offlineBadgeText}>{pendingCount}</Text>
+                </View>
+              </View>
+              <Text style={styles.offlineBannerSubtitle}>
+                {pendingCount === 1 ? "1 delivery proof" : `${pendingCount} delivery proofs`} awaiting upload
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.syncButton, isSyncing && styles.disabledButton]}
+            onPress={handleManualSync}
+            disabled={isSyncing}
+          >
+            {isSyncing ? (
+              <ActivityIndicator size="small" color="#0f172a" />
+            ) : (
+              <Text style={styles.syncButtonText}>Sync</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Filter Chips */}
       <View style={styles.filterRow}>
         <TouchableOpacity
@@ -254,6 +353,71 @@ const styles = StyleSheet.create({
   },
   refreshIconButton: {
     padding: 6,
+  },
+  offlineAlertBanner: {
+    backgroundColor: "#1e293b",
+    borderColor: "rgba(245, 158, 11, 0.4)",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  offlineBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  offlineTextColumn: {
+    flex: 1,
+  },
+  offlineTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  offlineBannerTitle: {
+    color: "#f59e0b",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  offlineBadge: {
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+  },
+  offlineBadgeText: {
+    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  offlineBannerSubtitle: {
+    color: "#94a3b8",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  syncButton: {
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+    minWidth: 60,
+    alignItems: "center",
+  },
+  syncButtonText: {
+    color: "#0f172a",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   filterRow: {
     flexDirection: "row",
