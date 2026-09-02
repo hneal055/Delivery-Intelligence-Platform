@@ -71,6 +71,8 @@ async def receive_location(driver_id: str, loc: LocationPayload):
 # ---------------------------------------------------------
 # Delivery Confirmation & Exception
 # ---------------------------------------------------------
+recent_proofs_db: List[Dict[str, Any]] = []
+
 @app.post("/delivery/confirm")
 async def confirm_delivery(
     package_id: str = Form(...),
@@ -81,13 +83,17 @@ async def confirm_delivery(
     photo: Optional[UploadFile] = File(None),
 ):
     logger.info(f"[Delivery] Confirmed package {package_id} by driver {driver_id}")
-    return {
+    proof_record = {
         "status": "DELIVERED",
         "package_id": package_id,
         "driver_id": driver_id,
+        "dest_lat": dest_lat,
+        "dest_lon": dest_lon,
         "signature_received": bool(signature_path),
         "photo_filename": photo.filename if photo else None,
     }
+    recent_proofs_db.append(proof_record)
+    return proof_record
 
 @app.post("/delivery/exception")
 async def report_exception(
@@ -100,7 +106,7 @@ async def report_exception(
 
 @app.get("/delivery/recent-proofs")
 async def get_recent_proofs():
-    return []
+    return recent_proofs_db
 
 # ---------------------------------------------------------
 # Push Notifications
@@ -137,7 +143,7 @@ async def get_fleet_analytics_summary():
         return await get_fleet_summary(None)
     except Exception:
         return {
-            "report_date": "2026-08-31",
+            "report_date": "2026-09-02",
             "total_active_drivers": 6,
             "total_manifest_packages": 148,
             "completed_deliveries": 112,
