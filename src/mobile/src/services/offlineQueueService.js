@@ -7,7 +7,8 @@ let db = null;
 let initPromise = null;
 
 /**
- * Initialize SQLite database and pending deliveries table
+ * Initialize SQLite database and pending deliveries table.
+ * Includes column migration for photo_uri if upgrading existing database.
  */
 export async function initOfflineDatabase() {
   if (Platform.OS === "web") {
@@ -22,6 +23,7 @@ export async function initOfflineDatabase() {
       try {
         const database = await SQLite.openDatabaseAsync(DB_NAME);
 
+        // Ensure base table exists
         await database.execAsync(`
           CREATE TABLE IF NOT EXISTS pending_deliveries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,11 +32,19 @@ export async function initOfflineDatabase() {
             lat REAL,
             lon REAL,
             signature_path TEXT,
+            photo_uri TEXT,
             attempts INTEGER DEFAULT 0,
             status TEXT DEFAULT 'PENDING',
             created_at TEXT NOT NULL
           );
         `);
+
+        // Handle migration gracefully if table existed before photo_uri was added
+        try {
+          await database.execAsync(`ALTER TABLE pending_deliveries ADD COLUMN photo_uri TEXT;`);
+        } catch (_) {
+          // Column already exists, safe to ignore
+        }
 
         console.log("[OfflineDB] SQLite pending_deliveries table initialized successfully.");
         db = database;
@@ -51,7 +61,7 @@ export async function initOfflineDatabase() {
 }
 
 /**
- * Enqueue a confirmed delivery record into SQLite
+ * Enqueue a confirmed delivery record into SQLite (supports optional photoUri)
  */
 export async function queueDeliveryConfirmation({
   packageId,
@@ -59,6 +69,7 @@ export async function queueDeliveryConfirmation({
   lat = 41.8786,
   lon = -87.6403,
   signaturePath = "",
+  photoUri = null,
 }) {
   if (!packageId) return false;
 
@@ -73,9 +84,17 @@ export async function queueDeliveryConfirmation({
 
     const timestamp = new Date().toISOString();
     await database.runAsync(
-      `INSERT INTO pending_deliveries (package_id, driver_id, lat, lon, signature_path, attempts, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 0, 'PENDING', ?)`,
-      [String(packageId), String(driverId || "D001"), lat, lon, signaturePath, timestamp]
+      `INSERT INTO pending_deliveries (package_id, driver_id, lat, lon, signature_path, photo_uri, attempts, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, 'PENDING', ?)`,
+      [
+        String(packageId),
+        String(driverId || "D001"),
+        lat,
+        lon,
+        signaturePath,
+        photoUri || null,
+        timestamp,
+      ]
     );
 
     console.log(`[OfflineDB] Enqueued delivery for ${packageId}`);
@@ -109,6 +128,7 @@ export async function getPendingQueueCount() {
 /**
  * Drain and flush queued records to the backend.
  * Uses native fetch to bypass Axios multipart/form-data boundary issues on Android.
+ * Attaches captured photo proof when available.
  * Prunes poison pill 4xx records so failed validations do not cause infinite loops.
  */
 export async function processOfflineQueue() {
@@ -134,9 +154,20 @@ export async function processOfflineQueue() {
         const formData = new FormData();
         formData.append("package_id", String(record.package_id));
         formData.append("driver_id", String(record.driver_id || "D001"));
-        formData.append("dest_lat", String(record.lat || "41.8786"));
-        formData.append("dest_lon", String(record.lon || "-87.6403"));
+        formData.append("dest_lat", String(record.lat ?? "41.8786"));
+        formData.append("dest_lon", String(record.lon ?? "-87.6403"));
         formData.append("signature_path", record.signature_path || "OFFLINE_CAPTURE");
+
+        // Attach photo file payload if a URI is saved
+        if (record.photo_uri) {
+          const rawUri = record.photo_uri;
+          const fileName = rawUri.split("/").pop() || `delivery_${record.package_id}.jpg`;
+          formData.append("photo", {
+            uri: rawUri,
+            name: fileName,
+            type: "image/jpeg",
+          });
+        }
 
         // Native fetch lets the runtime generate correct multipart boundary headers
         const response = await fetch(`${baseUrl}/delivery/confirm`, {

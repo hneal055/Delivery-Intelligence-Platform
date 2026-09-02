@@ -9,9 +9,13 @@ for p in (str(ROOT_DIR), str(BACKEND_DIR)):
         sys.path.insert(0, p)
 
 import logging
+import os
+import shutil
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from api.routes import auth
@@ -28,6 +32,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------
+# Uploads Directory Setup & Static Mounting
+# ---------------------------------------------------------
+UPLOAD_DIR = BACKEND_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Mount /uploads so saved proof photos can be viewed directly in a browser
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # ---------------------------------------------------------
 # Authentication Router
@@ -69,7 +82,7 @@ async def receive_location(driver_id: str, loc: LocationPayload):
     }
 
 # ---------------------------------------------------------
-# Delivery Confirmation & Exception
+# Delivery Confirmation & Exception (with Disk Persistence)
 # ---------------------------------------------------------
 recent_proofs_db: List[Dict[str, Any]] = []
 
@@ -82,7 +95,24 @@ async def confirm_delivery(
     signature_path: Optional[str] = Form(None),
     photo: Optional[UploadFile] = File(None),
 ):
-    logger.info(f"[Delivery] Confirmed package {package_id} by driver {driver_id}")
+    saved_filename = None
+
+    if photo and photo.filename:
+        ext = Path(photo.filename).suffix or ".jpg"
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        saved_filename = f"{package_id}_{timestamp}{ext}"
+        target_path = UPLOAD_DIR / saved_filename
+
+        try:
+            with open(target_path, "wb") as buffer:
+                shutil.copyfileobj(photo.file, buffer)
+            logger.info(f"[Delivery] Photo proof saved to disk: {target_path}")
+        except Exception as e:
+            logger.error(f"[Delivery] Failed to save photo to disk: {e}")
+            saved_filename = None
+        finally:
+            await photo.close()
+
     proof_record = {
         "status": "DELIVERED",
         "package_id": package_id,
@@ -90,9 +120,13 @@ async def confirm_delivery(
         "dest_lat": dest_lat,
         "dest_lon": dest_lon,
         "signature_received": bool(signature_path),
-        "photo_filename": photo.filename if photo else None,
+        "photo_filename": saved_filename,
+        "photo_url": f"/uploads/{saved_filename}" if saved_filename else None,
+        "confirmed_at": datetime.utcnow().isoformat(),
     }
+
     recent_proofs_db.append(proof_record)
+    logger.info(f"[Delivery] Confirmed package {package_id} by driver {driver_id} (Photo: {saved_filename})")
     return proof_record
 
 @app.post("/delivery/exception")

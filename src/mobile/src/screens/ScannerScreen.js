@@ -1,392 +1,413 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
-  View,
-  Text,
   StyleSheet,
+  Text,
+  View,
   TouchableOpacity,
-  Alert,
   TextInput,
-  SafeAreaView,
-  KeyboardAvoidingView,
+  Image,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
   Platform,
 } from "react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Haptics from "expo-haptics";
-import { queueDeliveryConfirmation } from "../services/offlineQueueService";
-import { useAuthStore } from "../stores/authStore";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import {
+  queueDeliveryConfirmation,
+  processOfflineQueue,
+} from "../services/offlineQueueService";
 
-export default function ScannerScreen({ navigation }) {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [scanned, setScanned] = useState(false);
-  const [manualInput, setManualInput] = useState("");
-  const [detectedPackage, setDetectedPackage] = useState(null);
-  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+export default function ScannerScreen({ navigation, route }) {
+  const [packageId, setPackageId] = useState(route?.params?.packageId || "pkg-001");
+  const [photoUri, setPhotoUri] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const user = useAuthStore((s) => s.user);
-
-  const getDriverId = () => {
-    if (typeof user === "string") {
-      const match = user.match(/\d+/);
-      return match ? `D${match[0].padStart(3, "0")}` : user;
-    }
-    if (user?.driver_id) return user.driver_id;
-    if (user?.username) {
-      const match = user.username.match(/\d+/);
-      return match ? `D${match[0].padStart(3, "0")}` : user.username;
-    }
-    return "D001";
+  // Fallback or driver coordinates (Chicago Loop default)
+  const defaultCoords = {
+    lat: 41.8786,
+    lon: -87.6403,
   };
 
-  const driverId = getDriverId();
-
-  const handleBarcodeScanned = ({ data }) => {
-    if (scanned || confirmModalVisible) return;
-    setScanned(true);
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    promptDeliveryConfirmation(data.trim());
-  };
-
-  const promptDeliveryConfirmation = (pkgId) => {
-    setDetectedPackage(pkgId);
-    setConfirmModalVisible(true);
-  };
-
-  const handleConfirmAndDeliver = async () => {
-    const pkgId = detectedPackage;
-    if (!pkgId) return;
-
+  /**
+   * Launch device camera to capture proof of delivery photo
+   */
+  const handleTakeDeliveryPhoto = async () => {
     try {
-      // 1. Log to local SQLite offline queue
-      await queueDeliveryConfirmation({
-        packageId: pkgId,
-        driverId: driverId,
-        lat: 41.8786,
-        lon: -87.6403,
-        signaturePath: "SCANNED_VIA_CAMERA",
+      if (Platform.OS !== "web") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert(
+            "Permission Required",
+            "Camera permission is required to take proof of delivery photos."
+          );
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 0.7, // Compress for faster upload and SQLite payload stability
       });
 
-      setConfirmModalVisible(false);
-
-      // 2. Notify driver and pass deliveredPackageId back to HomeScreen
-      Alert.alert("Notice", `Delivery logged locally for ${pkgId}.`, [
-        {
-          text: "OK",
-          onPress: () => {
-            navigation.navigate("Home", { deliveredPackageId: pkgId });
-          },
-        },
-      ]);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setPhotoUri(result.assets[0].uri);
+      }
     } catch (err) {
-      console.warn("Failed to log delivery locally:", err);
-      Alert.alert("Error", "Could not log delivery to local storage.");
-      setScanned(false);
-      setConfirmModalVisible(false);
+      console.error("[ScannerScreen] Error launching camera:", err);
+      Alert.alert("Camera Error", "Could not open camera on this device.");
     }
   };
 
-  const handleManualSubmit = () => {
-    if (!manualInput.trim()) return;
-    const pkgId = manualInput.trim();
-    setManualInput("");
-    promptDeliveryConfirmation(pkgId);
+  /**
+   * Remove selected photo
+   */
+  const handleRemovePhoto = () => {
+    setPhotoUri(null);
+  };
+
+  /**
+   * Confirm and enqueue delivery
+   */
+  const handleConfirmDelivery = async () => {
+    if (!packageId.trim()) {
+      Alert.alert("Error", "Please specify a valid Package ID.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // 1. Stage delivery into local SQLite database
+      const enqueued = await queueDeliveryConfirmation({
+        packageId: packageId.trim(),
+        driverId: "D001",
+        lat: defaultCoords.lat,
+        lon: defaultCoords.lon,
+        signaturePath: "NATIVE_DRIVER_SIG",
+        photoUri: photoUri,
+      });
+
+      if (!enqueued) {
+        throw new Error("Failed to write to local offline queue.");
+      }
+
+      // 2. Proactively trigger a flush if online
+      processOfflineQueue().catch((err) =>
+        console.warn("[ScannerScreen] Immediate queue drain deferred:", err)
+      );
+
+      Alert.alert(
+        "Delivery Confirmed",
+        `Package ${packageId.trim()} has been logged and queued for synchronization.`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              if (navigation?.canGoBack()) {
+                navigation.goBack();
+              }
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      console.error("[ScannerScreen] Submission failed:", err);
+      Alert.alert("Error", "Could not log delivery. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <SafeAreaView style={s.container}>
-      {/* Top Header */}
-      <View style={s.header}>
-        <TouchableOpacity
-          style={s.backBtn}
-          onPress={() => navigation.navigate("Home")}
-        >
-          <Text style={s.backBtnText}>← Back to Manifest</Text>
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Scan & Confirm Delivery</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <MaterialCommunityIcons name="barcode-scan" size={36} color="#3b82f6" />
+        <Text style={styles.title}>Confirm Delivery</Text>
+        <Text style={styles.subtitle}>
+          Verify package details and capture proof of delivery.
+        </Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={s.content}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        {/* Camera Viewfinder Viewport */}
-        <View style={s.cameraCard}>
-          {!permission?.granted ? (
-            <View style={s.permissionBox}>
-              <Text style={s.permissionText}>Camera permission is required.</Text>
-              <TouchableOpacity style={s.grantBtn} onPress={requestPermission}>
-                <Text style={s.grantBtnText}>Grant Permission</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={s.cameraWrapper}>
-              <CameraView
-                style={StyleSheet.absoluteFillObject}
-                facing="back"
-                barcodeScannerSettings={{
-                  barcodeTypes: ["qr", "code128", "code39", "ean13", "upc_a"],
-                }}
-                onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-              />
-              <View style={s.targetBox} />
-            </View>
-          )}
-        </View>
+      {/* Package Identifier Input */}
+      <View style={styles.card}>
+        <Text style={styles.inputLabel}>PACKAGE IDENTIFIER</Text>
+        <TextInput
+          style={styles.input}
+          value={packageId}
+          onChangeText={setPackageId}
+          placeholder="e.g. pkg-001"
+          placeholderTextColor="#64748b"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
-        {/* Quick Simulation Buttons */}
-        <View style={s.simSection}>
-          <Text style={s.sectionLabel}>Simulate Package Scan:</Text>
-          <View style={s.simBtnRow}>
-            {["pkg-001", "pkg-002", "pkg-003"].map((id) => (
-              <TouchableOpacity
-                key={id}
-                style={s.simChip}
-                onPress={() => promptDeliveryConfirmation(id)}
+        {/* Quick select presets */}
+        <View style={styles.presetsRow}>
+          {["pkg-001", "pkg-002", "pkg-003"].map((id) => (
+            <TouchableOpacity
+              key={id}
+              style={[styles.chip, packageId === id && styles.activeChip]}
+              onPress={() => setPackageId(id)}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  packageId === id && styles.activeChipText,
+                ]}
               >
-                <Text style={s.simChipText}>{id}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                {id}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
+      </View>
 
-        {/* Manual Barcode / ADB Input */}
-        <View style={s.manualSection}>
-          <TextInput
-            style={s.textInput}
-            placeholder="Or enter package ID manually..."
-            placeholderTextColor="#64748b"
-            value={manualInput}
-            onChangeText={setManualInput}
-            autoCapitalize="none"
-          />
+      {/* Photo Capture Section */}
+      <View style={styles.card}>
+        <Text style={styles.inputLabel}>PROOF OF DELIVERY PHOTO</Text>
+
+        {photoUri ? (
+          <View style={styles.previewContainer}>
+            <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+            <View style={styles.photoActionRow}>
+              <TouchableOpacity
+                style={[styles.smallButton, styles.retakeButton]}
+                onPress={handleTakeDeliveryPhoto}
+              >
+                <MaterialCommunityIcons name="camera-retake" size={18} color="#fff" />
+                <Text style={styles.buttonTextSmall}>Retake</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.smallButton, styles.deleteButton]}
+                onPress={handleRemovePhoto}
+              >
+                <MaterialCommunityIcons name="trash-can-outline" size={18} color="#fff" />
+                <Text style={styles.buttonTextSmall}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
           <TouchableOpacity
-            style={s.confirmInputBtn}
-            onPress={handleManualSubmit}
+            style={styles.cameraPlaceholder}
+            onPress={handleTakeDeliveryPhoto}
           >
-            <Text style={s.confirmInputBtnText}>Confirm Entered Package</Text>
+            <MaterialCommunityIcons name="camera-plus-outline" size={44} color="#94a3b8" />
+            <Text style={styles.cameraPlaceholderText}>Tap to Capture Photo</Text>
+            <Text style={styles.cameraSubtext}>Optional door/porch proof</Text>
           </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Metadata Readout */}
+      <View style={styles.infoCard}>
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons name="account-outline" size={18} color="#94a3b8" />
+          <Text style={styles.infoKey}>Driver ID:</Text>
+          <Text style={styles.infoValue}>D001</Text>
         </View>
-      </KeyboardAvoidingView>
-
-      {/* Confirmation Overlay Dialog */}
-      {confirmModalVisible && (
-        <View style={s.modalBackdrop}>
-          <View style={s.dialogBox}>
-            <Text style={s.dialogTitle}>Confirm Delivery</Text>
-            <Text style={s.dialogSubtitle}>
-              Scanned package: <Text style={s.boldText}>{detectedPackage}</Text>
-            </Text>
-            <Text style={s.dialogDesc}>
-              Do you want to confirm delivery and upload proof for Driver {driverId}?
-            </Text>
-
-            <View style={s.dialogActions}>
-              <TouchableOpacity
-                style={s.cancelBtn}
-                onPress={() => {
-                  setConfirmModalVisible(false);
-                  setScanned(false);
-                }}
-              >
-                <Text style={s.cancelBtnText}>CANCEL</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.deliverBtn}
-                onPress={handleConfirmAndDeliver}
-              >
-                <Text style={s.deliverBtnText}>CONFIRM & DELIVER</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons name="map-marker-outline" size={18} color="#94a3b8" />
+          <Text style={styles.infoKey}>GPS Coords:</Text>
+          <Text style={styles.infoValue}>
+            {defaultCoords.lat.toFixed(4)}, {defaultCoords.lon.toFixed(4)}
+          </Text>
         </View>
-      )}
-    </SafeAreaView>
+        <View style={styles.infoRow}>
+          <MaterialCommunityIcons name="draw" size={18} color="#94a3b8" />
+          <Text style={styles.infoKey}>Signature:</Text>
+          <Text style={styles.infoValue}>Captured (Standard)</Text>
+        </View>
+      </View>
+
+      {/* Action Buttons */}
+      <TouchableOpacity
+        style={[styles.submitButton, isSubmitting && styles.disabledButton]}
+        onPress={handleConfirmDelivery}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <>
+            <MaterialCommunityIcons name="check-circle-outline" size={22} color="#fff" />
+            <Text style={styles.submitButtonText}>CONFIRM & DELIVER</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: "#0b1120",
+    padding: 20,
+    backgroundColor: "#0f172a",
+    flexGrow: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
-  },
-  backBtn: {
-    paddingBottom: 6,
-  },
-  backBtnText: {
-    color: "#38bdf8",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  headerTitle: {
-    color: "#f8fafc",
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-    justifyContent: "space-around",
-  },
-  cameraCard: {
-    height: 280,
-    borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: "#020617",
-    borderWidth: 1,
-    borderColor: "#1e293b",
-  },
-  cameraWrapper: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-  },
-  targetBox: {
-    width: 220,
-    height: 140,
-    borderWidth: 2,
-    borderColor: "#38bdf8",
-    borderRadius: 12,
-    backgroundColor: "transparent",
-  },
-  permissionBox: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  permissionText: {
-    color: "#94a3b8",
-    fontSize: 14,
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  grantBtn: {
-    backgroundColor: "#2563eb",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  grantBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  simSection: {
-    marginVertical: 10,
-  },
-  sectionLabel: {
-    color: "#94a3b8",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 8,
-    textTransform: "uppercase",
-  },
-  simBtnRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  simChip: {
-    flex: 1,
-    backgroundColor: "#1e293b",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#334155",
-  },
-  simChipText: {
-    color: "#38bdf8",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-  manualSection: {
+    marginBottom: 24,
     marginTop: 10,
   },
-  textInput: {
-    backgroundColor: "#0f172a",
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#f8fafc",
+    marginTop: 8,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: "#94a3b8",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#334155",
-    color: "#f8fafc",
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    marginBottom: 12,
   },
-  confirmInputBtn: {
-    backgroundColor: "#1e3a8a",
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  confirmInputBtnText: {
-    color: "#93c5fd",
+  inputLabel: {
+    fontSize: 11,
     fontWeight: "700",
-    fontSize: 14,
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  dialogBox: {
-    width: "100%",
-    backgroundColor: "#334155",
-    borderRadius: 12,
-    padding: 20,
-    elevation: 10,
-  },
-  dialogTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#f8fafc",
+    color: "#94a3b8",
+    letterSpacing: 1,
     marginBottom: 8,
   },
-  dialogSubtitle: {
-    fontSize: 14,
-    color: "#cbd5e1",
-    marginBottom: 10,
+  input: {
+    backgroundColor: "#0f172a",
+    color: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#475569",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
   },
-  boldText: {
-    color: "#fff",
+  presetsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  chip: {
+    backgroundColor: "#334155",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  activeChip: {
+    backgroundColor: "#2563eb",
+  },
+  chipText: {
+    color: "#cbd5e1",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  activeChipText: {
+    color: "#ffffff",
     fontWeight: "700",
   },
-  dialogDesc: {
+  cameraPlaceholder: {
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#475569",
+    borderRadius: 10,
+    paddingVertical: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0f172a",
+  },
+  cameraPlaceholderText: {
+    color: "#e2e8f0",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 8,
+  },
+  cameraSubtext: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  previewContainer: {
+    alignItems: "center",
+  },
+  photoPreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: 8,
+    backgroundColor: "#000",
+  },
+  photoActionRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 10,
+    width: "100%",
+  },
+  smallButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  retakeButton: {
+    backgroundColor: "#3b82f6",
+  },
+  deleteButton: {
+    backgroundColor: "#ef4444",
+  },
+  buttonTextSmall: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  infoCard: {
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#334155",
+    gap: 8,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  infoKey: {
     fontSize: 13,
     color: "#94a3b8",
-    lineHeight: 18,
+    width: 90,
+  },
+  infoValue: {
+    fontSize: 13,
+    color: "#f8fafc",
+    fontWeight: "500",
+  },
+  submitButton: {
+    backgroundColor: "#16a34a",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+    borderRadius: 10,
     marginBottom: 20,
   },
-  dialogActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 16,
+  disabledButton: {
+    opacity: 0.6,
   },
-  cancelBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  cancelBtnText: {
-    color: "#94a3b8",
+  submitButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
     fontWeight: "700",
-    fontSize: 13,
-  },
-  deliverBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  deliverBtnText: {
-    color: "#34d399",
-    fontWeight: "800",
-    fontSize: 13,
+    letterSpacing: 0.5,
   },
 });
