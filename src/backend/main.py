@@ -1,8 +1,20 @@
+import sys
+from pathlib import Path
+
+# Add project root and backend dir to sys.path so 'src.backend...' and local module imports both resolve
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent
+for p in (str(ROOT_DIR), str(BACKEND_DIR)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
 import logging
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from api.routes import auth
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
@@ -16,6 +28,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------
+# Authentication Router
+# ---------------------------------------------------------
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 # ---------------------------------------------------------
 # Health & Status
@@ -37,7 +54,6 @@ class LocationPayload(BaseModel):
 
 @app.post("/tracking/{driver_id}/location")
 async def receive_location(driver_id: str, loc: LocationPayload):
-    # Process Geofence detection
     geofence_events = []
     try:
         from services.geofence import check_geofences_for_driver

@@ -12,6 +12,7 @@ import {
   RefreshControl,
   SafeAreaView,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import client from "../api/client";
 import { useAuthStore } from "../stores/authStore";
 import SignaturePad from "../components/SignaturePad";
@@ -38,7 +39,7 @@ const INITIAL_PACKAGES = [
   { id: "pkg-003", address: "500 W Madison St, Chicago, IL", status: "OUT_FOR_DELIVERY" },
 ];
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, route }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -101,16 +102,46 @@ export default function HomeScreen({ navigation }) {
     [driverId]
   );
 
-  // Routine sync and offline queue drain loop (every 10s)
+  // Routine sync and offline queue drain loop
   const syncQueueAndStatus = useCallback(async () => {
-    const result = await processOfflineQueue();
-    if (result.syncedCount > 0) {
-      console.log(`[Sync] Flushed ${result.syncedCount} queued deliveries.`);
+    try {
+      const result = await processOfflineQueue();
+      if (result?.syncedCount > 0) {
+        console.log(`[Sync] Flushed ${result.syncedCount} queued deliveries.`);
+      }
+    } catch (err) {
+      console.warn("[Sync] Error draining offline queue:", err);
+    } finally {
+      const count = await getPendingQueueCount();
+      setPendingQueueCount(count);
     }
-    const count = await getPendingQueueCount();
-    setPendingQueueCount(count);
   }, []);
 
+  // Screen focus hook: re-evaluates queue counts every time driver returns to Manifest
+  useFocusEffect(
+    useCallback(() => {
+      syncQueueAndStatus();
+    }, [syncQueueAndStatus])
+  );
+
+  // Catch package delivery events passed back from ScannerScreen
+  useEffect(() => {
+    if (route.params?.deliveredPackageId) {
+      const pkgId = route.params.deliveredPackageId;
+      setDeliveries((prev) =>
+        prev.map((item) =>
+          (item.id || item.tracking_number) === pkgId
+            ? { ...item, status: "DELIVERED" }
+            : item
+        )
+      );
+      syncQueueAndStatus();
+      // Clear parameter to avoid re-triggering on subsequent renders
+      navigation.setParams({ deliveredPackageId: null });
+    }
+  }, [route.params?.deliveredPackageId, syncQueueAndStatus, navigation]);
+
+  // Regular periodic sync loop (every 10s)
   useEffect(() => {
     syncQueueAndStatus();
     const timer = setInterval(syncQueueAndStatus, 10000);
@@ -239,7 +270,6 @@ export default function HomeScreen({ navigation }) {
     } catch (err) {
       console.warn("Network failed - enqueueing delivery confirmation offline:", err);
 
-      // Save to SQLite offline storage
       await queueDeliveryConfirmation({
         packageId: pkgId,
         driverId: driverId,
@@ -314,7 +344,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={s.statusText}>{isOnline ? "ONLINE" : "OFFLINE"}</Text>
               {pendingQueueCount > 0 && (
                 <View style={s.queuePill}>
-                  <Text style={s.queuePillText}>?? {pendingQueueCount} queued</Text>
+                  <Text style={s.queuePillText}>✓ {pendingQueueCount} queued</Text>
                 </View>
               )}
             </View>
@@ -325,7 +355,7 @@ export default function HomeScreen({ navigation }) {
 
           <View style={s.headerActions}>
             <TouchableOpacity style={s.refreshHeaderBtn} onPress={onRefresh}>
-              <Text style={s.refreshHeaderText}>?? Sync</Text>
+              <Text style={s.refreshHeaderText}>⟳ Sync</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -334,7 +364,7 @@ export default function HomeScreen({ navigation }) {
         <View style={s.simBanner}>
           <View style={s.simInfo}>
             <Text style={s.simTitle}>
-              {simActive ? "?? ROUTE IN PROGRESS" : "?? GPS IDLE"}
+              {simActive ? "● ROUTE IN PROGRESS" : "○ GPS IDLE"}
             </Text>
             <Text style={s.simSubtitle}>
               Current: {ROUTE_WAYPOINTS[currentWaypointIdx].label}
@@ -345,7 +375,7 @@ export default function HomeScreen({ navigation }) {
             onPress={toggleSimulation}
           >
             <Text style={s.simBtnText}>
-              {simActive ? "? Pause Sim" : "? Start Sim"}
+              {simActive ? "Pause Sim" : "Start Sim"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -369,7 +399,6 @@ export default function HomeScreen({ navigation }) {
         {/* Bottom Toolbar */}
         <View style={s.bottomBar}>
           <TouchableOpacity style={s.tabItem} onPress={onRefresh}>
-            <Text style={s.tabIcon}>??</Text>
             <Text style={[s.tabLabel, s.tabLabelActive]}>Manifest</Text>
           </TouchableOpacity>
 
@@ -377,12 +406,10 @@ export default function HomeScreen({ navigation }) {
             style={s.tabScanCenter}
             onPress={() => (navigation?.navigate ? navigation.navigate("Scanner") : null)}
           >
-            <Text style={s.scanCenterIcon}>??</Text>
             <Text style={s.scanCenterLabel}>Scan</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={s.tabItem} onPress={toggleSimulation}>
-            <Text style={s.tabIcon}>{simActive ? "?" : "??"}</Text>
             <Text style={s.tabLabel}>{simActive ? "Pause" : "Simulate"}</Text>
           </TouchableOpacity>
         </View>
@@ -408,7 +435,7 @@ export default function HomeScreen({ navigation }) {
                   disabled={actionLoading}
                   onPress={openSignatureCapture}
                 >
-                  <Text style={s.btnTextWhite}>? Collect Signature & Deliver</Text>
+                  <Text style={s.btnTextWhite}>Collect Signature & Deliver</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.modalBtn, s.btnCancel]}
@@ -461,12 +488,12 @@ const s = StyleSheet.create({
   statusText: { fontSize: 11, color: "#cbd5e1", fontWeight: "600" },
   queuePill: {
     backgroundColor: "#d97706",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 6,
     marginLeft: 4,
   },
-  queuePillText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  queuePillText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   signoutBtn: { marginTop: 4 },
   signout: { fontSize: 12, color: "#f87171", textDecorationLine: "underline" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -537,16 +564,15 @@ const s = StyleSheet.create({
     paddingBottom: Platform.OS === "ios" ? 14 : 4,
   },
   tabItem: { alignItems: "center", justifyContent: "center", flex: 1 },
-  tabIcon: { fontSize: 20 },
-  tabLabel: { color: "#94a3b8", fontSize: 11, fontWeight: "600", marginTop: 2 },
+  tabLabel: { color: "#94a3b8", fontSize: 12, fontWeight: "600" },
   tabLabelActive: { color: "#38bdf8" },
   tabScanCenter: {
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#2563eb",
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     marginTop: -20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -554,8 +580,7 @@ const s = StyleSheet.create({
     shadowRadius: 4,
     elevation: 6,
   },
-  scanCenterIcon: { fontSize: 22 },
-  scanCenterLabel: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  scanCenterLabel: { color: "#fff", fontSize: 12, fontWeight: "700" },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
