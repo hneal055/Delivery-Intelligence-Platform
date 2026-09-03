@@ -1,25 +1,52 @@
 {
   "expo": {
-    "name": "Delivery Intelligence Platform",
+    "name": "Delivery Intelligence",
     "slug": "delivery-intelligence-platform",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.deliveryintelligence.platform",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app requires camera access to photograph proof of delivery and scan barcodes.",
-        "NSPhotoLibraryUsageDescription": "This app requires photo library access to upload proof of delivery."
+        "NSCameraUsageDescription": "This app requires access to the camera to scan package barcodes and capture delivery proof photos.",
+        "NSLocationWhenInUseUsageDescription": "This app requires real-time GPS coordinates to record proof-of-delivery location at the delivery stop."
       }
     },
     "android": {
-      "package": "com.deliveryintelligence.platform",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
       "permissions": [
         "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
       ]
-    }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Delivery Intelligence to access your camera to scan barcodes and take proof photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Delivery Intelligence to access your location to verify delivery proof."
+        }
+      ]
+    ]
   }
 }

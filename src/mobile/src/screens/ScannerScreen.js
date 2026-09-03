@@ -1,481 +1,535 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
   View,
-  TextInput,
   TouchableOpacity,
+  Image,
   Alert,
   ActivityIndicator,
-  Image,
   ScrollView,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
-import client from "../api/client";
-import * as offlineQueueService from "../services/offlineQueueService";
+  Platform,
+} from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as apiClient from '../api/client';
 
 export default function ScannerScreen({ route, navigation }) {
-  const [packageId, setPackageId] = useState(route?.params?.packageId || "");
-  const [driverId] = useState("D001");
+  const { packageId: initialPackageId } = route.params || {};
+
+  // Package & Scanning State
+  const [scannedPackageId, setScannedPackageId] = useState(initialPackageId || null);
+  const [isScanning, setIsScanning] = useState(!initialPackageId);
+
+  // Camera & Photo State
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const cameraRef = useRef(null);
 
+  // GPS Location State
+  const [locationPermission, setLocationPermission] = useState(null);
+  const [currentCoords, setCurrentCoords] = useState(null);
+  const [locationStatus, setLocationStatus] = useState('Acquiring GPS fix...');
+
+  // Submission State
+  const [submitting, setSubmitting] = useState(false);
+
+  // Request Permissions & Retrieve Position
   useEffect(() => {
-    if (route?.params?.packageId) {
-      setPackageId(route.params.packageId);
+    let isMounted = true;
+
+    async function initLocation() {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!isMounted) return;
+
+        const granted = status === 'granted';
+        setLocationPermission(granted);
+
+        if (!granted) {
+          setLocationStatus('GPS Permission Denied');
+          return;
+        }
+
+        setLocationStatus('Fetching GPS fix...');
+
+        // 1. Check last known position immediately for zero latency
+        try {
+          const lastKnown = await Location.getLastKnownPositionAsync();
+          if (lastKnown && isMounted) {
+            setCurrentCoords({
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+              accuracy: lastKnown.coords.accuracy,
+            });
+            setLocationStatus(
+              `GPS Ready (±${Math.round(lastKnown.coords.accuracy || 0)}m)`
+            );
+          }
+        } catch (e) {
+          // Fall through to fresh position query
+        }
+
+        // 2. Query fresh position with balanced accuracy
+        const fresh = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        if (fresh && isMounted) {
+          setCurrentCoords({
+            latitude: fresh.coords.latitude,
+            longitude: fresh.coords.longitude,
+            accuracy: fresh.coords.accuracy,
+          });
+          setLocationStatus(
+            `GPS Ready (±${Math.round(fresh.coords.accuracy || 0)}m)`
+          );
+        }
+      } catch (err) {
+        if (isMounted && !currentCoords) {
+          setLocationStatus('GPS Fix Unavailable');
+        }
+      }
     }
-  }, [route?.params?.packageId]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      if (route?.params?.packageId) {
-        setPackageId(route.params.packageId);
-      }
-    });
-    return unsubscribe;
-  }, [navigation, route?.params?.packageId]);
+    initLocation();
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        console.warn("[ScannerScreen] Camera permission not granted");
-      }
-    })();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const handleTakePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.6,
-      });
+  // Barcode Scan Handler
+  const handleBarcodeScanned = ({ data }) => {
+    if (!isScanning) return;
+    setIsScanning(false);
+    setScannedPackageId(data);
+  };
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setPhotoUri(result.assets[0].uri);
+  // Capture Photo Proof
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.7,
+          skipProcessing: false,
+        });
+        setPhotoUri(photo.uri);
+      } catch (err) {
+        Alert.alert('Camera Error', 'Could not capture delivery photo.');
       }
-    } catch (err) {
-      console.warn("[ScannerScreen] Camera fallback for emulator:", err.message);
-      setPhotoUri("https://via.placeholder.com/600x400.png?text=Proof+Photo+Mock");
     }
   };
 
-  const handlePickFromGallery = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.6,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setPhotoUri(result.assets[0].uri);
-      }
-    } catch (err) {
-      Alert.alert("Gallery Error", err.message);
-    }
-  };
-
-  const handleClearPackageId = () => {
-    setPackageId("");
-    if (navigation.setParams) {
-      navigation.setParams({ packageId: "" });
-    }
-  };
-
+  // Submit Proof with Real GPS Coordinates
   const handleConfirmDelivery = async () => {
-    const cleanPackageId = (packageId || route?.params?.packageId || "").trim();
-
-    if (!cleanPackageId) {
-      Alert.alert("Missing Package ID", "Please scan or enter a Package ID before confirming delivery.");
+    if (!scannedPackageId) {
+      Alert.alert('Missing Package ID', 'Please scan a barcode or specify a package.');
       return;
     }
 
-    setIsSubmitting(true);
+    setSubmitting(true);
 
-    const deliveryPayload = {
-      package_id: cleanPackageId,
-      driver_id: driverId,
-      dest_lat: 41.8819,
-      dest_lon: -87.6398,
-      status: "DELIVERED",
-      photo_uri: photoUri,
-    };
+    // Live GPS -> Cached -> Chicago Default Fallback
+    let finalLat = 41.8786;
+    let finalLon = -87.6403;
+
+    if (currentCoords) {
+      finalLat = currentCoords.latitude;
+      finalLon = currentCoords.longitude;
+    } else if (locationPermission) {
+      try {
+        const quickLoc = await Location.getLastKnownPositionAsync();
+        if (quickLoc) {
+          finalLat = quickLoc.coords.latitude;
+          finalLon = quickLoc.coords.longitude;
+        }
+      } catch (e) {
+        // Fall back to default
+      }
+    }
+
+    const baseUrl =
+      apiClient.BASE_URL ||
+      apiClient.API_URL ||
+      'http://192.168.12.196:8000';
 
     try {
-      const formData = new FormData();
-      formData.append("package_id", deliveryPayload.package_id);
-      formData.append("driver_id", deliveryPayload.driver_id);
-      formData.append("dest_lat", String(deliveryPayload.dest_lat));
-      formData.append("dest_lon", String(deliveryPayload.dest_lon));
-      formData.append("status", deliveryPayload.status);
+      let resultData;
 
-      if (photoUri && !photoUri.startsWith("http")) {
-        const filename = photoUri.split("/").pop() || "proof.jpg";
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : "image/jpeg";
-        formData.append("photo", {
-          uri: photoUri,
-          name: filename,
-          type,
+      if (photoUri) {
+        const uploadResponse = await FileSystem.uploadAsync(
+          `${baseUrl}/delivery/confirm`,
+          photoUri,
+          {
+            fieldName: 'photo',
+            httpMethod: 'POST',
+            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+            parameters: {
+              package_id: String(scannedPackageId),
+              driver_id: 'D001',
+              dest_lat: String(finalLat),
+              dest_lon: String(finalLon),
+              status: 'DELIVERED',
+            },
+          }
+        );
+
+        if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
+          throw new Error(`Server returned ${uploadResponse.status}: ${uploadResponse.body}`);
+        }
+
+        resultData = JSON.parse(uploadResponse.body);
+      } else {
+        const params = new URLSearchParams();
+        params.append('package_id', scannedPackageId);
+        params.append('driver_id', 'D001');
+        params.append('dest_lat', String(finalLat));
+        params.append('dest_lon', String(finalLon));
+        params.append('status', 'DELIVERED');
+
+        const response = await fetch(`${baseUrl}/delivery/confirm`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
         });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server returned ${response.status}: ${errorText}`);
+        }
+
+        resultData = await response.json();
       }
 
-      const res = await client.post("/delivery/confirm", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 8000,
-      });
-
-      if (res.status === 200 || res.status === 201) {
+      if (resultData && (resultData.success || resultData.record_id)) {
         Alert.alert(
-          "Delivery Confirmed",
-          `Proof of delivery successfully verified for ${cleanPackageId}.`,
+          'Delivery Verified',
+          `Package ${scannedPackageId} confirmed!\nGPS: ${finalLat.toFixed(5)}, ${finalLon.toFixed(5)}`,
           [
             {
-              text: "Back to Manifest",
+              text: 'OK',
               onPress: () => {
-                handleClearPackageId();
                 setPhotoUri(null);
-                navigation.navigate("ManifestTab");
-              },
-            },
-            {
-              text: "Scan Next",
-              onPress: () => {
-                handleClearPackageId();
-                setPhotoUri(null);
+                setScannedPackageId(null);
+                navigation.navigate('Home');
               },
             },
           ]
         );
       } else {
-        throw new Error(`Server returned HTTP ${res.status}`);
+        throw new Error('Server returned an unrecognized response format.');
       }
     } catch (err) {
-      console.warn("[ScannerScreen] Network delivery failed, queuing offline:", err?.message || err);
-
-      try {
-        const queueDelivery =
-          offlineQueueService?.queueOfflineDelivery ||
-          offlineQueueService?.default?.queueOfflineDelivery;
-
-        if (typeof queueDelivery === "function") {
-          await queueDelivery(deliveryPayload);
-
-          Alert.alert(
-            "Saved Offline",
-            `Network unavailable. Delivery for ${cleanPackageId} saved locally to offline queue.`,
-            [
-              {
-                text: "Back to Manifest",
-                onPress: () => {
-                  handleClearPackageId();
-                  setPhotoUri(null);
-                  navigation.navigate("ManifestTab");
-                },
-              },
-              {
-                text: "OK",
-                onPress: () => {
-                  handleClearPackageId();
-                  setPhotoUri(null);
-                },
-              },
-            ]
-          );
-        } else {
-          Alert.alert("Sync Notice", "Unable to reach server. Please retry.");
-        }
-      } catch (queueErr) {
-        Alert.alert("Storage Error", "Could not queue delivery record locally.");
-      }
+      Alert.alert('Upload Error', err.message || 'Failed to submit delivery proof.');
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
-  const activePackageDisplay = packageId || route?.params?.packageId || "";
+  if (!cameraPermission) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#0284c7" />
+        <Text style={styles.statusText}>Requesting camera permission...</Text>
+      </View>
+    );
+  }
+
+  if (!cameraPermission.granted) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>
+          Camera access is required for proof capture.
+        </Text>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={requestCameraPermission}
+        >
+          <Text style={styles.buttonText}>Grant Camera Permission</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Delivery Scanner</Text>
-            <Text style={styles.headerSubtitle}>Driver {driverId} • Proof Verification</Text>
-          </View>
-          {activePackageDisplay ? (
-            <View style={styles.linkedBadge}>
-              <MaterialCommunityIcons name="link-variant" size={14} color="#38bdf8" />
-              <Text style={styles.linkedBadgeText}>Manifest Stop</Text>
-            </View>
-          ) : null}
+    <ScrollView contentContainerStyle={styles.container} bounces={false}>
+      {/* Telemetry Header */}
+      <View style={styles.telemetryCard}>
+        <View style={styles.telemetryRow}>
+          <Text style={styles.telemetryLabel}>Target Stop:</Text>
+          <Text style={styles.telemetryValue}>
+            {scannedPackageId ? scannedPackageId : 'Scan Barcode Below'}
+          </Text>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionLabel}>TARGET PACKAGE</Text>
-            <View style={styles.inputContainer}>
-              <MaterialCommunityIcons name="barcode-scan" size={22} color="#38bdf8" />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Scan or enter Package ID (e.g. pkg-004)"
-                placeholderTextColor="#64748b"
-                value={packageId}
-                onChangeText={setPackageId}
-                autoCapitalize="characters"
-                autoCorrect={false}
-              />
-              {activePackageDisplay.length > 0 && (
-                <TouchableOpacity
-                  onPress={handleClearPackageId}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialCommunityIcons name="close-circle" size={20} color="#94a3b8" />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionLabel}>PROOF OF DELIVERY PHOTO</Text>
-
-            {photoUri ? (
-              <View style={styles.previewContainer}>
-                <Image source={{ uri: photoUri }} style={styles.photoPreview} />
-                <TouchableOpacity
-                  style={styles.removePhotoButton}
-                  onPress={() => setPhotoUri(null)}
-                >
-                  <MaterialCommunityIcons name="trash-can-outline" size={18} color="#f87171" />
-                  <Text style={styles.removePhotoText}>Retake Photo</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.photoActionRow}>
-                <TouchableOpacity
-                  style={styles.cameraButton}
-                  onPress={handleTakePhoto}
-                  activeOpacity={0.7}
-                >
-                  <MaterialCommunityIcons name="camera" size={24} color="#ffffff" />
-                  <Text style={styles.cameraButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.galleryButton}
-                  onPress={handlePickFromGallery}
-                  activeOpacity={0.7}
-                >
-                  <MaterialCommunityIcons name="image-multiple-outline" size={22} color="#38bdf8" />
-                  <Text style={styles.galleryButtonText}>Choose</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.metaCard}>
-            <View style={styles.metaRow}>
-              <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#94a3b8" />
-              <Text style={styles.metaText}>Coordinates: 41.8819, -87.6398 (Chicago, IL)</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <MaterialCommunityIcons name="shield-check-outline" size={16} color="#94a3b8" />
-              <Text style={styles.metaText}>Verification: Instant Server Upload / Offline Fallback</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.confirmButton, isSubmitting && styles.disabledButton]}
-            onPress={handleConfirmDelivery}
-            disabled={isSubmitting}
-            activeOpacity={0.8}
+        <View style={styles.telemetryRow}>
+          <Text style={styles.telemetryLabel}>GPS Status:</Text>
+          <Text
+            style={[
+              styles.telemetryValue,
+              locationStatus.includes('Ready')
+                ? styles.gpsActive
+                : styles.gpsInactive,
+            ]}
           >
-            {isSubmitting ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <>
-                <MaterialCommunityIcons name="check-circle-outline" size={22} color="#ffffff" />
-                <Text style={styles.confirmButtonText}>Confirm Delivery</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </ScrollView>
+            {locationStatus}
+          </Text>
+        </View>
+
+        {currentCoords && (
+          <Text style={styles.coordSubtext}>
+            Lat: {currentCoords.latitude.toFixed(5)} | Lon:{' '}
+            {currentCoords.longitude.toFixed(5)}
+          </Text>
+        )}
       </View>
-    </SafeAreaView>
+
+      {/* Camera / Photo Review Section */}
+      <View style={styles.cameraContainer}>
+        {photoUri ? (
+          <View style={styles.previewWrapper}>
+            <Image source={{ uri: photoUri }} style={styles.previewImage} />
+            <TouchableOpacity
+              style={styles.retakeButton}
+              onPress={() => setPhotoUri(null)}
+            >
+              <Text style={styles.retakeButtonText}>Retake Photo</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing="back"
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr', 'code128', 'ean13', 'upc_a'],
+            }}
+            onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
+          >
+            {isScanning && (
+              <View style={styles.scannerOverlay}>
+                <View style={styles.scannerTarget} />
+                <Text style={styles.overlayPrompt}>
+                  Align barcode within square
+                </Text>
+              </View>
+            )}
+          </CameraView>
+        )}
+      </View>
+
+      {/* Action Controls */}
+      <View style={styles.actionContainer}>
+        {!photoUri && (
+          <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
+            <Text style={styles.buttonText}>Capture Photo Proof</Text>
+          </TouchableOpacity>
+        )}
+
+        {isScanning ? (
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setIsScanning(false)}
+          >
+            <Text style={styles.secondaryButtonText}>Cancel Scanner</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setIsScanning(true)}
+          >
+            <Text style={styles.secondaryButtonText}>Rescan Barcode</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.submitButton,
+            (!scannedPackageId || submitting) && styles.disabledButton,
+          ]}
+          onPress={handleConfirmDelivery}
+          disabled={!scannedPackageId || submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.submitButtonText}>Confirm & Log Delivery</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-  },
   container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#f8fafc",
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#94a3b8",
-    marginTop: 2,
-  },
-  linkedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.3)",
-  },
-  linkedBadgeText: {
-    color: "#38bdf8",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  scrollContent: {
+    flexGrow: 1,
+    backgroundColor: '#0f172a',
     padding: 16,
-    gap: 16,
   },
-  sectionCard: {
-    backgroundColor: "#1e293b",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#334155",
-    gap: 10,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#94a3b8",
-    letterSpacing: 0.5,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "#334155",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 48,
-    gap: 10,
-  },
-  textInput: {
+  centerContainer: {
     flex: 1,
-    color: "#f8fafc",
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  statusText: {
+    marginTop: 16,
+    color: '#94a3b8',
     fontSize: 15,
-    fontWeight: "600",
   },
-  photoActionRow: {
-    flexDirection: "row",
-    gap: 10,
+  errorText: {
+    color: '#f87171',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
   },
-  cameraButton: {
+  telemetryCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  telemetryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 3,
+  },
+  telemetryLabel: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  telemetryValue: {
+    color: '#f1f5f9',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  coordSubtext: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#38bdf8',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    textAlign: 'right',
+  },
+  gpsActive: {
+    color: '#22c55e',
+  },
+  gpsInactive: {
+    color: '#f59e0b',
+  },
+  cameraContainer: {
+    width: '100%',
+    height: 340,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  camera: {
     flex: 1,
-    backgroundColor: "#2563eb",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 8,
   },
-  cameraButtonText: {
-    color: "#ffffff",
-    fontWeight: "700",
-    fontSize: 14,
+  scannerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  galleryButton: {
-    backgroundColor: "rgba(56, 189, 248, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.3)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+  scannerTarget: {
+    width: 210,
+    height: 210,
+    borderWidth: 2,
+    borderColor: '#38bdf8',
+    borderRadius: 12,
+    backgroundColor: 'transparent',
   },
-  galleryButtonText: {
-    color: "#38bdf8",
-    fontWeight: "700",
+  overlayPrompt: {
+    marginTop: 14,
+    color: '#e2e8f0',
     fontSize: 13,
+    fontWeight: '500',
   },
-  previewContainer: {
-    alignItems: "center",
+  previewWrapper: {
+    flex: 1,
+    position: 'relative',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  retakeButton: {
+    position: 'absolute',
+    bottom: 14,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#64748b',
+  },
+  retakeButtonText: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  actionContainer: {
     gap: 10,
   },
-  photoPreview: {
-    width: "100%",
-    height: 180,
-    borderRadius: 8,
-    backgroundColor: "#0f172a",
+  captureButton: {
+    backgroundColor: '#334155',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  removePhotoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  removePhotoText: {
-    color: "#f87171",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  metaCard: {
-    backgroundColor: "#0f172a",
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
+  secondaryButton: {
+    backgroundColor: '#1e293b',
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: '#475569',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  secondaryButtonText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600',
   },
-  metaText: {
-    color: "#64748b",
-    fontSize: 11,
-  },
-  confirmButton: {
-    backgroundColor: "#16a34a",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+  submitButton: {
+    backgroundColor: '#0284c7',
     paddingVertical: 15,
     borderRadius: 10,
-    marginTop: 8,
-  },
-  confirmButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "800",
+    alignItems: 'center',
+    marginTop: 6,
   },
   disabledButton: {
+    backgroundColor: '#1e293b',
     opacity: 0.6,
+  },
+  primaryButton: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
