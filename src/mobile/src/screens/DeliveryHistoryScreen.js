@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { getRecentProofs, resetDatabase, BASE_URL } from '../api/client';
 
 export default function DeliveryHistoryScreen({ navigation }) {
@@ -22,6 +24,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [proofs, setProofs] = useState([]);
   const [resetting, setResetting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const fetchProofs = useCallback(async () => {
     try {
@@ -74,6 +77,55 @@ export default function DeliveryHistoryScreen({ navigation }) {
             }
           },
         },
+      ]
+    );
+  };
+
+  const downloadAndShareExport = async (format) => {
+    try {
+      setExporting(true);
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      if (!isSharingAvailable) {
+        Alert.alert('Sharing Unavailable', 'Sharing files is not supported on this device.');
+        return;
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `delivery_proofs_${timestamp}.${format}`;
+      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+      const downloadUrl = `${BASE_URL}/delivery/export?format=${format}`;
+      const downloadResult = await FileSystem.downloadAsync(downloadUrl, fileUri);
+
+      if (downloadResult.status !== 200) {
+        throw new Error(`Download failed with status ${downloadResult.status}`);
+      }
+
+      await Sharing.shareAsync(downloadResult.uri, {
+        mimeType: format === 'csv' ? 'text/csv' : 'application/json',
+        dialogTitle: `Export Delivery Proofs (${format.toUpperCase()})`,
+        UTI: format === 'csv' ? 'public.comma-separated-values-text' : 'public.json',
+      });
+    } catch (err) {
+      Alert.alert('Export Error', err.message || 'Failed to export delivery report.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPress = () => {
+    if (proofs.length === 0) {
+      Alert.alert('No Data', 'There are no delivery proofs available to export.');
+      return;
+    }
+
+    Alert.alert(
+      'Export Delivery Proofs',
+      'Select your preferred export report format:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'CSV (.csv)', onPress: () => downloadAndShareExport('csv') },
+        { text: 'JSON (.json)', onPress: () => downloadAndShareExport('json') },
       ]
     );
   };
@@ -184,7 +236,6 @@ export default function DeliveryHistoryScreen({ navigation }) {
     );
   }
 
-  // Generous top padding calculation giving explicit clearance below punch-hole and status bar
   const calculatedTopPadding = Math.max(
     insets.top + 18,
     Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 24 : 32
@@ -202,19 +253,34 @@ export default function DeliveryHistoryScreen({ navigation }) {
 
         <View style={styles.subHeaderRow}>
           <Text style={styles.subtext}>
-            {proofs.length} {proofs.length === 1 ? 'record' : 'records'} logged to SQLite
+            {proofs.length} {proofs.length === 1 ? 'record' : 'records'} logged
           </Text>
-          <TouchableOpacity
-            style={[styles.resetButton, resetting && styles.resetButtonDisabled]}
-            onPress={handleReset}
-            disabled={resetting}
-          >
-            {resetting ? (
-              <ActivityIndicator size="small" color="#f87171" />
-            ) : (
-              <Text style={styles.resetButtonText}>Clear DB</Text>
-            )}
-          </TouchableOpacity>
+
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              style={[styles.exportButton, exporting && styles.buttonDisabled]}
+              onPress={handleExportPress}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <ActivityIndicator size="small" color="#38bdf8" />
+              ) : (
+                <Text style={styles.exportButtonText}>Export</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.resetButton, resetting && styles.buttonDisabled]}
+              onPress={handleReset}
+              disabled={resetting}
+            >
+              {resetting ? (
+                <ActivityIndicator size="small" color="#f87171" />
+              ) : (
+                <Text style={styles.resetButtonText}>Clear DB</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -283,6 +349,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#94a3b8',
   },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  exportButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0284c7',
+    backgroundColor: 'rgba(2, 132, 199, 0.15)',
+  },
+  exportButtonText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   resetButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -291,7 +374,7 @@ const styles = StyleSheet.create({
     borderColor: '#7f1d1d',
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
-  resetButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.5,
   },
   resetButtonText: {
@@ -365,8 +448,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     borderWidth: 1,
     borderColor: '#334155',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   noPhotoText: {
     color: '#64748b',
