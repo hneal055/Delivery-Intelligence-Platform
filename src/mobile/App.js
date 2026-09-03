@@ -25,7 +25,7 @@ export default function App() {
               backgroundColor: "#0f172a",
               borderTopColor: "#1e293b",
               borderTopWidth: 1,
-              height: 60,
+              height: 62,
               paddingBottom: 8,
               paddingTop: 6,
             },
@@ -43,37 +43,40 @@ export default function App() {
             options={{
               tabBarLabel: "Home",
               tabBarIcon: ({ color, size }) => (
-                <MaterialCommunityIcons name="view-dashboard-outline" size={size} color={color} />
+                <MaterialCommunityIcons name="view-dashboard-outline" color={color} size={size || 24} />
               ),
             }}
           />
+
           <Tab.Screen
             name="ManifestTab"
             component={ManifestScreen}
             options={{
               tabBarLabel: "Manifest",
               tabBarIcon: ({ color, size }) => (
-                <MaterialCommunityIcons name="format-list-numbered" size={size} color={color} />
+                <MaterialCommunityIcons name="format-list-numbered" color={color} size={size || 24} />
               ),
             }}
           />
+
           <Tab.Screen
             name="Scanner"
             component={ScannerScreen}
             options={{
-              tabBarLabel: "Scan",
+              tabBarLabel: "Scanner",
               tabBarIcon: ({ color, size }) => (
-                <MaterialCommunityIcons name="barcode-scan" size={size} color={color} />
+                <MaterialCommunityIcons name="barcode-scan" color={color} size={size || 24} />
               ),
             }}
           />
+
           <Tab.Screen
-            name="Proofs"
+            name="HistoryTab"
             component={DeliveryHistoryScreen}
             options={{
               tabBarLabel: "Proofs",
               tabBarIcon: ({ color, size }) => (
-                <MaterialCommunityIcons name="clipboard-check-outline" size={size} color={color} />
+                <MaterialCommunityIcons name="clipboard-check-outline" color={color} size={size || 24} />
               ),
             }}
           />

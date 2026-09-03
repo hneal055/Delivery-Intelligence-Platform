@@ -1,35 +1,33 @@
-﻿import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   FlatList,
+  Image,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  StatusBar,
+  Platform,
   Alert,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import client from "../api/client";
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getRecentProofs, resetDatabase, BASE_URL } from '../api/client';
 
 export default function DeliveryHistoryScreen({ navigation }) {
-  const [proofs, setProofs] = useState([]);
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [csvContent, setCsvContent] = useState(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const [proofs, setProofs] = useState([]);
+  const [resetting, setResetting] = useState(false);
 
   const fetchProofs = useCallback(async () => {
     try {
-      const res = await client.get("/delivery/recent-proofs", {
-        params: { limit: 50 },
-      });
-      if (res && Array.isArray(res.data)) {
-        setProofs(res.data);
-      }
+      const data = await getRecentProofs(50);
+      setProofs(data || []);
     } catch (err) {
-      console.warn("[DeliveryHistoryScreen] Failed to fetch proofs:", err.message);
+      console.error('Error fetching proofs history:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -38,7 +36,10 @@ export default function DeliveryHistoryScreen({ navigation }) {
 
   useEffect(() => {
     fetchProofs();
-    const unsubscribe = navigation.addListener("focus", () => {
+  }, [fetchProofs]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
       fetchProofs();
     });
     return unsubscribe;
@@ -49,323 +50,333 @@ export default function DeliveryHistoryScreen({ navigation }) {
     fetchProofs();
   };
 
-  const handleToggleExport = async () => {
-    if (csvContent) {
-      setCsvContent(null);
-      return;
-    }
+  const handleReset = () => {
+    Alert.alert(
+      'Reset Proof Database',
+      'This will delete all proof records and photo storage on the backend. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setResetting(true);
+              await resetDatabase();
+              await fetchProofs();
+              Alert.alert('Success', 'Database and stored photos cleared.');
+            } catch (err) {
+              Alert.alert('Reset Failed', err.message || 'Could not reset backend state.');
+            } finally {
+              setResetting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
-    setIsExporting(true);
+  const formatTimestamp = (isoString) => {
+    if (!isoString) return 'Unknown Time';
     try {
-      const res = await client.get("/delivery/export", {
-        params: { format: "csv" },
-        responseType: "text",
-      });
-
-      if (res.data) {
-        setCsvContent(res.data);
-      } else {
-        Alert.alert("Export Notice", "No verified delivery records available to export.");
-      }
-    } catch (err) {
-      Alert.alert("Export Error", "Could not fetch CSV export from backend.");
-    } finally {
-      setIsExporting(false);
+      const date = new Date(isoString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return isoString;
     }
   };
 
-  const renderProofCard = ({ item }) => {
-    const formattedTime = item.timestamp
-      ? new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      : "Pending Time";
+  const renderProofItem = ({ item }) => {
+    const photoFullUrl = item.photo_url ? `${BASE_URL}${item.photo_url}` : null;
 
     return (
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <View style={styles.titleGroup}>
-            <MaterialCommunityIcons name="cube-outline" size={18} color="#38bdf8" />
-            <Text style={styles.packageId}>{item.package_id}</Text>
+      <View style={styles.proofCard}>
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.packageIdText}>{item.package_id}</Text>
+            <Text style={styles.driverTag}>Driver {item.driver_id || 'D001'}</Text>
           </View>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{item.status || "DELIVERED"}</Text>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusBadgeText}>{item.status}</Text>
           </View>
         </View>
 
-        <View style={styles.metaRow}>
-          <MaterialCommunityIcons name="account-outline" size={15} color="#94a3b8" />
-          <Text style={styles.metaText}>Driver: {item.driver_id}</Text>
-        </View>
+        <View style={styles.cardBody}>
+          {photoFullUrl ? (
+            <Image
+              source={{ uri: photoFullUrl }}
+              style={styles.proofThumbnail}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.noPhotoPlaceholder}>
+              <Text style={styles.noPhotoText}>No Photo</Text>
+            </View>
+          )}
 
-        <View style={styles.metaRow}>
-          <MaterialCommunityIcons name="clock-outline" size={15} color="#94a3b8" />
-          <Text style={styles.metaText}>{formattedTime}</Text>
-        </View>
+          <View style={styles.metaContainer}>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Timestamp:</Text>
+              <Text style={styles.metaValue}>{formatTimestamp(item.timestamp)}</Text>
+            </View>
 
-        <View style={styles.metaRow}>
-          <MaterialCommunityIcons name="map-marker-outline" size={15} color="#94a3b8" />
-          <Text style={styles.metaText}>
-            {item.latitude ? item.latitude.toFixed(4) : "41.8819"},{" "}
-            {item.longitude ? item.longitude.toFixed(4) : "-87.6398"}
-          </Text>
-        </View>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Latitude:</Text>
+              <Text style={styles.coordValue}>
+                {item.dest_lat !== null && item.dest_lat !== undefined
+                  ? Number(item.dest_lat).toFixed(5)
+                  : 'N/A'}
+              </Text>
+            </View>
 
-        <View style={styles.photoContainer}>
-          <View style={styles.photoPlaceholder}>
-            <MaterialCommunityIcons name="image-off-outline" size={24} color="#475569" />
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Longitude:</Text>
+              <Text style={styles.coordValue}>
+                {item.dest_lon !== null && item.dest_lon !== undefined
+                  ? Number(item.dest_lon).toFixed(5)
+                  : 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Record ID:</Text>
+              <Text style={styles.metaValue}>#{item.id}</Text>
+            </View>
           </View>
         </View>
       </View>
     );
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Delivery Proof Log</Text>
-            <Text style={styles.headerSubtitle}>{proofs.length} verified records in system</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.exportButton, csvContent && styles.exportButtonActive]}
-              onPress={handleToggleExport}
-              disabled={isExporting}
-              activeOpacity={0.7}
-            >
-              {isExporting ? (
-                <ActivityIndicator size="small" color="#38bdf8" />
-              ) : (
-                <>
-                  <MaterialCommunityIcons
-                    name={csvContent ? "eye-off-outline" : "file-delimited-outline"}
-                    size={16}
-                    color={csvContent ? "#ffffff" : "#38bdf8"}
-                  />
-                  <Text style={[styles.exportButtonText, csvContent && styles.exportButtonTextActive]}>
-                    {csvContent ? "Hide CSV" : "Export CSV"}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={onRefresh} style={styles.refreshIconButton} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="refresh" size={22} color="#38bdf8" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {csvContent ? (
-          <View style={styles.csvContainer}>
-            <View style={styles.csvHeader}>
-              <Text style={styles.csvTitle}>Exported CSV Data ({proofs.length} rows)</Text>
-              <TouchableOpacity onPress={() => setCsvContent(null)}>
-                <MaterialCommunityIcons name="close" size={18} color="#94a3b8" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.csvText} selectable={true}>
-              {csvContent}
-            </Text>
-            <Text style={styles.csvHint}>Tip: Long-press text above to copy.</Text>
-          </View>
-        ) : null}
-
-        {loading && !refreshing ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color="#38bdf8" />
-          </View>
-        ) : (
-          <FlatList
-            data={proofs}
-            keyExtractor={(item) => String(item.id || item.package_id)}
-            renderItem={renderProofCard}
-            contentContainerStyle={styles.listContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <MaterialCommunityIcons name="clipboard-text-outline" size={48} color="#475569" />
-                <Text style={styles.emptyText}>No verified proofs found yet.</Text>
-              </View>
-            }
-          />
-        )}
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+        <ActivityIndicator size="large" color="#0284c7" />
+        <Text style={styles.loadingText}>Loading proof history...</Text>
       </View>
-    </SafeAreaView>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+
+      {/* Header */}
+      <View style={styles.headerContainer}>
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.screenTitle}>Proof History</Text>
+            <Text style={styles.subtext}>
+              {proofs.length} {proofs.length === 1 ? 'record' : 'records'} logged to SQLite
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.resetButton, resetting && styles.resetButtonDisabled]}
+            onPress={handleReset}
+            disabled={resetting}
+          >
+            {resetting ? (
+              <ActivityIndicator size="small" color="#f87171" />
+            ) : (
+              <Text style={styles.resetButtonText}>Clear DB</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Proof List */}
+      <FlatList
+        data={proofs}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={renderProofItem}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#0284c7"
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No Proofs Found</Text>
+            <Text style={styles.emptySubtitle}>
+              Deliver a stop in the Scanner screen to generate records.
+            </Text>
+          </View>
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#0f172a",
-  },
   container: {
     flex: 1,
+    backgroundColor: '#0f172a',
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
+  centerContainer: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#f8fafc",
+  loadingText: {
+    marginTop: 12,
+    color: '#94a3b8',
+    fontSize: 14,
   },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#94a3b8",
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#f8fafc',
+    letterSpacing: -0.5,
+  },
+  subtext: {
+    fontSize: 13,
+    color: '#94a3b8',
     marginTop: 2,
   },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  exportButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(56, 189, 248, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.3)",
-    paddingHorizontal: 12,
+  resetButton: {
     paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 8,
-  },
-  exportButtonActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#38bdf8",
-  },
-  exportButtonText: {
-    color: "#38bdf8",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  exportButtonTextActive: {
-    color: "#ffffff",
-  },
-  refreshIconButton: {
-    padding: 6,
-  },
-  csvContainer: {
-    margin: 16,
-    padding: 14,
-    backgroundColor: "#090d16",
-    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#1e293b",
-    gap: 8,
+    borderColor: '#7f1d1d',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
-  csvHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  resetButtonDisabled: {
+    opacity: 0.5,
   },
-  csvTitle: {
-    color: "#38bdf8",
+  resetButtonText: {
+    color: '#f87171',
     fontSize: 12,
-    fontWeight: "700",
-  },
-  csvText: {
-    fontFamily: "monospace",
-    color: "#cbd5e1",
-    fontSize: 11,
-    lineHeight: 16,
-    backgroundColor: "#0f172a",
-    padding: 10,
-    borderRadius: 6,
-  },
-  csvHint: {
-    color: "#64748b",
-    fontSize: 10,
-    textAlign: "right",
+    fontWeight: '700',
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
     gap: 12,
   },
-  card: {
-    backgroundColor: "#1e293b",
+  proofCard: {
+    backgroundColor: '#1e293b',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#334155",
-    gap: 6,
-    position: "relative",
+    borderColor: '#334155',
   },
-  cardHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+    paddingBottom: 8,
   },
-  titleGroup: {
-    flexDirection: "row",
-    alignItems: "center",
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  packageId: {
+  packageIdText: {
+    color: '#f8fafc',
     fontSize: 16,
-    fontWeight: "800",
-    color: "#f8fafc",
+    fontWeight: '700',
   },
-  badge: {
-    backgroundColor: "rgba(74, 222, 128, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(74, 222, 128, 0.3)",
+  driverTag: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  statusBadge: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-  badgeText: {
-    color: "#4ade80",
-    fontSize: 10,
-    fontWeight: "700",
+  statusBadgeText: {
+    color: '#22c55e',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  cardBody: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  proofThumbnail: {
+    width: 90,
+    height: 90,
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  noPhotoPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noPhotoText: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  metaContainer: {
+    flex: 1,
+    gap: 4,
   },
   metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  metaText: {
+  metaLabel: {
+    color: '#94a3b8',
     fontSize: 12,
-    color: "#94a3b8",
+    fontWeight: '500',
   },
-  photoContainer: {
-    position: "absolute",
-    right: 14,
-    bottom: 14,
+  metaValue: {
+    color: '#f1f5f9',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  photoPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "#334155",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  coordValue: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: '600',
   },
   emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-    gap: 12,
+    paddingTop: 60,
+    alignItems: 'center',
+    gap: 6,
   },
-  emptyText: {
-    color: "#64748b",
-    fontSize: 14,
+  emptyTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  emptySubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 240,
   },
 });
