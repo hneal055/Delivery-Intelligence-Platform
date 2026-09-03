@@ -17,6 +17,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { getRecentProofs, resetDatabase, BASE_URL } from '../api/client';
+import { getOfflineQueue, syncOfflineQueue } from '../utils/offlineQueue';
 
 export default function DeliveryHistoryScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -26,10 +27,18 @@ export default function DeliveryHistoryScreen({ navigation }) {
   const [resetting, setResetting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  const fetchProofs = useCallback(async () => {
+  // Offline queue state
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const fetchProofsAndQueue = useCallback(async () => {
     try {
-      const data = await getRecentProofs(50);
+      const [data, queue] = await Promise.all([
+        getRecentProofs(50).catch(() => []),
+        getOfflineQueue().catch(() => []),
+      ]);
       setProofs(data || []);
+      setOfflineCount(queue.length);
     } catch (err) {
       console.error('Error fetching proofs history:', err);
     } finally {
@@ -39,20 +48,41 @@ export default function DeliveryHistoryScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    fetchProofs();
-  }, [fetchProofs]);
+    fetchProofsAndQueue();
+  }, [fetchProofsAndQueue]);
 
-  // Refresh proof logs whenever the screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      fetchProofs();
+      fetchProofsAndQueue();
     });
     return unsubscribe;
-  }, [navigation, fetchProofs]);
+  }, [navigation, fetchProofsAndQueue]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchProofs();
+    fetchProofsAndQueue();
+  };
+
+  const handleSyncQueue = async () => {
+    if (offlineCount === 0 || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const { syncedCount, remainingCount } = await syncOfflineQueue();
+      await fetchProofsAndQueue();
+
+      if (remainingCount === 0) {
+        Alert.alert('Sync Complete', `Successfully synced ${syncedCount} queued delivery records.`);
+      } else {
+        Alert.alert(
+          'Partial Sync',
+          `Synced ${syncedCount} records. ${remainingCount} remain queued (check network).`
+        );
+      }
+    } catch (err) {
+      Alert.alert('Sync Error', err.message || 'Could not reach server to sync queue.');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleReset = () => {
@@ -68,7 +98,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
             try {
               setResetting(true);
               await resetDatabase();
-              await fetchProofs();
+              await fetchProofsAndQueue();
               Alert.alert('Success', 'Database and stored delivery proofs cleared.');
             } catch (err) {
               Alert.alert('Reset Failed', err.message || 'Could not reset backend state.');
@@ -119,15 +149,11 @@ export default function DeliveryHistoryScreen({ navigation }) {
       return;
     }
 
-    Alert.alert(
-      'Export Delivery Proofs',
-      'Select your preferred export report format:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'CSV (.csv)', onPress: () => downloadAndShareExport('csv') },
-        { text: 'JSON (.json)', onPress: () => downloadAndShareExport('json') },
-      ]
-    );
+    Alert.alert('Export Delivery Proofs', 'Select your preferred export report format:', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'CSV (.csv)', onPress: () => downloadAndShareExport('csv') },
+      { text: 'JSON (.json)', onPress: () => downloadAndShareExport('json') },
+    ]);
   };
 
   const formatTimestamp = (isoString) => {
@@ -156,7 +182,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Content Section: Photo & Metadata */}
+        {/* Content Section */}
         <View style={styles.cardBody}>
           {photoFullUrl ? (
             <Image
@@ -201,7 +227,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Customer Signature Vector Preview */}
+        {/* Signature Vector Preview */}
         {item.signature_path ? (
           <View style={styles.signaturePreviewWrapper}>
             <Text style={styles.signaturePreviewLabel}>Customer Signature:</Text>
@@ -245,7 +271,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
     <View style={[styles.container, { paddingTop: calculatedTopPadding }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0f172a" translucent={false} />
 
-      {/* Header Container */}
+      {/* Header */}
       <View style={styles.headerContainer}>
         <View style={styles.titleRow}>
           <Text style={styles.screenTitle}>Proof History</Text>
@@ -282,20 +308,39 @@ export default function DeliveryHistoryScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Offline Queue Indicator Banner */}
+        {offlineCount > 0 && (
+          <View style={styles.offlineBanner}>
+            <View style={styles.offlineTextWrapper}>
+              <View style={styles.amberDot} />
+              <Text style={styles.offlineBannerText}>
+                {offlineCount} {offlineCount === 1 ? 'record' : 'records'} pending sync
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.syncButton, isSyncing && styles.buttonDisabled]}
+              onPress={handleSyncQueue}
+              disabled={isSyncing}
+            >
+              {isSyncing ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.syncButtonText}>Sync Now</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
-      {/* Proofs Feed */}
+      {/* Proof List */}
       <FlatList
         data={proofs}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderProofItem}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 28 }]}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#0284c7"
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0284c7" />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -379,6 +424,45 @@ const styles = StyleSheet.create({
   },
   resetButtonText: {
     color: '#f87171',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  offlineBanner: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: '#b45309',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  offlineTextWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  amberDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f59e0b',
+  },
+  offlineBannerText: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  syncButton: {
+    backgroundColor: '#f59e0b',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  syncButtonText: {
+    color: '#0f172a',
     fontSize: 11,
     fontWeight: '700',
   },

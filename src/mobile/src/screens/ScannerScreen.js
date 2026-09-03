@@ -16,6 +16,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as apiClient from '../api/client';
 import { getEffectiveLocation } from '../utils/location';
+import { enqueueOfflineDelivery } from '../utils/offlineQueue';
 
 export default function ScannerScreen({ route, navigation }) {
   const { packageId: initialPackageId } = route.params || {};
@@ -112,12 +113,18 @@ export default function ScannerScreen({ route, navigation }) {
     const finalLat = effectiveLoc.coords ? effectiveLoc.coords.latitude : 41.881837;
     const finalLon = effectiveLoc.coords ? effectiveLoc.coords.longitude : -87.632420;
 
-    const baseUrl =
-      apiClient.BASE_URL ||
-      apiClient.API_URL ||
-      'http://192.168.12.196:8000';
-
+    const baseUrl = apiClient.BASE_URL || 'http://192.168.12.196:8000';
     const signatureData = paths.length > 0 ? paths.join(' ') : null;
+
+    const deliveryPayload = {
+      package_id: scannedPackageId,
+      driver_id: 'D001',
+      dest_lat: finalLat,
+      dest_lon: finalLon,
+      signature_path: signatureData,
+      status: 'DELIVERED',
+      photoUri,
+    };
 
     try {
       let resultData;
@@ -142,7 +149,7 @@ export default function ScannerScreen({ route, navigation }) {
         );
 
         if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
-          throw new Error(`Server returned ${uploadResponse.status}: ${uploadResponse.body}`);
+          throw new Error(`Server status ${uploadResponse.status}`);
         }
 
         resultData = JSON.parse(uploadResponse.body);
@@ -157,26 +164,43 @@ export default function ScannerScreen({ route, navigation }) {
 
         const response = await fetch(`${baseUrl}/delivery/confirm`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: params.toString(),
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Server returned ${response.status}: ${errorText}`);
+          throw new Error(`Server status ${response.status}`);
         }
 
         resultData = await response.json();
       }
 
-      if (resultData && (resultData.success || resultData.record_id)) {
+      Alert.alert(
+        'Delivery Verified',
+        `Package ${scannedPackageId} confirmed!\nGPS: ${finalLat.toFixed(5)}, ${finalLon.toFixed(5)}${
+          signatureData ? '\nCustomer Signature Captured' : ''
+        }`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setPhotoUri(null);
+              setScannedPackageId(null);
+              clearSignature();
+              navigation.navigate('HomeTab');
+            },
+          },
+        ]
+      );
+    } catch (networkErr) {
+      console.warn('Network transmission failed, saving to offline queue:', networkErr.message);
+
+      try {
+        await enqueueOfflineDelivery(deliveryPayload);
+
         Alert.alert(
-          'Delivery Verified',
-          `Package ${scannedPackageId} confirmed!\nGPS: ${finalLat.toFixed(5)}, ${finalLon.toFixed(5)}${
-            signatureData ? '\nCustomer Signature Captured' : ''
-          }`,
+          'Saved Offline',
+          `Network unavailable. Delivery for ${scannedPackageId} was saved to the offline queue and will sync when reconnected.`,
           [
             {
               text: 'OK',
@@ -189,11 +213,9 @@ export default function ScannerScreen({ route, navigation }) {
             },
           ]
         );
-      } else {
-        throw new Error('Server returned an unrecognized response format.');
+      } catch (queueErr) {
+        Alert.alert('Storage Error', 'Failed to save delivery offline.');
       }
-    } catch (err) {
-      Alert.alert('Upload Error', err.message || 'Failed to submit delivery proof.');
     } finally {
       setSubmitting(false);
     }
@@ -211,13 +233,8 @@ export default function ScannerScreen({ route, navigation }) {
   if (!cameraPermission.granted) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>
-          Camera access is required for proof capture.
-        </Text>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={requestCameraPermission}
-        >
+        <Text style={styles.errorText}>Camera access is required for proof capture.</Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={requestCameraPermission}>
           <Text style={styles.buttonText}>Grant Camera Permission</Text>
         </TouchableOpacity>
       </View>
@@ -251,21 +268,17 @@ export default function ScannerScreen({ route, navigation }) {
 
         {currentCoords && (
           <Text style={styles.coordSubtext}>
-            Lat: {currentCoords.latitude.toFixed(5)} | Lon:{' '}
-            {currentCoords.longitude.toFixed(5)}
+            Lat: {currentCoords.latitude.toFixed(5)} | Lon: {currentCoords.longitude.toFixed(5)}
           </Text>
         )}
       </View>
 
-      {/* Camera / Review Section */}
+      {/* Camera / Photo Review Section */}
       <View style={styles.cameraContainer}>
         {photoUri ? (
           <View style={styles.previewWrapper}>
             <Image source={{ uri: photoUri }} style={styles.previewImage} />
-            <TouchableOpacity
-              style={styles.retakeButton}
-              onPress={() => setPhotoUri(null)}
-            >
+            <TouchableOpacity style={styles.retakeButton} onPress={() => setPhotoUri(null)}>
               <Text style={styles.retakeButtonText}>Retake Photo</Text>
             </TouchableOpacity>
           </View>
@@ -282,16 +295,14 @@ export default function ScannerScreen({ route, navigation }) {
             {isScanning && (
               <View style={styles.scannerOverlay}>
                 <View style={styles.scannerTarget} />
-                <Text style={styles.overlayPrompt}>
-                  Align barcode within square
-                </Text>
+                <Text style={styles.overlayPrompt}>Align barcode within square</Text>
               </View>
             )}
           </CameraView>
         )}
       </View>
 
-      {/* Customer Signature Capture Pad */}
+      {/* Signature Canvas */}
       <View style={styles.signatureCard}>
         <View style={styles.signatureHeader}>
           <Text style={styles.signatureTitle}>Customer Signature (Optional)</Text>
@@ -326,26 +337,17 @@ export default function ScannerScreen({ route, navigation }) {
         )}
 
         {isScanning ? (
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => setIsScanning(false)}
-          >
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsScanning(false)}>
             <Text style={styles.secondaryButtonText}>Cancel Scanner</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => setIsScanning(true)}
-          >
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsScanning(true)}>
             <Text style={styles.secondaryButtonText}>Rescan Barcode</Text>
           </TouchableOpacity>
         )}
 
         <TouchableOpacity
-          style={[
-            styles.submitButton,
-            (!scannedPackageId || submitting) && styles.disabledButton,
-          ]}
+          style={[styles.submitButton, (!scannedPackageId || submitting) && styles.disabledButton]}
           onPress={handleConfirmDelivery}
           disabled={!scannedPackageId || submitting}
         >
