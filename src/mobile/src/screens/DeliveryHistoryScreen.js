@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -27,11 +27,16 @@ export default function DeliveryHistoryScreen({ navigation }) {
   const [resetting, setResetting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  // Offline queue state
+  // Network health and auto-sync state
+  const [isOnline, setIsOnline] = useState(true);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatusText, setSyncStatusText] = useState(null);
 
+  const prevOnlineRef = useRef(true);
+
+  // Fetch SQLite proof history and AsyncStorage queue count
   const fetchProofsAndQueue = useCallback(async () => {
     try {
       const [data, queue] = await Promise.all([
@@ -48,15 +53,64 @@ export default function DeliveryHistoryScreen({ navigation }) {
     }
   }, []);
 
+  // Heartbeat probe to monitor backend reachability and auto-flush
   useEffect(() => {
     fetchProofsAndQueue();
+
+    const checkConnectivityAndFlush = async () => {
+      let reachable = false;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`${BASE_URL}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        reachable = res.ok;
+      } catch {
+        reachable = false;
+      }
+
+      setIsOnline(reachable);
+
+      // Transition from offline to online triggers automated queue sync
+      const justCameOnline = !prevOnlineRef.current && reachable;
+      prevOnlineRef.current = reachable;
+
+      if (justCameOnline) {
+        console.log('[Heartbeat] Connection restored. Checking offline delivery queue...');
+        const queue = await getOfflineQueue();
+        if (queue.length > 0) {
+          console.log(`[AutoSync] Flushing ${queue.length} pending deliveries...`);
+          setIsAutoSyncing(true);
+          try {
+            await syncOfflineQueue();
+            const freshProofs = await getRecentProofs(50);
+            setProofs(freshProofs || []);
+            const remaining = await getOfflineQueue();
+            setOfflineCount(remaining.length);
+          } catch (err) {
+            console.warn('[AutoSync] Background flush failed:', err.message);
+          } finally {
+            setIsAutoSyncing(false);
+          }
+        }
+      }
+    };
+
+    // Initial check followed by continuous polling every 6 seconds
+    checkConnectivityAndFlush();
+    const interval = setInterval(checkConnectivityAndFlush, 6000);
+
+    return () => clearInterval(interval);
   }, [fetchProofsAndQueue]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+    const unsub = navigation.addListener('focus', () => {
       fetchProofsAndQueue();
     });
-    return unsubscribe;
+    return unsub;
   }, [navigation, fetchProofsAndQueue]);
 
   const onRefresh = () => {
@@ -65,8 +119,8 @@ export default function DeliveryHistoryScreen({ navigation }) {
   };
 
   const handleSyncQueue = async () => {
-    if (offlineCount === 0 || isSyncing) return;
-    setIsSyncing(true);
+    if (offlineCount === 0 || isManualSyncing || isAutoSyncing) return;
+    setIsManualSyncing(true);
     setSyncStatusText(`Syncing 0/${offlineCount}...`);
 
     try {
@@ -81,13 +135,13 @@ export default function DeliveryHistoryScreen({ navigation }) {
       } else {
         Alert.alert(
           'Sync Paused',
-          `Synced ${syncedCount} records. ${remainingCount} remain queued (network timeout or connection dropped).`
+          `Synced ${syncedCount} records. ${remainingCount} remain queued.`
         );
       }
     } catch (err) {
       Alert.alert('Sync Error', err.message || 'Could not reach server to sync queue.');
     } finally {
-      setIsSyncing(false);
+      setIsManualSyncing(false);
       setSyncStatusText(null);
     }
   };
@@ -178,7 +232,6 @@ export default function DeliveryHistoryScreen({ navigation }) {
 
     return (
       <View style={styles.proofCard}>
-        {/* Card Header */}
         <View style={styles.cardHeader}>
           <View style={styles.headerLeft}>
             <Text style={styles.packageIdText}>{item.package_id}</Text>
@@ -189,7 +242,6 @@ export default function DeliveryHistoryScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Content Section */}
         <View style={styles.cardBody}>
           {photoFullUrl ? (
             <Image
@@ -234,7 +286,6 @@ export default function DeliveryHistoryScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Signature Vector Preview */}
         {item.signature_path ? (
           <View style={styles.signaturePreviewWrapper}>
             <Text style={styles.signaturePreviewLabel}>Customer Signature:</Text>
@@ -274,6 +325,8 @@ export default function DeliveryHistoryScreen({ navigation }) {
     Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 24 : 32
   );
 
+  const syncingActive = isManualSyncing || isAutoSyncing;
+
   return (
     <View style={[styles.container, { paddingTop: calculatedTopPadding }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0f172a" translucent={false} />
@@ -282,6 +335,14 @@ export default function DeliveryHistoryScreen({ navigation }) {
       <View style={styles.headerContainer}>
         <View style={styles.titleRow}>
           <Text style={styles.screenTitle}>Proof History</Text>
+
+          {/* Live Network Health Pill */}
+          <View style={[styles.networkPill, isOnline ? styles.netOnline : styles.netOffline]}>
+            <View style={[styles.netDot, isOnline ? styles.netDotOnline : styles.netDotOffline]} />
+            <Text style={[styles.netText, isOnline ? styles.netTextOnline : styles.netTextOffline]}>
+              {isOnline ? 'Online' : 'Offline'}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.subHeaderRow}>
@@ -316,21 +377,24 @@ export default function DeliveryHistoryScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Dynamic Offline Queue Banner */}
+        {/* Offline Queue / Auto-Sync Banner */}
         {offlineCount > 0 && (
           <View style={styles.offlineBanner}>
             <View style={styles.offlineTextWrapper}>
-              <View style={styles.amberDot} />
+              <View style={[styles.amberDot, isAutoSyncing && styles.pulseDot]} />
               <Text style={styles.offlineBannerText}>
-                {syncStatusText || `${offlineCount} ${offlineCount === 1 ? 'record' : 'records'} pending sync`}
+                {isAutoSyncing
+                  ? 'Auto-syncing background queue...'
+                  : syncStatusText ||
+                    `${offlineCount} ${offlineCount === 1 ? 'record' : 'records'} pending sync`}
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.syncButton, isSyncing && styles.buttonDisabled]}
+              style={[styles.syncButton, syncingActive && styles.buttonDisabled]}
               onPress={handleSyncQueue}
-              disabled={isSyncing}
+              disabled={syncingActive}
             >
-              {isSyncing ? (
+              {syncingActive ? (
                 <ActivityIndicator size="small" color="#0f172a" />
               ) : (
                 <Text style={styles.syncButtonText}>Sync Now</Text>
@@ -384,7 +448,48 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
+  },
+  networkPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 5,
+  },
+  netOnline: {
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderColor: '#16a34a',
+  },
+  netOffline: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: '#dc2626',
+  },
+  netDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  netDotOnline: {
+    backgroundColor: '#22c55e',
+  },
+  netDotOffline: {
+    backgroundColor: '#ef4444',
+  },
+  netText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  netTextOnline: {
+    color: '#22c55e',
+  },
+  netTextOffline: {
+    color: '#ef4444',
   },
   subHeaderRow: {
     flexDirection: 'row',
@@ -456,6 +561,9 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#f59e0b',
+  },
+  pulseDot: {
+    backgroundColor: '#38bdf8',
   },
   offlineBannerText: {
     color: '#fbbf24',
