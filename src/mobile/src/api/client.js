@@ -1,53 +1,78 @@
-import axios from "axios";
-import { Platform } from "react-native";
-import Constants from "expo-constants";
+import { Platform } from 'react-native';
+
+// Target machine IP for physical mobile testing on LAN
+export const BASE_URL = 'http://192.168.12.196:8000';
 
 /**
- * Dynamically resolves the backend base URL across:
- * - Android Emulator (10.0.2.2)
- * - iOS Simulator (localhost)
- * - Physical iOS / Android devices on LAN (auto-detected via Metro hostUri)
+ * Fetch route manifest for driver with optional GPS coordinate optimization.
+ * When originLat and originLon are supplied, the backend performs a 
+ * nearest-neighbor TSP sort.
  */
-const resolveBaseUrl = () => {
-  // Extract hostUri provided by Metro during development
-  const hostUri =
-    Constants.expoConfig?.hostUri ||
-    Constants.manifest2?.extra?.expoGo?.debuggerHost ||
-    "";
+export async function getSampleRoute(driverId = 'D001', originLat = null, originLon = null) {
+  let url = `${BASE_URL}/routing/sample-route/${driverId}`;
+  const queryParams = [];
 
-  const hostIp = hostUri ? hostUri.split(":")[0] : null;
-
-  if (__DEV__ && hostIp) {
-    // If the host is explicitly localhost/127.0.0.1
-    const isLoopback = hostIp === "localhost" || hostIp === "127.0.0.1";
-
-    if (Platform.OS === "android") {
-      // Android emulators cannot reach host machine via 127.0.0.1; they require 10.0.2.2
-      // Physical Android devices use the extracted LAN IP
-      return isLoopback ? "http://10.0.2.2:8000" : `http://${hostIp}:8000`;
-    }
-
-    if (Platform.OS === "ios") {
-      // iOS simulators can reach host machine via localhost
-      // Physical iOS devices use the extracted LAN IP
-      return isLoopback ? "http://localhost:8000" : `http://${hostIp}:8000`;
-    }
-
-    return `http://${hostIp}:8000`;
+  if (originLat !== null && originLon !== null) {
+    queryParams.push(`origin_lat=${originLat}`);
+    queryParams.push(`origin_lon=${originLon}`);
+    queryParams.push('optimize=true');
   }
 
-  // Fallback defaults if hostUri is unavailable
-  return Platform.OS === "android"
-    ? "http://10.0.2.2:8000"
-    : "http://localhost:8000";
-};
+  if (queryParams.length > 0) {
+    url += `?${queryParams.join('&')}`;
+  }
 
-const BASE_URL = resolveBaseUrl();
-console.log(`[API Client] Initialized baseURL: ${BASE_URL} (Platform: ${Platform.OS})`);
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch route (${response.status}): ${errorText}`);
+  }
 
-const client = axios.create({
-  baseURL: BASE_URL,
-  timeout: 10000,
-});
+  return await response.json();
+}
 
-export default client;
+/**
+ * Fetch recently submitted delivery proof records from SQLite.
+ */
+export async function getRecentProofs(limit = 20) {
+  const response = await fetch(`${BASE_URL}/delivery/recent-proofs?limit=${limit}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch proofs (${response.status}): ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Fallback confirmation method for non-file/FormData uploads.
+ */
+export async function confirmDelivery(formData) {
+  const response = await fetch(`${BASE_URL}/delivery/confirm`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Server returned ${response.status}: ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Trigger backend database and media reset.
+ */
+export async function resetDatabase() {
+  const response = await fetch(`${BASE_URL}/debug/reset-db`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to reset database (${response.status}): ${errorText}`);
+  }
+
+  return await response.json();
+}

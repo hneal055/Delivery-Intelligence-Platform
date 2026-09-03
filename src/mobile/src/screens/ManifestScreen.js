@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,367 +7,454 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import client from "../api/client";
-
-const INITIAL_STOPS = [
-  { id: "1", packageId: "pkg-001", address: "100 N State St, Chicago, IL", lat: 41.8837, lon: -87.6278, status: "PENDING" },
-  { id: "2", packageId: "pkg-002", address: "231 S Michigan Ave, Chicago, IL", lat: 41.8789, lon: -87.6247, status: "PENDING" },
-  { id: "3", packageId: "pkg-003", address: "500 W Madison St, Chicago, IL", lat: 41.8819, lon: -87.6398, status: "PENDING" },
-  { id: "4", packageId: "pkg-004", address: "400 N Michigan Ave, Chicago, IL", lat: 41.8900, lon: -87.6240, status: "PENDING" },
-  { id: "5", packageId: "pkg-005", address: "222 W Merchandise Mart Plaza", lat: 41.8885, lon: -87.6354, status: "PENDING" },
-];
+  SafeAreaView,
+  StatusBar,
+  Platform,
+} from 'react-native';
+import * as Location from 'expo-location';
+import { getSampleRoute, getRecentProofs } from '../api/client';
 
 export default function ManifestScreen({ navigation }) {
-  const [stops, setStops] = useState(INITIAL_STOPS);
-  const [filter, setFilter] = useState("ALL");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [stops, setStops] = useState([]);
+  const [deliveredIds, setDeliveredIds] = useState(new Set());
+  const [filter, setFilter] = useState('ALL'); // 'ALL' | 'PENDING' | 'DELIVERED'
+  const [isOptimized, setIsOptimized] = useState(false);
+  const [totalKm, setTotalKm] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState('Acquiring GPS...');
 
-  const syncManifestWithBackend = useCallback(async () => {
+  const fetchRouteAndProofs = useCallback(async () => {
     try {
-      const res = await client.get("/delivery/recent-proofs", { params: { limit: 50 } });
-      if (res && Array.isArray(res.data)) {
-        const deliveredIds = new Set(res.data.map((item) => item.package_id));
-        setStops((prevStops) =>
-          prevStops.map((stop) => ({
-            ...stop,
-            status: deliveredIds.has(stop.packageId) ? "DELIVERED" : "PENDING",
-          }))
-        );
+      let coords = null;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const lastKnown = await Location.getLastKnownPositionAsync();
+          if (lastKnown) {
+            coords = lastKnown.coords;
+          }
+
+          const fresh = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          if (fresh) {
+            coords = fresh.coords;
+          }
+          setGpsStatus('Live GPS Active');
+        } else {
+          setGpsStatus('Default Sequence (No GPS Permission)');
+        }
+      } catch (locErr) {
+        setGpsStatus('Default Sequence (No GPS Lock)');
       }
-    } catch (_) {
-      // Keep local state on network error
+
+      // 1. Fetch completed proofs
+      const proofs = await getRecentProofs(50);
+      const deliveredSet = new Set(proofs.map((p) => p.package_id));
+      setDeliveredIds(deliveredSet);
+
+      // 2. Fetch sequenced stops
+      const routeData = await getSampleRoute(
+        'D001',
+        coords ? coords.latitude : null,
+        coords ? coords.longitude : null
+      );
+
+      setStops(routeData.ordered_stops || []);
+      setIsOptimized(Boolean(routeData.optimized));
+      setTotalKm(routeData.total_distance_km);
+    } catch (err) {
+      console.error('Error loading manifest:', err);
     } finally {
-      setRefreshing(false);
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    syncManifestWithBackend();
-    const unsubscribe = navigation.addListener("focus", () => {
-      syncManifestWithBackend();
-    });
-    return unsubscribe;
-  }, [navigation, syncManifestWithBackend]);
+    fetchRouteAndProofs();
+  }, [fetchRouteAndProofs]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    syncManifestWithBackend();
+    fetchRouteAndProofs();
   };
 
-  const pendingCount = stops.filter((s) => s.status === "PENDING").length;
-  const deliveredCount = stops.filter((s) => s.status === "DELIVERED").length;
-
   const filteredStops = stops.filter((stop) => {
-    if (filter === "PENDING") return stop.status === "PENDING";
-    if (filter === "DELIVERED") return stop.status === "DELIVERED";
+    const isDelivered = deliveredIds.has(stop.id);
+    if (filter === 'PENDING') return !isDelivered;
+    if (filter === 'DELIVERED') return isDelivered;
     return true;
   });
 
-  const renderStopItem = ({ item }) => {
-    const isDelivered = item.status === "DELIVERED";
+  const deliveredCount = stops.filter((s) => deliveredIds.has(s.id)).length;
+  const pendingCount = stops.length - deliveredCount;
+
+  const renderStopItem = ({ item, index }) => {
+    const isDelivered = deliveredIds.has(item.id);
 
     return (
-      <View style={[styles.card, isDelivered && styles.cardDelivered]}>
-        <View style={styles.cardHeaderRow}>
-          <View style={[styles.indexCircle, isDelivered && styles.indexCircleDelivered]}>
-            {isDelivered ? (
-              <MaterialCommunityIcons name="check" size={18} color="#ffffff" />
+      <View style={[styles.stopCard, isDelivered && styles.deliveredCard]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.sequenceBadge}>
+            <Text style={styles.sequenceText}>#{item.sequence || index + 1}</Text>
+          </View>
+          <Text style={styles.packageIdText}>{item.id}</Text>
+          <View
+            style={[
+              styles.statusPill,
+              isDelivered ? styles.pillDelivered : styles.pillPending,
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusPillText,
+                isDelivered ? styles.textDelivered : styles.textPending,
+              ]}
+            >
+              {isDelivered ? 'DELIVERED' : 'PENDING'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.addressText}>{item.address}</Text>
+
+        <View style={styles.cardFooter}>
+          <View style={styles.distanceContainer}>
+            {item.distance_from_previous_km !== null &&
+            item.distance_from_previous_km !== undefined ? (
+              <Text style={styles.distanceText}>
+                +{item.distance_from_previous_km} km leg ({item.total_distance_km} km total)
+              </Text>
             ) : (
-              <Text style={styles.indexText}>{item.id}</Text>
+              <Text style={styles.coordsText}>
+                {item.lat.toFixed(4)}, {item.lon.toFixed(4)}
+              </Text>
             )}
           </View>
 
-          <View style={styles.headerDetails}>
-            <View style={styles.titleRow}>
-              <MaterialCommunityIcons
-                name={isDelivered ? "package-variant-closed-check" : "package-variant-closed"}
-                size={16}
-                color={isDelivered ? "#4ade80" : "#38bdf8"}
-              />
-              <Text style={styles.packageIdText}>{item.packageId}</Text>
-              <View style={[styles.badge, isDelivered ? styles.badgeDelivered : styles.badgePending]}>
-                <Text style={[styles.badgeText, isDelivered ? styles.badgeTextDelivered : styles.badgeTextPending]}>
-                  {item.status}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.addressText}>{item.address}</Text>
-            <View style={styles.coordsRow}>
-              <MaterialCommunityIcons name="map-marker-outline" size={13} color="#64748b" />
-              <Text style={styles.coordsText}>{item.lat.toFixed(4)}, {item.lon.toFixed(4)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.cardActionContainer}>
-            {isDelivered ? (
-              <TouchableOpacity
-                style={styles.photoViewButton}
-                onPress={() => navigation.navigate("Proofs")}
-                activeOpacity={0.7}
-              >
-                <MaterialCommunityIcons name="image-outline" size={18} color="#38bdf8" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.scanButton}
-                onPress={() => navigation.navigate("Scanner", { packageId: item.packageId })}
-                activeOpacity={0.7}
-              >
-                <MaterialCommunityIcons name="barcode-scan" size={16} color="#ffffff" />
-                <Text style={styles.scanButtonText}>Scan</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {!isDelivered && (
+            <TouchableOpacity
+              style={styles.deliverButton}
+              onPress={() =>
+                navigation.navigate('Scanner', { packageId: item.id })
+              }
+            >
+              <Text style={styles.deliverButtonText}>Deliver Stop</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Route Manifest</Text>
-            <Text style={styles.headerSubtitle}>Driver D001 • {pendingCount} stops remaining</Text>
-          </View>
-          <TouchableOpacity onPress={onRefresh} style={styles.refreshIconButton} activeOpacity={0.7}>
-            <MaterialCommunityIcons name="refresh" size={22} color="#38bdf8" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.filterRow}>
-          <TouchableOpacity
-            style={[styles.filterPill, filter === "ALL" && styles.filterPillActive]}
-            onPress={() => setFilter("ALL")}
-          >
-            <Text style={[styles.filterText, filter === "ALL" && styles.filterTextActive]}>
-              All ({stops.length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterPill, filter === "PENDING" && styles.filterPillActive]}
-            onPress={() => setFilter("PENDING")}
-          >
-            <Text style={[styles.filterText, filter === "PENDING" && styles.filterTextActive]}>
-              Pending ({pendingCount})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterPill, filter === "DELIVERED" && styles.filterPillActive]}
-            onPress={() => setFilter("DELIVERED")}
-          >
-            <Text style={[styles.filterText, filter === "DELIVERED" && styles.filterTextActive]}>
-              Delivered ({deliveredCount})
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {loading && !refreshing ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color="#38bdf8" />
-          </View>
-        ) : (
-          <FlatList
-            data={filteredStops}
-            keyExtractor={(item) => item.id}
-            renderItem={renderStopItem}
-            contentContainerStyle={styles.listContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
-            }
-          />
-        )}
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+        <ActivityIndicator size="large" color="#0284c7" />
+        <Text style={styles.loadingText}>Sequencing route stops...</Text>
       </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f172a" translucent={false} />
+      
+      {/* Top Header Container with Safe Notch Inset */}
+      <View style={styles.headerContainer}>
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.screenTitle}>Route Manifest</Text>
+            <Text style={styles.driverSubtext}>Driver D001 • {pendingCount} stops remaining</Text>
+          </View>
+        </View>
+
+        {/* Telemetry Status Bar */}
+        <View style={styles.telemetryBar}>
+          <View style={styles.telemetryStatusLeft}>
+            <View style={[styles.statusDot, isOptimized ? styles.dotActive : styles.dotInactive]} />
+            <Text style={styles.telemetryStatusText}>{gpsStatus}</Text>
+          </View>
+          {totalKm !== null && totalKm !== undefined && (
+            <Text style={styles.totalDistanceText}>{totalKm} km estimated</Text>
+          )}
+        </View>
+      </View>
+
+      {/* Filter Tabs */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'ALL' && styles.filterTabActive]}
+          onPress={() => setFilter('ALL')}
+        >
+          <Text
+            style={[styles.filterTabText, filter === 'ALL' && styles.filterTabTextActive]}
+          >
+            All ({stops.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'PENDING' && styles.filterTabActive]}
+          onPress={() => setFilter('PENDING')}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === 'PENDING' && styles.filterTabTextActive,
+            ]}
+          >
+            Pending ({pendingCount})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterTab, filter === 'DELIVERED' && styles.filterTabActive]}
+          onPress={() => setFilter('DELIVERED')}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              filter === 'DELIVERED' && styles.filterTabTextActive,
+            ]}
+          >
+            Delivered ({deliveredCount})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Manifest List */}
+      <FlatList
+        data={filteredStops}
+        keyExtractor={(item) => item.id}
+        renderItem={renderStopItem}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#0284c7"
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No stops matching filter.</Text>
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  safeContainer: {
     flex: 1,
-    backgroundColor: "#0f172a",
+    backgroundColor: '#0f172a',
+    // Platform-specific top inset avoids status bar overlap
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 8,
   },
-  container: {
+  centerContainer: {
     flex: 1,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1e293b",
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#f8fafc",
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#94a3b8",
-    marginTop: 2,
-  },
-  refreshIconButton: {
-    padding: 6,
-  },
-  filterRow: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: "#1e293b",
-    borderWidth: 1,
-    borderColor: "#334155",
-  },
-  filterPillActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#38bdf8",
-  },
-  filterText: {
-    fontSize: 12,
-    color: "#94a3b8",
-    fontWeight: "600",
-  },
-  filterTextActive: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
-  listContent: {
-    padding: 16,
-    gap: 12,
-  },
-  card: {
-    backgroundColor: "#1e293b",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#334155",
-  },
-  cardDelivered: {
-    borderColor: "rgba(74, 222, 128, 0.3)",
-    backgroundColor: "rgba(30, 41, 59, 0.7)",
-  },
-  cardHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  indexCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#2563eb",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  indexCircleDelivered: {
-    backgroundColor: "#16a34a",
-  },
-  indexText: {
-    color: "#ffffff",
+  loadingText: {
+    marginTop: 12,
+    color: '#94a3b8',
     fontSize: 14,
-    fontWeight: "700",
   },
-  headerDetails: {
-    flex: 1,
-    gap: 3,
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 10,
   },
   titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  packageIdText: {
-    color: "#f8fafc",
-    fontSize: 14,
-    fontWeight: "700",
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#f8fafc',
+    letterSpacing: -0.5,
   },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: "auto",
+  driverSubtext: {
+    fontSize: 13,
+    color: '#94a3b8',
+    marginTop: 2,
   },
-  badgePending: {
-    backgroundColor: "rgba(251, 191, 36, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(251, 191, 36, 0.3)",
-  },
-  badgeDelivered: {
-    backgroundColor: "rgba(74, 222, 128, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(74, 222, 128, 0.3)",
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  badgeTextPending: {
-    color: "#fbbf24",
-  },
-  badgeTextDelivered: {
-    color: "#4ade80",
-  },
-  addressText: {
-    color: "#cbd5e1",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  coordsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  coordsText: {
-    color: "#64748b",
-    fontSize: 11,
-  },
-  cardActionContainer: {
-    marginLeft: 4,
-  },
-  scanButton: {
-    backgroundColor: "#16a34a",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  telemetryBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-  },
-  scanButtonText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  photoViewButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: "rgba(56, 189, 248, 0.1)",
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.25)",
-    alignItems: "center",
-    justifyContent: "center",
+    borderColor: '#334155',
   },
-  centered: {
+  telemetryStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotActive: {
+    backgroundColor: '#22c55e',
+  },
+  dotInactive: {
+    backgroundColor: '#f59e0b',
+  },
+  telemetryStatusText: {
+    fontSize: 12,
+    color: '#38bdf8',
+    fontWeight: '600',
+  },
+  totalDistanceText: {
+    fontSize: 12,
+    color: '#22c55e',
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    gap: 8,
+  },
+  filterTab: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  filterTabActive: {
+    backgroundColor: '#0284c7',
+    borderColor: '#0284c7',
+  },
+  filterTabText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  filterTabTextActive: {
+    color: '#ffffff',
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  stopCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  deliveredCard: {
+    opacity: 0.6,
+    borderColor: '#1e293b',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  sequenceBadge: {
+    backgroundColor: '#0284c7',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  sequenceText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  packageIdText: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '700',
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  pillPending: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+  },
+  pillDelivered: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  textPending: {
+    color: '#f59e0b',
+  },
+  textDelivered: {
+    color: '#22c55e',
+  },
+  addressText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  distanceContainer: {
+    flex: 1,
+  },
+  distanceText: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: '600',
+  },
+  coordsText: {
+    color: '#64748b',
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  deliverButton: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  deliverButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    paddingTop: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#64748b',
+    fontSize: 14,
   },
 });

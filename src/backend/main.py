@@ -1,11 +1,12 @@
 import csv
 import io
 import json
+import math
 import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 from fastapi import (
     FastAPI,
@@ -31,8 +32,8 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title="Delivery Intelligence Platform API",
-    version="1.0.0",
-    description="Backend routing, proof-of-delivery logging, and telemetry ingestion.",
+    version="1.1.0",
+    description="Backend routing, proof-of-delivery logging, telemetry ingestion, and route optimization.",
 )
 
 # Enable CORS for Metro, emulator, and web environments
@@ -80,27 +81,104 @@ def init_db():
 init_db()
 
 
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Computes great-circle distance between two points in kilometers.
+    """
+    r = 6371.0  # Earth's radius in km
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
+
+
+def optimize_stops(origin_lat: float, origin_lon: float, stops: List[Dict]) -> List[Dict]:
+    """
+    Greedy nearest-neighbor TSP sort starting from driver's origin coordinates.
+    """
+    unvisited = [dict(s) for s in stops]
+    optimized = []
+    curr_lat, curr_lon = origin_lat, origin_lon
+    accumulated_km = 0.0
+
+    while unvisited:
+        nearest_idx = min(
+            range(len(unvisited)),
+            key=lambda i: haversine_distance(
+                curr_lat, curr_lon, unvisited[i]["lat"], unvisited[i]["lon"]
+            ),
+        )
+        nearest_stop = unvisited.pop(nearest_idx)
+        leg_distance = haversine_distance(
+            curr_lat, curr_lon, nearest_stop["lat"], nearest_stop["lon"]
+        )
+        accumulated_km += leg_distance
+
+        nearest_stop["sequence"] = len(optimized) + 1
+        nearest_stop["distance_from_previous_km"] = round(leg_distance, 2)
+        nearest_stop["total_distance_km"] = round(accumulated_km, 2)
+
+        optimized.append(nearest_stop)
+        curr_lat, curr_lon = nearest_stop["lat"], nearest_stop["lon"]
+
+    return optimized
+
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 
 @app.get("/routing/sample-route/{driver_id}")
-def get_sample_route(driver_id: str):
+def get_sample_route(
+    driver_id: str,
+    origin_lat: Optional[float] = Query(None, description="Driver starting latitude"),
+    origin_lon: Optional[float] = Query(None, description="Driver starting longitude"),
+    optimize: bool = Query(True, description="Enable nearest-neighbor route sequencing"),
+):
     """
-    Returns an optimized delivery sequence for a driver.
+    Returns delivery sequence for a driver. Reorders stops by distance when coordinates are supplied.
     """
-    stops = [
+    raw_stops = [
         {"id": "pkg-001", "address": "100 N State St, Chicago, IL", "lat": 41.8837, "lon": -87.6278},
         {"id": "pkg-002", "address": "231 S Michigan Ave, Chicago, IL", "lat": 41.8789, "lon": -87.6247},
         {"id": "pkg-003", "address": "500 W Madison St, Chicago, IL", "lat": 41.8819, "lon": -87.6398},
         {"id": "pkg-004", "address": "400 N Michigan Ave, Chicago, IL", "lat": 41.8900, "lon": -87.6240},
         {"id": "pkg-005", "address": "222 W Merchandise Mart Plaza", "lat": 41.8885, "lon": -87.6354},
     ]
+
+    # If coordinates are provided and optimization requested, calculate nearest-neighbor route
+    if optimize and origin_lat is not None and origin_lon is not None:
+        ordered_stops = optimize_stops(origin_lat, origin_lon, raw_stops)
+        total_route_km = (
+            ordered_stops[-1]["total_distance_km"] if ordered_stops else 0.0
+        )
+        route_optimized = True
+    else:
+        ordered_stops = [
+            {**stop, "sequence": idx + 1, "distance_from_previous_km": None}
+            for idx, stop in enumerate(raw_stops)
+        ]
+        total_route_km = None
+        route_optimized = False
+
     return {
         "driver_id": driver_id,
-        "total_stops": len(stops),
-        "ordered_stops": stops,
+        "total_stops": len(ordered_stops),
+        "optimized": route_optimized,
+        "origin": {
+            "lat": origin_lat,
+            "lon": origin_lon,
+        } if origin_lat is not None and origin_lon is not None else None,
+        "total_distance_km": total_route_km,
+        "ordered_stops": ordered_stops,
     }
 
 
@@ -300,7 +378,6 @@ def reset_database():
     conn.commit()
     conn.close()
 
-    # Clean up stored upload images
     deleted_files = 0
     for file_path in UPLOADS_DIR.glob("*.*"):
         try:
