@@ -30,6 +30,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
   // Offline queue state
   const [offlineCount, setOfflineCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatusText, setSyncStatusText] = useState(null);
 
   const fetchProofsAndQueue = useCallback(async () => {
     try {
@@ -66,22 +67,28 @@ export default function DeliveryHistoryScreen({ navigation }) {
   const handleSyncQueue = async () => {
     if (offlineCount === 0 || isSyncing) return;
     setIsSyncing(true);
+    setSyncStatusText(`Syncing 0/${offlineCount}...`);
+
     try {
-      const { syncedCount, remainingCount } = await syncOfflineQueue();
+      const { syncedCount, remainingCount } = await syncOfflineQueue((done, total) => {
+        setSyncStatusText(`Syncing ${done}/${total}...`);
+      });
+
       await fetchProofsAndQueue();
 
       if (remainingCount === 0) {
         Alert.alert('Sync Complete', `Successfully synced ${syncedCount} queued delivery records.`);
       } else {
         Alert.alert(
-          'Partial Sync',
-          `Synced ${syncedCount} records. ${remainingCount} remain queued (check network).`
+          'Sync Paused',
+          `Synced ${syncedCount} records. ${remainingCount} remain queued (network timeout or connection dropped).`
         );
       }
     } catch (err) {
       Alert.alert('Sync Error', err.message || 'Could not reach server to sync queue.');
     } finally {
       setIsSyncing(false);
+      setSyncStatusText(null);
     }
   };
 
@@ -309,13 +316,13 @@ export default function DeliveryHistoryScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Offline Queue Indicator Banner */}
+        {/* Dynamic Offline Queue Banner */}
         {offlineCount > 0 && (
           <View style={styles.offlineBanner}>
             <View style={styles.offlineTextWrapper}>
               <View style={styles.amberDot} />
               <Text style={styles.offlineBannerText}>
-                {offlineCount} {offlineCount === 1 ? 'record' : 'records'} pending sync
+                {syncStatusText || `${offlineCount} ${offlineCount === 1 ? 'record' : 'records'} pending sync`}
               </Text>
             </View>
             <TouchableOpacity
@@ -324,7 +331,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
               disabled={isSyncing}
             >
               {isSyncing ? (
-                <ActivityIndicator size="small" color="#ffffff" />
+                <ActivityIndicator size="small" color="#0f172a" />
               ) : (
                 <Text style={styles.syncButtonText}>Sync Now</Text>
               )}
@@ -457,9 +464,11 @@ const styles = StyleSheet.create({
   },
   syncButton: {
     backgroundColor: '#f59e0b',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
     borderRadius: 6,
+    minWidth: 70,
+    alignItems: 'center',
   },
   syncButtonText: {
     color: '#0f172a',

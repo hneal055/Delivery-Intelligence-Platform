@@ -24,6 +24,9 @@ export default function ScannerScreen({ route, navigation }) {
   const [scannedPackageId, setScannedPackageId] = useState(initialPackageId || null);
   const [isScanning, setIsScanning] = useState(!initialPackageId);
 
+  // Quick fallback package selector
+  const [pendingPackages, setPendingPackages] = useState(['pkg-002', 'pkg-003', 'pkg-004', 'pkg-005']);
+
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState(null);
   const cameraRef = useRef(null);
@@ -34,6 +37,34 @@ export default function ScannerScreen({ route, navigation }) {
   const [currentCoords, setCurrentCoords] = useState(null);
   const [locationStatus, setLocationStatus] = useState('Acquiring GPS fix...');
   const [submitting, setSubmitting] = useState(false);
+
+  // If opened directly without params, load pending stops from route
+  useEffect(() => {
+    async function loadPendingStops() {
+      try {
+        const [routeData, proofs] = await Promise.all([
+          apiClient.getSampleRoute('D001').catch(() => null),
+          apiClient.getRecentProofs(50).catch(() => []),
+        ]);
+
+        if (routeData && routeData.ordered_stops) {
+          const deliveredSet = new Set(proofs.map((p) => p.package_id));
+          const pending = routeData.ordered_stops
+            .filter((s) => !deliveredSet.has(s.id))
+            .map((s) => s.id);
+
+          if (pending.length > 0) {
+            setPendingPackages(pending);
+            if (!initialPackageId && !scannedPackageId) {
+              setScannedPackageId(pending[0]); // Auto-select first pending stop
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    loadPendingStops();
+  }, [initialPackageId]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -103,7 +134,7 @@ export default function ScannerScreen({ route, navigation }) {
 
   const handleConfirmDelivery = async () => {
     if (!scannedPackageId) {
-      Alert.alert('Missing Package ID', 'Please scan a barcode or specify a package.');
+      Alert.alert('Missing Package ID', 'Please select or scan a package first.');
       return;
     }
 
@@ -185,7 +216,6 @@ export default function ScannerScreen({ route, navigation }) {
             text: 'OK',
             onPress: () => {
               setPhotoUri(null);
-              setScannedPackageId(null);
               clearSignature();
               navigation.navigate('HomeTab');
             },
@@ -206,7 +236,6 @@ export default function ScannerScreen({ route, navigation }) {
               text: 'OK',
               onPress: () => {
                 setPhotoUri(null);
-                setScannedPackageId(null);
                 clearSignature();
                 navigation.navigate('HomeTab');
               },
@@ -248,8 +277,29 @@ export default function ScannerScreen({ route, navigation }) {
         <View style={styles.telemetryRow}>
           <Text style={styles.telemetryLabel}>Target Stop:</Text>
           <Text style={styles.telemetryValue}>
-            {scannedPackageId ? scannedPackageId : 'Scan Barcode Below'}
+            {scannedPackageId ? scannedPackageId : 'Select Stop Below'}
           </Text>
+        </View>
+
+        {/* Quick package selection chips if driver opens scanner directly */}
+        <View style={styles.chipRow}>
+          <Text style={styles.chipLabel}>Select Stop:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
+            {pendingPackages.map((pkg) => {
+              const isSelected = scannedPackageId === pkg;
+              return (
+                <TouchableOpacity
+                  key={pkg}
+                  style={[styles.pkgChip, isSelected && styles.pkgChipSelected]}
+                  onPress={() => setScannedPackageId(pkg)}
+                >
+                  <Text style={[styles.pkgChipText, isSelected && styles.pkgChipTextSelected]}>
+                    {pkg}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
 
         <View style={styles.telemetryRow}>
@@ -338,7 +388,7 @@ export default function ScannerScreen({ route, navigation }) {
 
         {isScanning ? (
           <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsScanning(false)}>
-            <Text style={styles.secondaryButtonText}>Cancel Scanner</Text>
+            <Text style={styles.secondaryButtonText}>Hide Barcode Reticle</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.secondaryButton} onPress={() => setIsScanning(true)}>
@@ -347,14 +397,19 @@ export default function ScannerScreen({ route, navigation }) {
         )}
 
         <TouchableOpacity
-          style={[styles.submitButton, (!scannedPackageId || submitting) && styles.disabledButton]}
+          style={[
+            styles.submitButton,
+            (!scannedPackageId || submitting) && styles.disabledButton,
+          ]}
           onPress={handleConfirmDelivery}
           disabled={!scannedPackageId || submitting}
         >
           {submitting ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.submitButtonText}>Confirm & Log Delivery</Text>
+            <Text style={styles.submitButtonText}>
+              {scannedPackageId ? `Confirm & Log ${scannedPackageId}` : 'Select Stop to Deliver'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -409,6 +464,43 @@ const styles = StyleSheet.create({
   telemetryValue: {
     color: '#f1f5f9',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  chipRow: {
+    marginTop: 8,
+    marginBottom: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+  },
+  chipLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  chipsContainer: {
+    gap: 8,
+  },
+  pkgChip: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  pkgChipSelected: {
+    backgroundColor: '#0284c7',
+    borderColor: '#38bdf8',
+  },
+  pkgChipText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pkgChipTextSelected: {
+    color: '#ffffff',
     fontWeight: '700',
   },
   coordSubtext: {
@@ -551,7 +643,7 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: '#1e293b',
-    opacity: 0.6,
+    opacity: 0.5,
   },
   primaryButton: {
     backgroundColor: '#0284c7',
