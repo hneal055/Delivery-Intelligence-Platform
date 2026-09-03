@@ -286,3 +286,31 @@ def export_delivery_proofs(
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.post("/debug/reset-db")
+def reset_database():
+    """
+    Clears all delivery proofs from SQLite and removes uploaded proof images.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM delivery_proofs")
+    cursor.execute("DELETE FROM sqlite_sequence WHERE name='delivery_proofs'")
+    conn.commit()
+    conn.close()
+
+    # Clean up stored upload images
+    deleted_files = 0
+    for file_path in UPLOADS_DIR.glob("*.*"):
+        try:
+            file_path.unlink()
+            deleted_files += 1
+        except OSError:
+            pass
+
+    return {
+        "status": "success",
+        "message": "All proofs cleared and SQLite autoincrement sequence reset.",
+        "deleted_photos": deleted_files,
+    }
