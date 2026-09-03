@@ -4,12 +4,10 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  Platform,
   ScrollView,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import client from "../api/client";
 
@@ -27,7 +25,6 @@ export default function HomeScreen({ navigation }) {
     tier: "Priority",
   });
 
-  // Pull latest proof count to sync metrics
   const refreshHomeData = useCallback(async () => {
     try {
       const res = await client.get("/delivery/recent-proofs", {
@@ -56,7 +53,7 @@ export default function HomeScreen({ navigation }) {
         }
       }
     } catch (_) {
-      // Fallback to local state if backend is offline
+      // Offline fallback retaining previous state
     } finally {
       setRefreshing(false);
     }
@@ -78,7 +75,6 @@ export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Top Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.headerPortal}>DRIVER PORTAL</Text>
@@ -95,7 +91,6 @@ export default function HomeScreen({ navigation }) {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38bdf8" />
           }
         >
-          {/* Stat Summary Cards */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <MaterialCommunityIcons name="truck-delivery-outline" size={22} color="#38bdf8" />
@@ -116,7 +111,6 @@ export default function HomeScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Quick Action Navigation Cards */}
           <TouchableOpacity
             style={styles.actionCardPrimary}
             onPress={() =>
@@ -155,7 +149,6 @@ export default function HomeScreen({ navigation }) {
             <MaterialCommunityIcons name="chevron-right" size={22} color="#64748b" />
           </TouchableOpacity>
 
-          {/* Up Next on Route */}
           <View style={styles.upNextSection}>
             <Text style={styles.sectionHeader}>Up Next on Route</Text>
 
@@ -202,14 +195,13 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 10 : 10,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#1e293b",
   },

@@ -1,62 +1,25 @@
 {
-    "expo":  {
-                 "name":  "Delivery Intelligence",
-                 "slug":  "delivery-intelligence-mobile",
-                 "version":  "1.0.0",
-                 "orientation":  "portrait",
-                 "icon":  "./assets/icon.png",
-                 "userInterfaceStyle":  "dark",
-                 "splash":  {
-                                "image":  "./assets/splash.png",
-                                "resizeMode":  "contain",
-                                "backgroundColor":  "#1e293b"
-                            },
-                 "ios":  {
-                             "supportsTablet":  true,
-                             "bundleIdentifier":  "com.deliveryintelligence.mobile",
-                             "infoPlist":  {
-                                               "NSCameraUsageDescription":  "This app uses the camera to scan package barcodes and capture proof of delivery photos.",
-                                               "NSLocationWhenInUseUsageDescription":  "This app requires location access to track driver route telemetry and verify geofence arrivals."
-                                           }
-                         },
-                 "android":  {
-                                 "adaptiveIcon":  {
-                                                      "foregroundImage":  "./assets/adaptive-icon.png",
-                                                      "backgroundColor":  "#1e293b"
-                                                  },
-                                 "package":  "com.deliveryintelligence.mobile",
-                                 "permissions":  [
-                                                     "CAMERA",
-                                                     "ACCESS_FINE_LOCATION",
-                                                     "ACCESS_COARSE_LOCATION",
-                                                     "RECEIVE_BOOT_COMPLETED",
-                                                     "VIBRATE",
-                                                     "android.permission.CAMERA",
-                                                     "android.permission.RECORD_AUDIO"
-                                                 ]
-                             },
-                 "plugins":  [
-                                 [
-                                     "expo-camera",
-                                     {
-                                         "cameraPermission":  "Allow $(PRODUCT_NAME) to access camera for barcode scanning and delivery photo capture."
-                                     }
-                                 ],
-                                 [
-                                     "expo-notifications",
-                                     {
-                                         "icon":  "./assets/icon.png",
-                                         "color":  "#2563eb"
-                                     }
-                                 ],
-                                 "expo-sqlite"
-                             ],
-                 "extra":  {
-                               "eas":  {
-                                           "projectId":  "d4face41-fbd2-473a-9f6f-0b496a15e20c"
-                                       }
-                           },
-                 "owner":  "hneal1038",
-                 "scheme":  "deliveryintelligence"
-             }
+  "expo": {
+    "name": "Delivery Intelligence Platform",
+    "slug": "delivery-intelligence-platform",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.deliveryintelligence.platform",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app requires camera access to photograph proof of delivery and scan barcodes.",
+        "NSPhotoLibraryUsageDescription": "This app requires photo library access to upload proof of delivery."
+      }
+    },
+    "android": {
+      "package": "com.deliveryintelligence.platform",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    }
+  }
 }

@@ -5,14 +5,12 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  Platform,
   Alert,
   ActivityIndicator,
   Image,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import client from "../api/client";
@@ -24,14 +22,12 @@ export default function ScannerScreen({ route, navigation }) {
   const [photoUri, setPhotoUri] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync packageId whenever route params change
   useEffect(() => {
     if (route?.params?.packageId) {
       setPackageId(route.params.packageId);
     }
   }, [route?.params?.packageId]);
 
-  // Re-sync packageId whenever screen gains focus from Manifest or deep link
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       if (route?.params?.packageId) {
@@ -41,7 +37,6 @@ export default function ScannerScreen({ route, navigation }) {
     return unsubscribe;
   }, [navigation, route?.params?.packageId]);
 
-  // Request camera permissions on mount
   useEffect(() => {
     (async () => {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -92,14 +87,10 @@ export default function ScannerScreen({ route, navigation }) {
   };
 
   const handleConfirmDelivery = async () => {
-    // Check input state first; fall back to route parameter
     const cleanPackageId = (packageId || route?.params?.packageId || "").trim();
 
     if (!cleanPackageId) {
-      Alert.alert(
-        "Missing Package ID",
-        "Please scan or enter a Package ID before confirming delivery."
-      );
+      Alert.alert("Missing Package ID", "Please scan or enter a Package ID before confirming delivery.");
       return;
     }
 
@@ -211,13 +202,10 @@ export default function ScannerScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.headerTitle}>Delivery Scanner</Text>
-            <Text style={styles.headerSubtitle}>
-              Driver {driverId} • Proof Verification
-            </Text>
+            <Text style={styles.headerSubtitle}>Driver {driverId} • Proof Verification</Text>
           </View>
           {activePackageDisplay ? (
             <View style={styles.linkedBadge}>
@@ -228,7 +216,6 @@ export default function ScannerScreen({ route, navigation }) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {/* Target Package Input */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionLabel}>TARGET PACKAGE</Text>
             <View style={styles.inputContainer}>
@@ -253,7 +240,6 @@ export default function ScannerScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Photo Capture Section */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionLabel}>PROOF OF DELIVERY PHOTO</Text>
 
@@ -291,7 +277,6 @@ export default function ScannerScreen({ route, navigation }) {
             )}
           </View>
 
-          {/* Metadata Section */}
           <View style={styles.metaCard}>
             <View style={styles.metaRow}>
               <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#94a3b8" />
@@ -303,7 +288,6 @@ export default function ScannerScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Confirm Delivery Button */}
           <TouchableOpacity
             style={[styles.confirmButton, isSubmitting && styles.disabledButton]}
             onPress={handleConfirmDelivery}
@@ -332,14 +316,13 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 10 : 10,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#1e293b",
   },
