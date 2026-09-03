@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  PanResponder,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -27,6 +29,10 @@ export default function ScannerScreen({ route, navigation }) {
   const [photoUri, setPhotoUri] = useState(null);
   const cameraRef = useRef(null);
 
+  // Signature State
+  const [paths, setPaths] = useState([]);
+  const [currentPath, setCurrentPath] = useState('');
+
   // GPS Location State
   const [locationPermission, setLocationPermission] = useState(null);
   const [currentCoords, setCurrentCoords] = useState(null);
@@ -34,6 +40,35 @@ export default function ScannerScreen({ route, navigation }) {
 
   // Submission State
   const [submitting, setSubmitting] = useState(false);
+
+  // Signature PanResponder
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        setCurrentPath(`M ${locationX.toFixed(1)} ${locationY.toFixed(1)}`);
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        setCurrentPath((prev) => `${prev} L ${locationX.toFixed(1)} ${locationY.toFixed(1)}`);
+      },
+      onPanResponderRelease: () => {
+        setCurrentPath((prev) => {
+          if (prev) {
+            setPaths((existing) => [...existing, prev]);
+          }
+          return '';
+        });
+      },
+    })
+  ).current;
+
+  const clearSignature = () => {
+    setPaths([]);
+    setCurrentPath('');
+  };
 
   // Request Permissions & Retrieve Position
   useEffect(() => {
@@ -54,7 +89,6 @@ export default function ScannerScreen({ route, navigation }) {
 
         setLocationStatus('Fetching GPS fix...');
 
-        // 1. Check last known position immediately for zero latency
         try {
           const lastKnown = await Location.getLastKnownPositionAsync();
           if (lastKnown && isMounted) {
@@ -67,11 +101,8 @@ export default function ScannerScreen({ route, navigation }) {
               `GPS Ready (±${Math.round(lastKnown.coords.accuracy || 0)}m)`
             );
           }
-        } catch (e) {
-          // Fall through to fresh position query
-        }
+        } catch (e) {}
 
-        // 2. Query fresh position with balanced accuracy
         const fresh = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
@@ -100,14 +131,12 @@ export default function ScannerScreen({ route, navigation }) {
     };
   }, []);
 
-  // Barcode Scan Handler
   const handleBarcodeScanned = ({ data }) => {
     if (!isScanning) return;
     setIsScanning(false);
     setScannedPackageId(data);
   };
 
-  // Capture Photo Proof
   const takePicture = async () => {
     if (cameraRef.current) {
       try {
@@ -122,7 +151,6 @@ export default function ScannerScreen({ route, navigation }) {
     }
   };
 
-  // Submit Proof with Real GPS Coordinates
   const handleConfirmDelivery = async () => {
     if (!scannedPackageId) {
       Alert.alert('Missing Package ID', 'Please scan a barcode or specify a package.');
@@ -131,7 +159,6 @@ export default function ScannerScreen({ route, navigation }) {
 
     setSubmitting(true);
 
-    // Live GPS -> Cached -> Chicago Default Fallback
     let finalLat = 41.8786;
     let finalLon = -87.6403;
 
@@ -145,15 +172,15 @@ export default function ScannerScreen({ route, navigation }) {
           finalLat = quickLoc.coords.latitude;
           finalLon = quickLoc.coords.longitude;
         }
-      } catch (e) {
-        // Fall back to default
-      }
+      } catch (e) {}
     }
 
     const baseUrl =
       apiClient.BASE_URL ||
       apiClient.API_URL ||
       'http://192.168.12.196:8000';
+
+    const signatureData = paths.length > 0 ? paths.join(' ') : null;
 
     try {
       let resultData;
@@ -171,6 +198,7 @@ export default function ScannerScreen({ route, navigation }) {
               driver_id: 'D001',
               dest_lat: String(finalLat),
               dest_lon: String(finalLon),
+              signature_path: signatureData || '',
               status: 'DELIVERED',
             },
           }
@@ -187,6 +215,7 @@ export default function ScannerScreen({ route, navigation }) {
         params.append('driver_id', 'D001');
         params.append('dest_lat', String(finalLat));
         params.append('dest_lon', String(finalLon));
+        if (signatureData) params.append('signature_path', signatureData);
         params.append('status', 'DELIVERED');
 
         const response = await fetch(`${baseUrl}/delivery/confirm`, {
@@ -208,14 +237,17 @@ export default function ScannerScreen({ route, navigation }) {
       if (resultData && (resultData.success || resultData.record_id)) {
         Alert.alert(
           'Delivery Verified',
-          `Package ${scannedPackageId} confirmed!\nGPS: ${finalLat.toFixed(5)}, ${finalLon.toFixed(5)}`,
+          `Package ${scannedPackageId} confirmed!\nGPS: ${finalLat.toFixed(5)}, ${finalLon.toFixed(5)}${
+            signatureData ? '\nCustomer Signature Captured' : ''
+          }`,
           [
             {
               text: 'OK',
               onPress: () => {
                 setPhotoUri(null);
                 setScannedPackageId(null);
-                navigation.navigate('Home');
+                clearSignature();
+                navigation.navigate('HomeTab');
               },
             },
           ]
@@ -322,6 +354,32 @@ export default function ScannerScreen({ route, navigation }) {
         )}
       </View>
 
+      {/* Customer Signature Capture Pad */}
+      <View style={styles.signatureCard}>
+        <View style={styles.signatureHeader}>
+          <Text style={styles.signatureTitle}>Customer Signature (Optional)</Text>
+          {paths.length > 0 && (
+            <TouchableOpacity onPress={clearSignature}>
+              <Text style={styles.clearText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.canvasContainer} {...panResponder.panHandlers}>
+          <Svg style={StyleSheet.absoluteFill}>
+            {paths.map((p, i) => (
+              <Path key={i} d={p} stroke="#38bdf8" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            ))}
+            {currentPath ? (
+              <Path d={currentPath} stroke="#38bdf8" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            ) : null}
+          </Svg>
+          {paths.length === 0 && !currentPath && (
+            <Text style={styles.signaturePlaceholder}>Sign with finger above</Text>
+          )}
+        </View>
+      </View>
+
       {/* Action Controls */}
       <View style={styles.actionContainer}>
         {!photoUri && (
@@ -370,6 +428,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: '#0f172a',
     padding: 16,
+    paddingBottom: 40,
   },
   centerContainer: {
     flex: 1,
@@ -428,7 +487,7 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     width: '100%',
-    height: 340,
+    height: 280,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#000',
@@ -446,8 +505,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scannerTarget: {
-    width: 210,
-    height: 210,
+    width: 200,
+    height: 200,
     borderWidth: 2,
     borderColor: '#38bdf8',
     borderRadius: 12,
@@ -482,6 +541,45 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 13,
     fontWeight: '600',
+  },
+  signatureCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 16,
+  },
+  signatureHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  signatureTitle: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  clearText: {
+    color: '#f87171',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  canvasContainer: {
+    height: 120,
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  signaturePlaceholder: {
+    color: '#475569',
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   actionContainer: {
     gap: 10,

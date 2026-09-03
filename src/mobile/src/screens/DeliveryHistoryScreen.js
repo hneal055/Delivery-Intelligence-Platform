@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import { getRecentProofs, resetDatabase, BASE_URL } from '../api/client';
 
 export default function DeliveryHistoryScreen({ navigation }) {
@@ -38,6 +39,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
     fetchProofs();
   }, [fetchProofs]);
 
+  // Refresh proof logs whenever the screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       fetchProofs();
@@ -53,7 +55,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
   const handleReset = () => {
     Alert.alert(
       'Reset Proof Database',
-      'This will delete all proof records and photo storage on the backend. Continue?',
+      'This will delete all delivery proof records and clear photo storage on the backend. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -64,7 +66,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
               setResetting(true);
               await resetDatabase();
               await fetchProofs();
-              Alert.alert('Success', 'Database and stored photos cleared.');
+              Alert.alert('Success', 'Database and stored delivery proofs cleared.');
             } catch (err) {
               Alert.alert('Reset Failed', err.message || 'Could not reset backend state.');
             } finally {
@@ -91,6 +93,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
 
     return (
       <View style={styles.proofCard}>
+        {/* Card Header */}
         <View style={styles.cardHeader}>
           <View style={styles.headerLeft}>
             <Text style={styles.packageIdText}>{item.package_id}</Text>
@@ -101,6 +104,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Content Section: Photo & Metadata */}
         <View style={styles.cardBody}>
           {photoFullUrl ? (
             <Image
@@ -144,6 +148,28 @@ export default function DeliveryHistoryScreen({ navigation }) {
             </View>
           </View>
         </View>
+
+        {/* Customer Signature Vector Preview */}
+        {item.signature_path ? (
+          <View style={styles.signaturePreviewWrapper}>
+            <Text style={styles.signaturePreviewLabel}>Customer Signature:</Text>
+            <View style={styles.signatureMiniCanvas}>
+              <Svg style={StyleSheet.absoluteFill} viewBox="0 0 320 100">
+                {item.signature_path.split(/(?=M)/).map((segment, idx) => (
+                  <Path
+                    key={idx}
+                    d={segment.trim()}
+                    stroke="#38bdf8"
+                    strokeWidth={2.5}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ))}
+              </Svg>
+            </View>
+          </View>
+        ) : null}
       </View>
     );
   };
@@ -158,19 +184,26 @@ export default function DeliveryHistoryScreen({ navigation }) {
     );
   }
 
-  return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+  // Generous top padding calculation giving explicit clearance below punch-hole and status bar
+  const calculatedTopPadding = Math.max(
+    insets.top + 18,
+    Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 24 : 32
+  );
 
-      {/* Header */}
+  return (
+    <View style={[styles.container, { paddingTop: calculatedTopPadding }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f172a" translucent={false} />
+
+      {/* Header Container */}
       <View style={styles.headerContainer}>
         <View style={styles.titleRow}>
-          <View>
-            <Text style={styles.screenTitle}>Proof History</Text>
-            <Text style={styles.subtext}>
-              {proofs.length} {proofs.length === 1 ? 'record' : 'records'} logged to SQLite
-            </Text>
-          </View>
+          <Text style={styles.screenTitle}>Proof History</Text>
+        </View>
+
+        <View style={styles.subHeaderRow}>
+          <Text style={styles.subtext}>
+            {proofs.length} {proofs.length === 1 ? 'record' : 'records'} logged to SQLite
+          </Text>
           <TouchableOpacity
             style={[styles.resetButton, resetting && styles.resetButtonDisabled]}
             onPress={handleReset}
@@ -185,12 +218,12 @@ export default function DeliveryHistoryScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Proof List */}
+      {/* Proofs Feed */}
       <FlatList
         data={proofs}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderProofItem}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 28 }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -230,15 +263,18 @@ const styles = StyleSheet.create({
   headerContainer: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 16,
   },
   titleRow: {
+    marginBottom: 8,
+  },
+  subHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   screenTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
     color: '#f8fafc',
     letterSpacing: -0.5,
@@ -246,12 +282,11 @@ const styles = StyleSheet.create({
   subtext: {
     fontSize: 13,
     color: '#94a3b8',
-    marginTop: 2,
   },
   resetButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: '#7f1d1d',
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -261,7 +296,7 @@ const styles = StyleSheet.create({
   },
   resetButtonText: {
     color: '#f87171',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   listContent: {
@@ -362,6 +397,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     fontWeight: '600',
+  },
+  signaturePreviewWrapper: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+  },
+  signaturePreviewLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  signatureMiniCanvas: {
+    height: 50,
+    backgroundColor: '#0f172a',
+    borderRadius: 6,
+    overflow: 'hidden',
   },
   emptyContainer: {
     paddingTop: 60,
