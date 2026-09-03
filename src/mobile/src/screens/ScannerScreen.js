@@ -13,35 +13,27 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as apiClient from '../api/client';
+import { getEffectiveLocation } from '../utils/location';
 
 export default function ScannerScreen({ route, navigation }) {
   const { packageId: initialPackageId } = route.params || {};
 
-  // Package & Scanning State
   const [scannedPackageId, setScannedPackageId] = useState(initialPackageId || null);
   const [isScanning, setIsScanning] = useState(!initialPackageId);
 
-  // Camera & Photo State
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState(null);
   const cameraRef = useRef(null);
 
-  // Signature State
   const [paths, setPaths] = useState([]);
   const [currentPath, setCurrentPath] = useState('');
 
-  // GPS Location State
-  const [locationPermission, setLocationPermission] = useState(null);
   const [currentCoords, setCurrentCoords] = useState(null);
   const [locationStatus, setLocationStatus] = useState('Acquiring GPS fix...');
-
-  // Submission State
   const [submitting, setSubmitting] = useState(false);
 
-  // Signature PanResponder
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -70,61 +62,18 @@ export default function ScannerScreen({ route, navigation }) {
     setCurrentPath('');
   };
 
-  // Request Permissions & Retrieve Position
   useEffect(() => {
     let isMounted = true;
 
-    async function initLocation() {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (!isMounted) return;
-
-        const granted = status === 'granted';
-        setLocationPermission(granted);
-
-        if (!granted) {
-          setLocationStatus('GPS Permission Denied');
-          return;
-        }
-
-        setLocationStatus('Fetching GPS fix...');
-
-        try {
-          const lastKnown = await Location.getLastKnownPositionAsync();
-          if (lastKnown && isMounted) {
-            setCurrentCoords({
-              latitude: lastKnown.coords.latitude,
-              longitude: lastKnown.coords.longitude,
-              accuracy: lastKnown.coords.accuracy,
-            });
-            setLocationStatus(
-              `GPS Ready (±${Math.round(lastKnown.coords.accuracy || 0)}m)`
-            );
-          }
-        } catch (e) {}
-
-        const fresh = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        if (fresh && isMounted) {
-          setCurrentCoords({
-            latitude: fresh.coords.latitude,
-            longitude: fresh.coords.longitude,
-            accuracy: fresh.coords.accuracy,
-          });
-          setLocationStatus(
-            `GPS Ready (±${Math.round(fresh.coords.accuracy || 0)}m)`
-          );
-        }
-      } catch (err) {
-        if (isMounted && !currentCoords) {
-          setLocationStatus('GPS Fix Unavailable');
-        }
+    async function syncLocation() {
+      const { coords, statusText } = await getEffectiveLocation();
+      if (isMounted) {
+        setCurrentCoords(coords);
+        setLocationStatus(statusText);
       }
     }
 
-    initLocation();
+    syncLocation();
 
     return () => {
       isMounted = false;
@@ -159,21 +108,9 @@ export default function ScannerScreen({ route, navigation }) {
 
     setSubmitting(true);
 
-    let finalLat = 41.8786;
-    let finalLon = -87.6403;
-
-    if (currentCoords) {
-      finalLat = currentCoords.latitude;
-      finalLon = currentCoords.longitude;
-    } else if (locationPermission) {
-      try {
-        const quickLoc = await Location.getLastKnownPositionAsync();
-        if (quickLoc) {
-          finalLat = quickLoc.coords.latitude;
-          finalLon = quickLoc.coords.longitude;
-        }
-      } catch (e) {}
-    }
+    const effectiveLoc = await getEffectiveLocation();
+    const finalLat = effectiveLoc.coords ? effectiveLoc.coords.latitude : 41.881837;
+    const finalLon = effectiveLoc.coords ? effectiveLoc.coords.longitude : -87.632420;
 
     const baseUrl =
       apiClient.BASE_URL ||
@@ -303,7 +240,7 @@ export default function ScannerScreen({ route, navigation }) {
           <Text
             style={[
               styles.telemetryValue,
-              locationStatus.includes('Ready')
+              locationStatus.includes('Sim') || locationStatus.includes('Live')
                 ? styles.gpsActive
                 : styles.gpsInactive,
             ]}
@@ -320,7 +257,7 @@ export default function ScannerScreen({ route, navigation }) {
         )}
       </View>
 
-      {/* Camera / Photo Review Section */}
+      {/* Camera / Review Section */}
       <View style={styles.cameraContainer}>
         {photoUri ? (
           <View style={styles.previewWrapper}>

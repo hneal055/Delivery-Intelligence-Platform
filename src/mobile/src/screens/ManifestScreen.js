@@ -7,14 +7,21 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  SafeAreaView,
   StatusBar,
   Platform,
+  Switch,
 } from 'react-native';
-import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSampleRoute, getRecentProofs } from '../api/client';
+import {
+  getEffectiveLocation,
+  isDevMockGpsEnabled,
+  updateDevMockGps,
+  CHICAGO_DEPOT,
+} from '../utils/location';
 
 export default function ManifestScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stops, setStops] = useState([]);
@@ -23,30 +30,21 @@ export default function ManifestScreen({ navigation }) {
   const [isOptimized, setIsOptimized] = useState(false);
   const [totalKm, setTotalKm] = useState(null);
   const [gpsStatus, setGpsStatus] = useState('Acquiring GPS...');
+  const [devMockActive, setDevMockActive] = useState(false);
 
-  const fetchRouteAndProofs = useCallback(async () => {
+  const fetchRouteAndProofs = useCallback(async (overrideCoords = undefined) => {
     try {
-      let coords = null;
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const lastKnown = await Location.getLastKnownPositionAsync();
-          if (lastKnown) {
-            coords = lastKnown.coords;
-          }
+      const mockEnabled = await isDevMockGpsEnabled();
+      setDevMockActive(mockEnabled);
 
-          const fresh = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          if (fresh) {
-            coords = fresh.coords;
-          }
-          setGpsStatus('Live GPS Active');
-        } else {
-          setGpsStatus('Default Sequence (No GPS Permission)');
-        }
-      } catch (locErr) {
-        setGpsStatus('Default Sequence (No GPS Lock)');
+      let coords = null;
+      if (overrideCoords !== undefined) {
+        coords = overrideCoords;
+        setGpsStatus(overrideCoords ? 'Chicago Sim (Dev Mode)' : 'Acquiring GPS...');
+      } else {
+        const effectiveLoc = await getEffectiveLocation();
+        coords = effectiveLoc.coords;
+        setGpsStatus(effectiveLoc.statusText);
       }
 
       // 1. Fetch completed proofs
@@ -76,9 +74,26 @@ export default function ManifestScreen({ navigation }) {
     fetchRouteAndProofs();
   }, [fetchRouteAndProofs]);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchRouteAndProofs();
+    });
+    return unsubscribe;
+  }, [navigation, fetchRouteAndProofs]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchRouteAndProofs();
+  };
+
+  const handleToggleDevMock = async (newValue) => {
+    // Optimistically update the UI switch immediately
+    setDevMockActive(newValue);
+    await updateDevMockGps(newValue);
+
+    // Provide explicit coordinates based on the new switch state to prevent racing
+    const targetCoords = newValue ? CHICAGO_DEPOT : null;
+    await fetchRouteAndProofs(targetCoords);
   };
 
   const filteredStops = stops.filter((stop) => {
@@ -159,11 +174,16 @@ export default function ManifestScreen({ navigation }) {
     );
   }
 
+  const calculatedTopPadding = Math.max(
+    insets.top + 14,
+    Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 18 : 26
+  );
+
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={[styles.container, { paddingTop: calculatedTopPadding }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0f172a" translucent={false} />
-      
-      {/* Top Header Container with Safe Notch Inset */}
+
+      {/* Top Header */}
       <View style={styles.headerContainer}>
         <View style={styles.titleRow}>
           <View>
@@ -172,7 +192,7 @@ export default function ManifestScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Telemetry Status Bar */}
+        {/* Telemetry Status & Dev Mode Row */}
         <View style={styles.telemetryBar}>
           <View style={styles.telemetryStatusLeft}>
             <View style={[styles.statusDot, isOptimized ? styles.dotActive : styles.dotInactive]} />
@@ -181,6 +201,18 @@ export default function ManifestScreen({ navigation }) {
           {totalKm !== null && totalKm !== undefined && (
             <Text style={styles.totalDistanceText}>{totalKm} km estimated</Text>
           )}
+        </View>
+
+        {/* Dev Mock Toggle Bar */}
+        <View style={styles.devBar}>
+          <Text style={styles.devBarText}>Simulate Chicago Hub (Dev)</Text>
+          <Switch
+            value={devMockActive}
+            onValueChange={handleToggleDevMock}
+            trackColor={{ false: '#334155', true: '#0284c7' }}
+            thumbColor={devMockActive ? '#38bdf8' : '#94a3b8'}
+            style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+          />
         </View>
       </View>
 
@@ -231,7 +263,7 @@ export default function ManifestScreen({ navigation }) {
         data={filteredStops}
         keyExtractor={(item) => item.id}
         renderItem={renderStopItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -245,16 +277,14 @@ export default function ManifestScreen({ navigation }) {
           </View>
         }
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeContainer: {
+  container: {
     flex: 1,
     backgroundColor: '#0f172a',
-    // Platform-specific top inset avoids status bar overlap
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 8,
   },
   centerContainer: {
     flex: 1,
@@ -269,17 +299,16 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 16,
-    paddingTop: 4,
     paddingBottom: 10,
   },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   screenTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
     color: '#f8fafc',
     letterSpacing: -0.5,
@@ -327,6 +356,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
+  devBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  devBarText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   filterContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -355,7 +401,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
     gap: 12,
   },
   stopCard: {
