@@ -27,7 +27,7 @@ jupyter==1.0.0
 
 # Utilities
 python-dotenv==1.0.0
-requests==2.31.0
+requests==2.33.0
 joblib>=1.3.2  # Added for ML model persistence
 
 # Optimization & Hardening
