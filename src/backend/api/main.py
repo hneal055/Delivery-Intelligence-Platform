@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 import logging
 from typing import Optional
-
+import src.backend.api.routes.command_center as command_center
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import FastAPI, Header, HTTPException, status
@@ -198,6 +198,9 @@ app.include_router(dispatch.router)
 app.include_router(tracking.router)
 app.include_router(advanced_routing.router)
 app.include_router(users.router)
+
+# V4 Operations Command Center
+app.include_router(command_center.router)
 
 
 @app.get("/health")

@@ -1,7 +1,18 @@
 import { Platform } from 'react-native';
 
-// Target machine IP for physical mobile testing on LAN
-export const BASE_URL = 'http://192.168.12.196:8000';
+// Dynamically select the correct host depending on the platform or environment override
+const getDefaultHost = () => {
+  if (process.env.EXPO_PUBLIC_API_HOST) {
+    return process.env.EXPO_PUBLIC_API_HOST;
+  }
+  // Android Emulator requires 10.0.2.2 to reach the host machine's localhost
+  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+};
+
+const API_HOST = getDefaultHost();
+const API_PORT = process.env.EXPO_PUBLIC_API_PORT || '8000';
+
+export const BASE_URL = `http://${API_HOST}:${API_PORT}`;
 
 /**
  * Fetch route manifest for driver with optional GPS coordinate optimization.

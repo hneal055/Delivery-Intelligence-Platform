@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -53,7 +54,7 @@ export default function HomeScreen({ navigation }) {
         }
       }
     } catch (_) {
-      // Offline fallback retaining previous state
+      // Offline fallback retaining previous state silently
     } finally {
       setRefreshing(false);
     }
@@ -72,6 +73,27 @@ export default function HomeScreen({ navigation }) {
     refreshHomeData();
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out of Driver Portal?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Sign Out", 
+          style: "destructive", 
+          onPress: () => {
+            // Add your auth reset / navigation reset logic here
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Login" }],
+            });
+          } 
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -80,7 +102,11 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.headerPortal}>DRIVER PORTAL</Text>
             <Text style={styles.headerTitle}>Driver D001</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} activeOpacity={0.7}>
+          <TouchableOpacity 
+            style={styles.logoutButton} 
+            activeOpacity={0.7}
+            onPress={handleLogout}
+          >
             <MaterialCommunityIcons name="exit-to-app" size={20} color="#f87171" />
           </TouchableOpacity>
         </View>

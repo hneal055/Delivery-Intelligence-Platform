@@ -1,61 +1,33 @@
 {
   "expo": {
-    "name": "Delivery Intelligence",
+    "name": "Delivery Intelligence Platform",
     "slug": "delivery-intelligence-platform",
     "version": "1.0.0",
-    "orientation": "default",
+    "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0f172a"
+      "backgroundColor": "#121212"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.deliveryintelligence.platform",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app requires access to the camera to scan package barcodes and capture delivery proof photos.",
-        "NSLocationWhenInUseUsageDescription": "This app requires real-time GPS coordinates to record proof-of-delivery location at the delivery stop."
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f172a"
+        "backgroundColor": "#121212"
       },
-      "package": "com.deliveryintelligence.platform",
-      "versionCode": 1,
-      "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
-      ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      "package": "com.deliveryintelligence.platform"
     },
     "plugins": [
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow Delivery Intelligence to access your camera to scan barcodes and take proof photos."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Allow Delivery Intelligence to access your location to verify delivery proof."
-        }
-      ],
-      "expo-sharing"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "1d2de5ee-3c67-4fc2-a534-06e2e3c01b74"
-      }
-    },
-    "owner": "hneal1038"
+      "expo-camera"
+    ]
   }
 }

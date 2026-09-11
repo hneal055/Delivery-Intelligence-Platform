@@ -8,6 +8,7 @@ from fastapi import (
     BackgroundTasks,
     Request,
 )
+from src.backend.services.heartbeat import heartbeat_service
 from fastapi.responses import Response
 from pydantic import BaseModel
 import time
@@ -61,7 +62,17 @@ async def verify_location(
     payload: LocationVerifyRequest,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-):
+)
+@router.get("/test-heartbeat/{driver_id}")
+async def test_heartbeat(driver_id: str):
+
+    await heartbeat_service.update(driver_id)
+
+    return {
+        "status": "heartbeat created",
+        "driver_id": driver_id,
+    }
+``
     driver_id = (
         payload.driver_id
         if payload.driver_id != "unknown"
@@ -98,7 +109,33 @@ async def verify_location(
         "distance": distance,
     }
 
+@router.post("/verify-location")
+async def verify_location(...):
+    ...
+    return {
+        "message": "Location Verified"
+    }
 
+# ==================================================
+# INSERT NEW TEST ENDPOINT HERE
+# ==================================================
+
+@router.get("/test-heartbeat/{driver_id}")
+async def test_heartbeat(driver_id: str):
+
+    await heartbeat_service.update(driver_id)
+
+    return {
+        "status": "heartbeat created",
+        "driver_id": driver_id,
+    }
+
+# ==================================================
+# END INSERT
+# ==================================================
+
+@router.post("/confirm")
+async def confirm_delivery(...):
 @router.post("/confirm")
 async def confirm_delivery(
     package_id: str = Form(...),
