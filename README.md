@@ -192,3 +192,13 @@ Build and spin up the complete containerized stack from scratch:
 
 PowerShell
 docker compose up -d --build
+
+
+Running Fleet Simulations
+To test real-time tracking data flow and telemetry processing, run the driver simulation script:
+
+PowerShell
+.\run_simulation.ps1 -Drivers 50
+
+### Next Step:
+Copy and paste this text directly into your root `README.md` file and save it to keep your project documentation completely synchronized with your local build environment.
