@@ -160,3 +160,28 @@ pytest tests/unit/test_security.py -v
 | `test_api_health.py` | Health endpoint, secure-ping auth, CORS preflight |
 | `test_api_basics.py` | Core API endpoint smoke tests |
 | `test_routing_api.py` | Route optimization API |
+
+# Delivery Intelligence Platform
+
+A full-stack containerized fleet and delivery operations tracking system built with a FastAPI backend, React/Vite frontend, and PostgreSQL database.
+
+---
+
+## Architecture & Services
+
+* **Backend**: FastAPI (Python 3.11) running on port `8002` (mapped from container port `8000`).
+* **Frontend**: React 18, TypeScript, Vite, and Mantine UI served via Nginx on port `8`.
+* **Database**: PostgreSQL with persistent volume storage (`postgres_data`).
+* **Monitoring**: Grafana telemetry dashboard on port `3500`.
+
+---
+
+## Getting Started & Daily Workflow
+
+To ensure a completely fresh state free of stale container caches or locked development ports, use the clean-slate startup workflow:
+
+### 1. Clean Environment Reset
+Tear down existing containers, wipe volumes, terminate lingering processes, and free up ports:
+```powershell
+docker compose down --volumes --remove-orphans
+Stop-Process -Name "node", "vite", "python", "uvicorn" -Force -ErrorAction SilentlyContinue
