@@ -180,8 +180,15 @@ A full-stack containerized fleet and delivery operations tracking system built w
 
 To ensure a completely fresh state free of stale container caches or locked development ports, use the clean-slate startup workflow:
 
+
 ### 1. Clean Environment Reset
 Tear down existing containers, wipe volumes, terminate lingering processes, and free up ports:
 ```powershell
 docker compose down --volumes --remove-orphans
 Stop-Process -Name "node", "vite", "python", "uvicorn" -Force -ErrorAction SilentlyContinue
+
+2. Build and Launch Stack
+Build and spin up the complete containerized stack from scratch:
+
+PowerShell
+docker compose up -d --build
