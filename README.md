@@ -197,6 +197,57 @@ docker compose up -d --build
 Running Fleet Simulations
 To test real-time tracking data flow and telemetry processing, run the driver simulation script:
 
+
+## 🚀 Quick Start & Operational Scripts
+
+The Chicago Cargo Courier LLC Delivery Intelligence Platform includes automated PowerShell scripts to manage container lifecycles, database resets, and fleet simulations.
+
+### 1. Daily Startup
+To spin up the existing container stack (PostGIS, Redis, Backend, and Web frontend) for daily development:
+```powershell
+.\daily_startup.ps1
+
+
+2. Full Clean & Reset (Fresh Build)
+If you encounter configuration drift, schema changes, or need to purge old volumes and containers for a completely fresh build:
+
+PowerShell
+.\clean_start.ps1
+
+
+VSuggested README.md Addition: Quick Start & Maintenance
+Markdown
+## 🚀 Quick Start & Operational Scripts
+
+The Chicago Cargo Courier LLC Delivery Intelligence Platform includes automated PowerShell scripts to manage container lifecycles, database resets, and fleet simulations.
+
+### 1. Daily Startup
+To spin up the existing container stack (PostGIS, Redis, Backend, and Web frontend) for daily development:
+```powershell
+.\daily_startup.ps1
+2. Full Clean & Reset (Fresh Build)
+If you encounter configuration drift, schema changes, or need to purge old volumes and containers for a completely fresh build:
+
+PowerShell
+.\clean_start.ps1
+3. Run Fleet Simulation
+To launch virtual drivers that authenticate against /auth/token and stream live GPS telemetry into PostGIS:
+
+PowerShell
+.\run_simulation.ps1 -Drivers 10
+(Or run the Python simulator directly: python tools/simulators/fleet_sim.py --drivers 10)
+
+4. Access Points
+API Documentation (Swagger UI): http://localhost:8002/docs
+
+Web Dispatch Dashboard: http://localhost
+
+Prometheus Metrics: http://localhost:9090
+
+
+---
+
+Would you like to apply this directly to your `README.md` file, or adjust any of the script commands?
 PowerShell
 .\run_simulation.ps1 -Drivers 50
 
