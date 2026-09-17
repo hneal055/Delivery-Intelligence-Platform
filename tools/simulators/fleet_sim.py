@@ -17,15 +17,11 @@ DEVICE_API_KEY = "dev-secret-key-123"
 CHICAGO_BOUNDS = {"lat_min": 41.8000, "lat_max": 42.0000, "lon_min": -87.8000, "lon_max": -87.6500}
 # NOTE: This is a rectangular approximation of the service area. Chicago's
 # actual shoreline runs diagonally, so a box reaching all the way to the true
-# eastern edge of the city (~-87.60) includes a large amount of open Lake
-# Michigan. -87.65 stays reliably over land at the cost of excluding the
-# immediate lakefront strip. A proper fix would check candidate points
-# against a real land polygon instead of a bounding rectangle.
+# eastern edge of the city (~-87.60) includes open Lake Michigan. 
+# -87.65 stays reliably over land.
 
 # How close (in degrees, ~0.0002 deg ~= 22m) a driver must be to its assigned
-# stop before a delivery is attempted. Small enough to reliably satisfy the
-# backend's geofence check, large enough that the driver has genuinely
-# traveled there rather than teleporting.
+# stop before a delivery is attempted.
 ARRIVAL_THRESHOLD_DEG = 0.0002
 
 class VirtualDriver:
@@ -45,10 +41,7 @@ class VirtualDriver:
         }
 
     def _assign_new_stop(self):
-        """Pick a genuinely new destination somewhere in the service area.
-        This is a REAL destination the driver will spend multiple ticks
-        actually traveling toward -- not a point fabricated next to its
-        current position."""
+        """Pick a genuinely new destination somewhere in the service area."""
         dest = self._random_location()
         self.stops = [{"dest_lat": dest["lat"], "dest_lon": dest["lon"]}]
 
@@ -69,9 +62,7 @@ class VirtualDriver:
         if not self.token:
             return
 
-        # Move toward the assigned stop (closes 10% of the remaining
-        # distance per tick -- an asymptotic approach that takes several
-        # minutes for a realistic cross-city trip, similar to a real route).
+        # Move toward the assigned stop (closes 10% of remaining distance per tick)
         if self.stops:
             target = self.stops[0]
             lat_diff = target["dest_lat"] - self.current_location["lat"]
@@ -103,16 +94,13 @@ class VirtualDriver:
 
         target = self.stops[0]
 
-        # Only attempt a delivery once we've actually arrived at the
-        # assigned stop -- not on a random per-tick chance regardless of
-        # position.
+        # Only attempt a delivery once arrived at the assigned stop
         lat_gap = abs(target["dest_lat"] - self.current_location["lat"])
         lon_gap = abs(target["dest_lon"] - self.current_location["lon"])
         if lat_gap > ARRIVAL_THRESHOLD_DEG or lon_gap > ARRIVAL_THRESHOLD_DEG:
             return
 
-        # 1. VERIFY LOCATION (Geofencing Check) -- against the REAL stop,
-        # not a fabricated nearby point.
+        # 1. VERIFY LOCATION (Geofencing Check)
         try:
             verify_payload = {
                 "driver_id": self.driver_id,
@@ -132,6 +120,7 @@ class VirtualDriver:
                     return
             else:
                 logger.warning(f"Geofence Check Failed: {verify_resp.status_code}")
+                return
         except Exception as e:
             logger.error(f"Geofence Error: {e}")
             return
@@ -139,8 +128,12 @@ class VirtualDriver:
         # 2. PERFORM DELIVERY
         pkg_id = f"PKG-{self.driver_id}-{int(time.time())}-{random.randint(1000,9999)}"
 
-        with open('tools/simulators/dummy_proof.jpg', 'rb') as f:
-            dummy_image = f.read()
+        try:
+            with open('tools/simulators/dummy_proof.jpg', 'rb') as f:
+                dummy_image = f.read()
+        except FileNotFoundError:
+            # Fallback if dummy image is missing
+            dummy_image = b"fake-jpeg-bytes"
 
         files = {"photo": ("proof.jpg", dummy_image, "image/jpeg")}
         data = {
@@ -159,8 +152,6 @@ class VirtualDriver:
                 headers={"Authorization": f"Bearer {self.token}"}
             )
             if resp.status_code == 200:
-                # Delivery complete -- head to a brand new, realistically
-                # distant destination next.
                 self._assign_new_stop()
             else:
                 logger.warning(f"Delivery failed: {resp.text}")

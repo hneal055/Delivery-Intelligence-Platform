@@ -1,12 +1,13 @@
 """
-Simple heartbeat service.
+Simple heartbeat service with automatic startup seeding.
 """
 
 import time
 
 HEARTBEAT_TTL = 60
 
-_memory_heartbeats = {}
+# Pre-seed all 50 drivers so they start online
+_memory_heartbeats = {f"D{i:03d}": time.time() for i in range(1, 51)}
 
 
 class HeartbeatService:

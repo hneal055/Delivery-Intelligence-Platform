@@ -1,91 +1,45 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import update, delete
-from typing import List, Optional
-from datetime import datetime
-
-from src.backend.models.sql_models import DispatchJob, Driver, Package, DriverAvailability
-from src.backend.models.domain import DispatchJobCreate
-import uuid
+import math
+from typing import Optional, Dict, List
+from src.backend.services.heartbeat import heartbeat_service
 
 class DispatchService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    def __init__(self):
+        # Simulated driver coordinates cache for matching (latitude, longitude)
+        self.driver_locations: Dict[str, tuple[float, float]] = {
+            f"D{i:03d}": (41.8781 + (i * 0.01), -87.6298 - (i * 0.01)) 
+            for i in range(1, 51)
+        }
 
-    async def create_job(self, job_data: DispatchJobCreate) -> DispatchJob:
-        new_job = DispatchJob(
-            **job_data.model_dump(exclude_unset=True),
-            id=str(uuid.uuid4())
-        )
-        self.db.add(new_job)
-        await self.db.commit()
-        await self.db.refresh(new_job)
-        return new_job
+    async def update_driver_coordinate(self, driver_id: str, lat: float, lon: float):
+        self.driver_locations[driver_id] = (lat, lon)
+        await heartbeat_service.update(driver_id)
 
-    async def get_job(self, job_id: str) -> Optional[DispatchJob]:
-        result = await self.db.execute(select(DispatchJob).where(DispatchJob.id == job_id))
-        return result.scalars().first()
+    def _calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Haversine formula approximation for distance between coordinates."""
+        R = 3958.8 # Radius of the earth in miles
+        d_lat = math.radians(lat2 - lat1)
+        d_lon = math.radians(lon2 - lon1)
+        a = (math.sin(d_lat / 2) ** 2 + 
+             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * 
+             math.sin(d_lon / 2) ** 2)
+        c = 2 * math.asin(math.sqrt(a))
+        return R * c
 
-    async def get_all_jobs(self, status: Optional[str] = None) -> List[DispatchJob]:
-        query = select(DispatchJob)
-        if status:
-            query = query.where(DispatchJob.status == status)
-        result = await self.db.execute(query)
-        return result.scalars().all()
+    async def find_optimal_driver(self, order_lat: float, order_lon: float) -> Optional[str]:
+        """
+        Finds the closest online driver who has an active heartbeat.
+        """
+        best_driver: Optional[str] = None
+        min_distance = float('inf')
 
-    async def update_job_status(self, job_id: str, status: str) -> Optional[DispatchJob]:
-        job = await self.get_job(job_id)
-        if not job:
-            return None
-        
-        job.status = status
-        if status == "completed":
-            job.completed_at = datetime.utcnow()
-            
-        await self.db.commit()
-        await self.db.refresh(job)
-        return job
+        for driver_id, (d_lat, d_lon) in self.driver_locations.items():
+            # Check if driver is currently online via heartbeat service
+            if await heartbeat_service.is_online(driver_id):
+                distance = self._calculate_distance(order_lat, order_lon, d_lat, d_lon)
+                if distance < min_distance:
+                    min_distance = distance
+                    best_driver = driver_id
 
-    async def assign_driver(self, job_id: str, driver_id: str) -> Optional[DispatchJob]:
-        job = await self.get_job(job_id)
-        if not job:
-            return None
-            
-        driver_result = await self.db.execute(select(Driver).where(Driver.id == driver_id))
-        driver = driver_result.scalars().first()
-        if not driver:
-            raise ValueError("Driver not found")
+        return best_driver
 
-        job.driver_id = driver_id
-        job.status = "assigned"
-        await self.db.commit()
-        await self.db.refresh(job)
-        return job
-
-    async def set_availability(self, driver_id: str, date: datetime, is_available: bool, start: str, end: str):
-        # Check existing
-        result = await self.db.execute(
-            select(DriverAvailability).where(
-                DriverAvailability.driver_id == driver_id,
-                DriverAvailability.date == date
-            )
-        )
-        avail = result.scalars().first()
-        
-        if avail:
-            avail.is_available = is_available
-            avail.start_time = start
-            avail.end_time = end
-        else:
-            avail = DriverAvailability(
-                driver_id=driver_id,
-                date=date,
-                is_available=is_available,
-                start_time=start,
-                end_time=end
-            )
-            self.db.add(avail)
-            
-        await self.db.commit()
-        return avail
-
+dispatch_service = DispatchService()
