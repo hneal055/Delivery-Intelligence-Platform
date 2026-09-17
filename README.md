@@ -91,13 +91,13 @@ Run a specific test module:
 PowerShell
 pytest tests/unit/test_security.py -v
 
-***
+---
 
-### **How to Update Your Repository:**
-1. Overwrite your root **`README.md`** with the text above and save the file.
-2. Run the following commands in your terminal to push the clean documentation to GitHub:
-   ```powershell
-   git add README.md
-   git commit -m "Polish README.md with comprehensive platform overview and scripts"
-   git pull origin main --rebase
-   git push -u origin main
+### **Ready to Push?**
+Save this clean text to your root `README.md` and run your git commands:
+```powershell
+git add README.md
+git commit -m "Finalize professional README.md with script guides and platform specs"
+git pull origin main --rebase
+git push -u origin main
+
