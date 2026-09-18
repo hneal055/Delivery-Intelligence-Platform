@@ -18,7 +18,7 @@ async def test_optimize_route_success():
 
         headers = {"X-DIAD-Token": "dev-secret-key-123"}
 
-        response = await client.post("/route/optimize", json=payload, headers=headers)
+        response = await client.post("/routing/optimize", json=payload, headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -41,5 +41,7 @@ async def test_optimize_route_empty():
             "stops": []
         }
         headers = {"X-DIAD-Token": "dev-secret-key-123"}
-        response = await client.post("/route/optimize", json=payload, headers=headers)
+        response = await client.post("/routing/optimize", json=payload, headers=headers)
         assert response.status_code == 400
+
+
