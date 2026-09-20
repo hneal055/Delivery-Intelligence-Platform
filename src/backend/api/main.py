@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 import logging
 from typing import Optional
-import src.backend.api.routes.command_center as command_center
+
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import FastAPI, Header, HTTPException, status
@@ -21,6 +21,7 @@ from src.backend.api.routes import (
     advanced_routing,
     analytics,
     auth,
+    command_center,
     delivery,
     dispatch,
     oidc,
@@ -108,7 +109,7 @@ async def init_data():
                     )
                     created_users += 1
 
-                # Driver profile (used by simulator -- must use explicit D001 IDs)
+                # Driver profile
                 result = await db.execute(select(Driver).where(Driver.id == driver_id))
                 existing_driver = result.scalars().first()
                 if not existing_driver:
@@ -143,7 +144,7 @@ async def lifespan(app: FastAPI):
     driver_metric_task = asyncio.create_task(update_active_drivers())
     logger.info("Startup complete")
 
-    yield  # ← application runs here
+    yield  # application runs here
 
     logger.info("Shutting down...")
     driver_metric_task.cancel()
@@ -156,7 +157,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
 # --- CORS Configuration ---
-# allow_origin_regex permits localhost, local network IPs (192.168.x.x), and tunneling tools
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^https?://.*",
@@ -187,17 +187,17 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Prometheus Metrics
 Instrumentator().instrument(app).expose(app)
 
-# Include Routers
+# --- Include Routers ---
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(oidc.router)
-app.include_router(routing.router)
-app.include_router(delivery.router)
-app.include_router(analytics.router)
-app.include_router(websocket.router)
-app.include_router(dispatch.router)
-app.include_router(tracking.router)
-app.include_router(advanced_routing.router)
-app.include_router(users.router)
+app.include_router(routing.router, prefix="/routing", tags=["routing"])
+app.include_router(delivery.router)  # delivery.py already defines prefix="/delivery"
+app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+app.include_router(websocket.router, tags=["websocket"])
+app.include_router(dispatch.router, prefix="/dispatch", tags=["dispatch"])
+app.include_router(tracking.router, prefix="/tracking", tags=["tracking"])
+app.include_router(advanced_routing.router, prefix="/advanced-routing", tags=["advanced-routing"])
+app.include_router(users.router)  # users.py already defines prefix="/users"
 
 # V4 Operations Command Center
 app.include_router(command_center.router)

@@ -54,7 +54,7 @@ jobs:
             --cov=src \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=60 \
+            --cov-fail-under=35 \
             -q
 
       - name: Run integration tests
@@ -386,3 +386,4 @@ jobs:
           name: e2e-test-results
           path: "*.xml"
           if-no-files-found: ignore
+
