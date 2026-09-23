@@ -77,3 +77,4 @@ Delivery_Intelligence_Platform_Operational_Manual.md.pdf
 *.db
 *.db-journal
 *.db-wal
+.env.backend

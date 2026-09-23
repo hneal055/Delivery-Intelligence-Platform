@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import asyncpg
 from fastapi import (
     FastAPI,
     File,
@@ -30,10 +31,13 @@ DB_PATH = DATA_DIR / "delivery_proofs.db"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+# PostGIS Database URL environment variable (defaults to docker-compose service name)
+POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@delivery_db:5432/delivery_db")
+
 app = FastAPI(
     title="Delivery Intelligence Platform API",
-    version="1.1.0",
-    description="Backend routing, proof-of-delivery logging, telemetry ingestion, and route optimization.",
+    version="1.2.0",
+    description="Backend routing, PostGIS spatial telemetry, proof-of-delivery logging, and route optimization.",
 )
 
 # Enable CORS for Metro, emulator, and web environments
@@ -136,6 +140,48 @@ def health_check():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 
+@app.get("/api/dispatches/geojson")
+async def get_dispatches_geojson():
+    """
+    Queries PostGIS spatial database and returns active dispatches 
+    natively as a GeoJSON FeatureCollection using ST_AsGeoJSON.
+    """
+    try:
+        connection = await asyncpg.connect(POSTGRES_URL)
+        
+        query = """
+            SELECT json_build_object(
+                'type', 'FeatureCollection',
+                'features', json_agg(json_build_object(
+                    'type', 'Feature',
+                    'geometry', ST_AsGeoJSON(current_location)::json,
+                    'properties', json_build_object(
+                        'id', dispatch_id,
+                        'driver_id', driver_id,
+                        'destination', destination_name,
+                        'status', status,
+                        'speed', speed
+                    )
+                ))
+            ) as geojson FROM dispatches;
+        """
+        
+        result = await connection.fetchval(query)
+        await connection.close()
+        
+        # If result is returned as a string from asyncpg json handling, parse it; else return direct dict/json
+        if isinstance(result, str):
+            return json.loads(result)
+        return result or {"type": "FeatureCollection", "features": []}
+        
+    except Exception as e:
+        # Fallback graceful response if PostGIS container is offline during local test runs
+        raise HTTPException(
+            status_code=500, 
+            detail=f"PostGIS Spatial Database connection error: {str(e)}"
+        )
+
+
 @app.get("/routing/sample-route/{driver_id}")
 def get_sample_route(
     driver_id: str,
@@ -154,7 +200,6 @@ def get_sample_route(
         {"id": "pkg-005", "address": "222 W Merchandise Mart Plaza", "lat": 41.8885, "lon": -87.6354},
     ]
 
-    # If coordinates are provided and optimization requested, calculate nearest-neighbor route
     if optimize and origin_lat is not None and origin_lon is not None:
         ordered_stops = optimize_stops(origin_lat, origin_lon, raw_stops)
         total_route_km = (

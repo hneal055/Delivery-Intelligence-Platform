@@ -1,0 +1,7 @@
+[whitelist]
+description = "Global allowlist for permitted test fixtures and documentation examples"
+paths = [
+    '''\.env\.example$''',
+    '''docs/.*''',
+    '''README\.md$'''
+]
