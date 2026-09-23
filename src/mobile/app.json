@@ -12,22 +12,38 @@
       "backgroundColor": "#121212"
     },
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
-        }
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#121212"
       },
-      "package": "com.deliveryintelligence.platform"
+      "package": "com.deliveryintelligence.platform",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "plugins": [
-      "expo-camera"
-    ]
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Delivery Intelligence to scan delivery barcodes and capture proof-of-delivery photos.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2c2a76b7-bc4e-4091-b6a0-77b45fa62fdf"
+      },
+      "apiUrl": "https://api.yourdomain.com"
+    }
   }
 }
