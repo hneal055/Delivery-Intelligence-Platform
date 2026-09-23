@@ -4,6 +4,7 @@ import logging
 from typing import List
 from fastapi import WebSocket
 from src.backend.services.geofence import geofence_service
+from src.backend.services.sla_monitor import sla_monitor
 import redis.asyncio as aioredis
 
 logger = logging.getLogger("delivery_platform.websockets")
@@ -46,6 +47,17 @@ class ConnectionManager:
                         for alert in alerts:
                             alert_payload = {"driver_id": event_data["driver_id"], "message": alert}
                             await self._local_broadcast("geofence_alert", alert_payload)
+
+                        # Check SLA & stationarity incidents
+                        sla_alerts = sla_monitor.evaluate_telemetry(
+                            event_data["driver_id"],
+                            event_data.get("lat", 0.0),
+                            event_data.get("lng", 0.0),
+                            event_data.get("speed", 0.0)
+                        )
+                        for sla_alert in sla_alerts:
+                            sla_payload = {"driver_id": event_data["driver_id"], "message": sla_alert}
+                            await self._local_broadcast("sla_alert", sla_payload)
         except asyncio.CancelledError:
             pass
         except Exception as e:
