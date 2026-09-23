@@ -238,3 +238,5 @@ async def secure_ping(
 @app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse(url="/docs")
+
+app.include_router(ws_router)
