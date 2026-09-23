@@ -1,0 +1,33 @@
+{
+  "name": "delivery-intelligence-platform",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build": "npx expo export --platform web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~3.2.3",
+    "@expo/vector-icons": "^14.0.3",
+    "@react-native-community/slider": "4.5.2",
+    "@tabler/icons-react": "^3.36.1",
+    "@types/react": "~18.2.79",
+    "expo": "51.0.0",
+    "expo-notifications": "^57.0.20",
+    "expo-secure-store": "~13.0.2",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-web": "~0.19.13",
+    "typescript": "~5.3.3"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0"
+  },
+  "resolutions": {
+    "react-native": "0.74.5"
+  }
+}
