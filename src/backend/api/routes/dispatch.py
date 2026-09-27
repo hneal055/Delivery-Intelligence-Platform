@@ -4,14 +4,25 @@ from sqlalchemy import select, func
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
-
+from src.backend.models.sql_models import (
+    Driver as DriverSQL,
+    Package as PackageSQL,
+    DispatchJob as DispatchJobSQL,
+    DriverAvailability,
+)
 from src.backend.core.database import get_db
 from src.backend.api.deps import get_current_active_user, PermissionChecker
 from src.backend.models.domain import User, DispatchJob, DispatchJobCreate, AvailabilityCreate
-from src.backend.models.sql_models import Driver as DriverSQL, Package as PackageSQL
+from src.backend.models.sql_models import (
+    Driver as DriverSQL,
+    Package as PackageSQL,
+    DispatchJob as DispatchJobSQL,
+    DriverAvailability,
+)
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.core.permissions import Permission
-from src.backend.services.dispatch_service import DispatchService
+
+
 from src.backend.api.limiter import limiter
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
