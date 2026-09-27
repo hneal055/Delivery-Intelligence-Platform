@@ -1,103 +1,344 @@
-# Delivery Intelligence Platform
+# Delivery Intelligence Platform (DIP)
 
-> **Note**: This is a private, proprietary repository for Chicago Cargo Courier LLC. Source code distribution is restricted.
-
-## 🎯 Overview
-
-The **Delivery Intelligence Platform** is a real-time, intelligent delivery management system designed to optimize the "last mile" of logistics. It serves as the central operational brain for fleet management, real-time telemetry streaming, dynamic routing, and automated proof-of-delivery verification.
-
----
-
-## ✨ Core Features
-
-*   **Smart Inventory Tracking**: Real-time package mapping to vehicle sections using Pydantic models.
-*   **Geospatial Intelligence**: Automated geofencing (using Shapely & GeoPandas / PostGIS) to verify driver location against delivery targets.
-*   **Automated Verification**: Proof-of-delivery validation (Photo/Signature) including automated image quality checks (resolution, brightness, sharpness).
-*   **Real Traffic & ETA Intelligence**: Live traffic-adjusted travel time and distance via the TomTom Routing API, with graceful fallback to synthetic estimates.
-*   **Dynamic Routing**: Instructions and route updates dispatched directly to driver devices.
-*   **Real-time Analytics**: Grafana and Prometheus telemetry dashboards for fleet monitoring and operational metrics.
-*   **Mobile Driver App**: React Native application for drivers to receive routes, view ETAs, and capture delivery proof.
-*   **ML ETA Prediction**: Scikit-learn Random Forest Regressor model providing real-time arrival estimates factoring in distance and traffic load.
-*   **Dispatch & Scheduling**: Job creation, assignment, and Kanban boards for managing dispatch workflows.
-*   **GPS Tracking**: Real-time driver map with route history playback and speed controls.
-*   **Proof of Delivery Gallery**: Filterable gallery of delivery proof images with detail views.
-*   **Equipment & Barcode Scanning**: Camera-based barcode scanning for equipment check-in/out tracking.
+> **Proprietary Software**
+>
+> © Chicago Cargo Courier LLC
+>
+> Internal Use Only
+>
+> Source code distribution is restricted.
+>
+> **README Version:** 2.0
+>
+> **Platform Status:** Operational Foundation Established ✅
+>
+> **Last Updated:** September 2026
 
 ---
 
-## 🛠️ Technical Stack
+# Table of Contents
 
-*   **Backend**: Python 3.11+, FastAPI, Uvicorn, Arq (Async Worker), OpenTelemetry
-*   **Web Dashboard**: React, TypeScript, Vite, Mantine UI, Leaflet Maps, Nginx
-*   **Mobile**: React Native, Expo
-*   **Data & ML**: Pandas, Scikit-learn, Shapely, GeoAlchemy2, PostGIS
-*   **External APIs**: TomTom Routing/Traffic API (optional)
-*   **Infrastructure**: Docker Compose, PostgreSQL + PostGIS 15, Redis, LocalStack (S3)
-*   **Visualization**: Grafana, Prometheus
-*   **Testing**: Pytest
+- [Executive Summary
+- #current-operational-status
+- #architecture
+- #core-capabilities
+  - #last-mile-logistics-intelligence
+  - #fleet-operations
+  - #telemetry--real-time-visibility
+  - #dispatch-management
+  - #route-optimization--geospatial-intelligence
+  - #proof-of-delivery-pod-validation
+  - #predictive-analytics--machine-learning
+  - #mobile-driver-experience
+  - #platform-security--compliance
+  - #command-center-operations
+- #technical-stack
+- #roadmap-implementation-plan
+- #deployment-guide
+- #platform-access-points
+- #recovery-checklist
+- #quick-troubleshooting-reference
+- #detailed-troubleshooting-guide
+- #testing-guide
+- #incident-recovery-timeline
+- #known-issues
+- #next-session-priorities
+- #future-roadmap
+- #project-status
 
 ---
 
-## 🚀 Quick Start & Operational Scripts
+# Executive Summary
 
-The platform includes automated PowerShell scripts to manage container lifecycles, database resets, and fleet simulations.
+The **Delivery Intelligence Platform (DIP)** is a containerized logistics intelligence platform built to optimize last-mile delivery operations through real-time tracking, dispatch management, route optimization, proof-of-delivery verification, geospatial intelligence, and predictive analytics.
 
-### 0. Environment Setup
-Copy the environment template and configure your local variables before the first run:
+The platform serves as the operational backbone for fleet management, driver telemetry, dispatch coordination, route intelligence, and delivery execution.
+
+Current platform capabilities include:
+
+- Real-time fleet visibility
+- Dispatch workflow management
+- Geospatial route intelligence
+- Proof-of-delivery verification
+- ETA prediction and analytics
+- GPS tracking and telemetry
+- OAuth2/JWT security
+- PostgreSQL/PostGIS spatial services
+- Mobile driver workflows
+- Monitoring and observability
+
+---
+
+# Current Operational Status
+
+| Component | Status |
+|------------|----------|
+| Docker Infrastructure | ✅ Operational |
+| Backend API | ✅ Operational |
+| PostgreSQL | ✅ Operational |
+| PostGIS | ✅ Operational |
+| Redis | ✅ Operational |
+| Swagger UI | ✅ Operational |
+| OpenAPI Generation | ✅ Operational |
+| Alembic Migrations | ✅ Operational |
+| Authentication | ✅ Operational |
+| JWT Authorization | ✅ Operational |
+| Database Seeding | ✅ Operational |
+| Dispatch Validation | 🔄 In Progress |
+| Tracking Validation | ⬜ Pending |
+| Routing Validation | ⬜ Pending |
+| Analytics Validation | ⬜ Pending |
+| Production Hardening | ⬜ Pending |
+
+---
+
+# Architecture
+
+```text
+                    Delivery Intelligence Platform
+
+ ┌────────────────────────────────────────────────────┐
+ │                    Frontend UI                     │
+ └────────────────────────────────────────────────────┘
+                          │
+                          ▼
+
+ ┌────────────────────────────────────────────────────┐
+ │                 FastAPI Backend                    │
+ └────────────────────────────────────────────────────┘
+                │                │
+                ▼                ▼
+
+       ┌─────────────────┐   ┌─────────────────┐
+       │      Redis      │   │   PostgreSQL    │
+       │   Pub / Sub     │   │     PostGIS     │
+       └─────────────────┘   └─────────────────┘
+                │
+                ▼
+
+     ┌─────────────────────────────┐
+     │ Analytics & ML Services     │
+     └─────────────────────────────┘
+                │
+                ▼
+
+     ┌─────────────────────────────┐
+     │ Route Optimization Engine   │
+     └─────────────────────────────┘
+```
+
+---
+
+# Core Capabilities
+
+The Delivery Intelligence Platform delivers end-to-end operational intelligence across logistics, fleet management, dispatch, routing, proof-of-delivery validation, and predictive analytics.
+
+---
+
+## Last-Mile Logistics Intelligence
+DIP serves as the operational intelligence layer for delivery execution, providing complete visibility throughout the delivery lifecycle.
+
+
+```
+ 
+Fix:
+ 
 ```powershell
-cp .env.example .env
-
-Ensure SECRET_KEY, POSTGRES_PASSWORD, and REDIS_PASSWORD are configured.
-
-1. Daily Development Startup
-To spin up the existing container stack (PostGIS, Redis, Backend, Web frontend, and monitoring) for daily development:
-
-PowerShell
-.\daily_startup.ps1
-2. Full Clean Reset & Fresh Build
-If you encounter configuration drift, schema changes, or need to purge old volumes and containers for a completely clean slate:
-
-PowerShell
-.\clean_start.ps1
-3. Run Fleet Simulation
-To launch virtual drivers that authenticate against /auth/token and stream live GPS telemetry into PostGIS:
-
-PowerShell
-.\run_simulation.ps1 -Drivers 10
-(Or run the Python simulator directly: python tools/simulators/fleet_sim.py --drivers 10)
-
-🌐 Access Points & Services
-Once your containers are running, you can access the platform services at:
-
-API Documentation (Swagger UI): http://localhost:8002/docs
-
-Web Dispatch Dashboard: http://localhost (or http://localhost:5173 during local dev)
-
-Grafana Telemetry: http://localhost:3500 (Login: admin / see .env)
-
-Prometheus Metrics: http://localhost:9090
-
-🧪 Running Tests
-Execute the unit test suite (no database or external services required):
-
-PowerShell
+python -m tools.seed_db
+```
+ 
+---
+ 
+## Authentication Failure
+ 
+Verify:
+ 
+```http
+Authorization: Bearer <token>
+```
+ 
+exists.
+ 
+---
+ 
+# Testing Guide
+ 
+## Run All Tests
+ 
+```powershell
 pytest
-Run with coverage report:
-
-PowerShell
-pytest --cov=src --cov-report=term-missing
-Run a specific test module:
-
-PowerShell
-pytest tests/unit/test_security.py -v
-
----
-
-### **Ready to Push?**
-Save this clean text to your root `README.md` and run your git commands:
+```
+ 
+## Coverage Report
+ 
 ```powershell
-git add README.md
-git commit -m "Finalize professional README.md with script guides and platform specs"
-git pull origin main --rebase
-git push -u origin main
-
+pytest --cov=src --cov-report=term-missing
+```
+ 
+## Specific Test
+ 
+```powershell
+pytest tests/unit/test_security.py -v
+```
+ 
+---
+ 
+# Incident Recovery Timeline
+ 
+## Original Failure
+ 
+```text
+Docker build failure
+requirements.txt dependency failures
+```
+ 
+## Root Causes
+ 
+- Linux dependency issues
+- Database configuration drift
+- Missing schema
+- Missing users table
+- Missing seed data
+ 
+## Recovery Milestones
+ 
+✅ Docker Build Recovered
+ 
+✅ Services Operational
+ 
+✅ Schema Recovered
+ 
+✅ Users Table Restored
+ 
+✅ Seed Data Loaded
+ 
+✅ Authentication Working
+ 
+✅ JWT Generation Working
+ 
+✅ Swagger Operational
+ 
+---
+ 
+# Known Issues
+ 
+## Dispatch Dashboard Authentication
+ 
+Endpoint:
+ 
+```http
+GET /dispatch/dispatch/dashboard/summary
+```
+ 
+Current Behavior:
+ 
+```json
+{
+"detail": "Not authenticated"
+}
+```
+ 
+Status:
+ 
+🔄 Investigation In Progress
+ 
+Potential Areas:
+ 
+- JWT propagation
+- Swagger authorization handling
+- Router security configuration
+ 
+---
+ 
+# Next Session Priorities
+ 
+## Priority 1
+ 
+```http
+GET /auth/users/me
+```
+ 
+Validate authenticated user context.
+ 
+## Priority 2
+ 
+```http
+GET /dispatch/dispatch/dashboard/summary
+```
+ 
+Validate dispatch dashboard authorization.
+ 
+## Priority 3
+ 
+```http
+GET /dispatch/dispatch/drivers
+```
+ 
+Validate database-backed dispatch records.
+ 
+## Priority 4
+ 
+```http
+POST /dispatch/dispatch/jobs
+```
+ 
+Validate dispatch workflow management.
+ 
+---
+ 
+# Future Roadmap
+ 
+## Mobile Experience
+ 
+- Driver mobile workflows
+- Push notifications
+- Offline operation
+- Mobile POD processing
+ 
+## Command Center
+ 
+- Live telemetry dashboards
+- Fleet heat maps
+- Real-time alerting
+- KPI visualization
+ 
+## Advanced Analytics
+ 
+- Demand forecasting
+- Capacity planning
+- Risk prediction
+- Performance scoring
+ 
+## AI & Predictive Intelligence
+ 
+- Intelligent dispatch recommendations
+- Driver optimization
+- Predictive routing
+- Delivery risk mitigation
+ 
+---
+ 
+# Project Status
+ 
+```text
+Infrastructure Recovery ✅ COMPLETE
+Container Recovery ✅ COMPLETE
+Database Recovery ✅ COMPLETE
+Migration Recovery ✅ COMPLETE
+Authentication Recovery ✅ COMPLETE
+Dispatch Validation 🔄 IN PROGRESS
+Tracking Validation ⬜ PENDING
+Routing Validation ⬜ PENDING
+Analytics Validation ⬜ PENDING
+Production Readiness ⬜ PENDING
+```
+ 
+---
+ 
+**README Version:** 2.0
+ 
+**Platform State:** Operational Foundation Established ✅
+ 
+**Current Milestone:** Dispatch Functional Validation 🔄
+ 
+**Next Major Milestone:** End-to-End Operational Workflow Validation 🚀
