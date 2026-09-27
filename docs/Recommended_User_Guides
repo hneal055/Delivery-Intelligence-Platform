@@ -1,296 +1,630 @@
-docs/user-guide/
-
-├── USER-GUIDE.md
-├── DISPATCHER-GUIDE.md
-├── DRIVER-GUIDE.md
-├── ADMINISTRATOR-GUIDE.md
-└── QUICK-START.md
-Executive Assessment
-Strengths
-
-✅ Comprehensive walkthrough
-
-✅ Good feature coverage
-
-✅ Clear role separation
-
-✅ Includes both dispatcher and mobile experiences
-
-✅ Good use of tables
-
-✅ Business workflow oriented
-
-✅ Covers operational tasks
-
-Weaknesses
-1. Demo Credentials Should Not Appear
-
-Current:
-dispatcher1
-dispatcherpassword
-
-driver1
-driverpassword
-
-Production user documentation should never include passwords.
-
-Replace with:
-Contact your system administrator for credentials.
-
-For development environments, see:
-DEPLOYMENT.md
-
-Contact your system administrator for credentials.
-
-For development environments, see: DEPLOYMENT.md 
-
-2. URLs Should Be Centralized
-
-Current:
-http://localhost:5173
-
-http://localhost:8000
-
-Instead:
-See RUNBOOK.md for environment-specific URLs.
-
-
-Why?
-
-Production:dispatch.company.com
-
-Development:
-localhost
-
-Staging:
-staging.company.com
-
-User Guide should not need updates for environment changes.
-
-
-Missing Role Matrix
-# Role Matrix
-Add near the beginning:
-
-Role Matrix
-Capability	Admin	Dispatcher	Driver
-Dashboard	✅	✅	❌
-Driver Tracking	✅	✅	❌
-Job Assignment	✅	✅	❌
-User Management	✅	❌	❌
-Route Execution	❌	❌	✅
-POD Submission	❌	❌	✅
-Equipment Check-Out	✅	✅	✅
-
-
-This improves onboarding dramatically.
-
-Missing Workflow Guides
-
-Current sections are screen-driven.
-
-Production operators think in workflows.
-
-Add:
-# Common Dispatcher Workflows
-
-## Assigning a New Delivery
-
-Step 1
-Step 2
-Step 3
-
-## Monitoring Deliveries
-
-Step 1
-Step 2
-Step 3
-
-## Handling Delivery Exceptions
-
-Step 1
-Step 2
-Step 3
-
-Common Dispatcher Workflows
-Assigning a New Delivery
-Step 1 Step 2 Step 3
-
-Monitoring Deliveries
-Step 1 Step 2 Step 3
-
-Handling Delivery Exceptions
-Step 1 Step 2 Step 3 
-
-Add a section:
-# Common Operational Scenarios
-
-
-Common Operational Scenarios
-
-Examples:
-
-Driver Offline
-Symptom:
-Driver disappears from map
-
-Action:
-Verify GPS permission
-Verify application login
-Verify cellular connectivity
-
-
-Delivery Exception
-Customer unavailable
-
-Action:
-Report Exception
-Capture Notes
-Return Package to Dispatch
-
-GPS Verification Failure
-Outside Geofence
-
-Action:
-Move closer
-Retry Verification
-Contact Dispatch
-
-
-POD Upload Failure
-Poor Signal
-
-Action:
-Retake Image
-Retry Upload
-Monitor Sync Queue
-
-These are often the most valuable sections in production systems.
-
-
-Equipment Section Needs Enterprise Update
-
-Current:
-Stored in browser localStorage
-
-That's an implementation detail.
-
-Users don't need to know this.
-
-Replace:
-Equipment records persist locally within the current deployment environment.
-
-If later you move to PostgreSQL you won't have to rewrite user documentation.
-
-
-Add Troubleshooting Section
-
-Users need:
-# Troubleshooting
-
-## Cannot Log In
-
-## Driver Appears Offline
-
-## GPS Unavailable
-
-## Delivery Cannot Be Confirmed
-
-## Barcode Scanner Not Working
-
-## Photo Upload Failed
-
-Troubleshooting
-Cannot Log In
-Driver Appears Offline
-GPS Unavailable
-Delivery Cannot Be Confirmed
-Barcode Scanner Not Working
-Photo Upload Failed
-
-Do not send users to engineering documentation
-
-Add Glossary
-
-This platform contains domain terms.
-
-Add:
-# Glossary
-
-Delivery Job
-Package
-Proof of Delivery (POD)
-Geofence
-Dispatcher
-Driver
-ETA
-Exception
-Assignment
-Heartbeat
-
-
-
-Glossary
-Delivery Job Package Proof of Delivery (POD) Geofence Dispatcher Driver ETA Exception Assignment Heartbeat
-
-This reduces training time significantly.
-
-
-Recommended Structure
-docs/user-guide/USER-GUIDE.md
+Delivery Intelligence Platform User Guide
+
+Document Version: 2.0
+ Audience: Dispatchers, Drivers, Supervisors, Operations Managers, Administrators
+ Classification: Internal Operations Documentation
+ Status: Approved for Operational Use
+ Last Updated: September 2026
+
+Table of Contents
+Introduction
 Introduction
 Role Matrix
-Dispatcher Guide
-Driver Guide
-Common Workflows
-Operational Scenarios
-Troubleshooting
-Glossary
-
-
-docs/user-guide/DISPATCHER-GUIDE.md
+Quick Start
+Part I: Dispatcher Operations Console
+Dispatcher Operations Overview
+Dispatcher Responsibilities
+Assign a New Delivery
+Monitor Active Drivers
+Monitor Delivery Performance
+Handle Delivery Exceptions
 Dashboard
-Scheduling
+Scheduling & Dispatch
+Driver Management
+Package Management
+Fleet Tracking & Route Playback
+Proof of Delivery Gallery
+Equipment Management
+Part II: Driver Mobile Application
+Driver Mobile Overview
+Driver Responsibilities
+Complete a Delivery
+Report an Exception
+Delivery List
+ETA Prediction
+GPS Status
+Operational Guidance
+Common Operational Scenarios
+GPS Verification Failed
+Driver Appears Offline
+Delivery Cannot Be Confirmed
+Photo Upload Failure
+Barcode Scanner Not Working
+Administration & Reference
+Administrator Operations
+Operational Escalation Matrix
+Glossary
+Best Practices
+Support
+Related Documentation
+Revision History
+Introduction
+
+The Delivery Intelligence Platform (DIP) provides end-to-end operational visibility and control across fleet management, dispatch operations, delivery execution, proof-of-delivery processing, equipment tracking, and real-time driver telemetry.
+
+The platform is designed to support day-to-day logistics operations by enabling dispatch teams to coordinate deliveries while giving drivers the tools required to complete deliveries efficiently and accurately.
+
+The platform consists of two primary applications:
+
+Dispatcher Operations Console
+
+Used by:
+
+Dispatchers
+Operations Managers
+Fleet Supervisors
+Administrators
+
+Primary capabilities:
+
+Fleet visibility
+Dispatch coordination
+Driver monitoring
+Package management
+Proof verification
+Operational reporting
+Driver Mobile Application
+
+Used by:
+
+Delivery Drivers
+
+Primary capabilities:
+
+Route execution
+Delivery management
+GPS verification
+Proof-of-delivery submission
+Exception reporting
+Role Matrix
+Capability	Administrator	Dispatcher	DriverDashboard Access	✅	✅	❌
+Driver Tracking	✅	✅	❌
+Job Scheduling	✅	✅	❌
+Package Management	✅	✅	❌
+Equipment Management	✅	✅	Limited
+Proof Gallery Access	✅	✅	❌
+User Administration	✅	❌	❌
+Route Execution	❌	❌	✅
+GPS Reporting	❌	❌	✅
+POD Submission	❌	❌	✅
+Exception Reporting	❌	❌	✅
+Quick Start
+Dispatcher Quick Start
+Log into the Dispatcher Console.
+Review Dashboard metrics.
+Check active drivers.
+Review pending deliveries.
+Assign delivery jobs.
+Monitor route activity.
+Address operational exceptions.
+Driver Quick Start
+Log into the Mobile Application.
+Open assigned deliveries.
+Travel to delivery location.
+Verify GPS location.
+Capture proof-of-delivery.
+Confirm delivery completion.
+Proceed to the next assignment.
+Part I: Dispatcher Operations Console
+Dispatcher Operations Overview
+
+The Dispatcher Operations Console serves as the command center for logistics operations.
+
+The platform enables dispatch personnel to:
+
+Monitor drivers
+Manage deliveries
+Assign work
+Review delivery performance
+Investigate exceptions
+Track equipment
+Verify proof-of-delivery
+Dispatcher Responsibilities
+
+Dispatch personnel are responsible for:
+
+Managing delivery assignments
+Monitoring fleet activity
+Resolving operational exceptions
+Maintaining delivery visibility
+Supporting field personnel
+Escalating operational issues
+Assign a New Delivery
+Step 1
+
+Navigate to:
+
+Plain Text
+Scheduling → Jobs
+Show more lines
+Step 2
+
+Select:
+
+Plain Text
+Create Job
+Show more lines
+Step 3
+
+Enter:
+
+Job Title
+Job Type
+Priority
+Scheduled Time
+Delivery Notes
+Step 4
+
+Save the job.
+
+Step 5
+
+Assign a driver.
+
+The platform prioritizes:
+
+Available drivers
+Online drivers
+Lowest workload
+Active status
+Outcome
+
+The job moves into the dispatch queue and is assigned for execution.
+
+Monitor Active Drivers
+Step 1
+
+Open:
+
+Plain Text
 Tracking
-Packages
-Equipment
-Proof Gallery
-Exception Handling
+Show more lines
+Step 2
 
+Select a driver.
 
-docs/user-guide/DRIVER-GUIDE.md
-Login
-Deliveries
-GPS Verification
-POD
+Step 3
+
+Review:
+
+Current location
+Online status
+Package count
+Route history
+Step 4
+
+Use route playback controls if required.
+
+Outcome
+
+Maintains real-time operational awareness across the fleet.
+
+Monitor Delivery Performance
+Step 1
+
+Open:
+
+Plain Text
+Dashboard
+Show more lines
+Step 2
+
+Review:
+
+Online Drivers
+Active Drivers
+Pending Packages
+Delivered Packages
 Exceptions
-Profile
+Step 3
 
-docs/user-guide/ADMINISTRATOR-GUIDE.md
-User Management
-System Monitoring
-Operations
-Troubleshooting
-Maintenance
+Investigate any exception events.
 
+Outcome
 
-Current Readiness Assessment
-Category	ScoreStructure	9/10
-Completeness	9/10
-Usability	8/10
-Production Readiness	7/10
-Training Value	9/10
-Operational Guidance	6/10
-Overall
+Operational issues are identified and addressed before customer impact.
 
-Current: 8.5/10
+Handle Delivery Exceptions
+Common Exceptions
+Customer unavailable
+Incorrect address
+Access denied
+Damaged package
+GPS validation failure
+Dispatcher Actions
+Review exception details.
+Contact the driver if necessary.
+Provide updated instructions.
+Reassign work when required.
+Update delivery status.
+Record operational notes.
+Outcome
 
-After Revision: 9.5/10
+Exceptions are handled consistently and documented properly.
 
-The biggest improvement would be moving away from a screen-by-screen walkthrough and toward a workflow-driven operational guide that helps dispatchers and drivers complete real-world tasks and recover from common operational issues.
+Dashboard
+Purpose
 
+The Dashboard provides a live operational overview of fleet activity.
 
+Key Metrics
+Metric	DescriptionOnline Drivers	Drivers actively reporting telemetry
+Active Drivers	Drivers currently working
+Pending Packages	Deliveries awaiting completion
+Delivered Packages	Successfully completed deliveries
+Total Drivers	Registered drivers
+Total Packages	Active package inventory
+Exceptions	Deliveries requiring attention
+Driver Visibility
 
+Dispatchers may:
 
+View driver locations
+Select drivers
+Review route activity
+Monitor operational status
+Scheduling & Dispatch
+Delivery Lifecycle
+Plain Text
+Pending
+↓
+Assigned
+↓
+In Progress
+↓
+Completed
+Show more lines
 
+Alternative outcome:
 
+Plain Text
+Cancelled
+Show more lines
+Job Management
+
+Dispatchers can:
+
+Create jobs
+Assign jobs
+Reassign jobs
+Update job status
+Add operational notes
+Cancel jobs
+Driver Management
+
+The Driver Management section provides visibility into all drivers.
+
+Available Information
+Driver Status
+Online Indicator
+Package Counts
+Last Known Location
+Activity Updates
+Search Options
+Driver Name
+Driver ID
+Status
+Package Management
+Package Statuses
+Status	DescriptionPending	Awaiting execution
+Loaded	Assigned and loaded
+Delivered	Successfully completed
+Exception	Issue requires review
+Package Information
+
+Each package includes:
+
+Package Identifier
+Driver Assignment
+Destination
+ETA
+Current Status
+Creation Date
+Fleet Tracking & Route Playback
+Capabilities
+
+Dispatchers can:
+
+Monitor live GPS activity
+View historical routes
+Review route execution
+Analyze driver movement
+Playback Controls
+
+Available controls:
+
+Play
+Pause
+Stop
+Timeline Navigation
+Playback Speed Adjustment
+Operational Uses
+Incident investigation
+Delivery verification
+Driver coaching
+Route analysis
+Proof of Delivery Gallery
+Purpose
+
+Provides centralized access to delivery verification records.
+
+Available Information
+POD Image
+Package Identifier
+Driver Identifier
+Submission Timestamp
+Common Uses
+Customer support
+Audit requests
+Delivery verification
+Compliance reviews
+Equipment Management
+Supported Equipment
+Scanners
+Radios
+Dollies
+Vehicle Keys
+Miscellaneous Equipment
+Available Actions
+Register Equipment
+Check In Equipment
+Check Out Equipment
+Review History
+Search Inventory
+Barcode Operations
+
+Barcode scanning supports:
+
+Asset registration
+Verification
+Check-in workflows
+Check-out workflows
+Part II: Driver Mobile Application
+Driver Mobile Overview
+
+The Driver Mobile Application supports day-to-day delivery execution and field operations.
+
+Driver Responsibilities
+
+Drivers are responsible for:
+
+Completing assigned deliveries
+Maintaining GPS connectivity
+Submitting proof-of-delivery
+Reporting exceptions
+Following dispatch instructions
+Complete a Delivery
+Step 1
+
+Open assigned delivery.
+
+Review:
+
+Package Information
+Destination
+ETA
+Step 2
+
+Travel to delivery location.
+
+Monitor:
+
+GPS status
+ETA updates
+Route information
+Step 3
+
+Verify Location
+
+Select:
+
+Plain Text
+Verify Location
+Show more lines
+
+Possible result:
+
+✅ Location Verified
+
+or
+
+❌ Outside Delivery Zone
+
+Step 4
+
+Capture Proof of Delivery
+
+Take a photograph showing:
+
+Delivered package
+Delivery location
+Relevant delivery context
+Step 5
+
+Confirm Delivery
+
+Submit:
+
+Delivery confirmation
+Proof image
+Outcome
+
+Delivery status changes to Completed.
+
+Step 6
+
+Proceed to the next assignment.
+
+Report an Exception
+
+If delivery cannot be completed:
+
+Open delivery details.
+Select:
+Plain Text
+Report Exception
+Show more lines
+Select an appropriate reason.
+Submit the report.
+Common Reasons
+Customer unavailable
+Access issue
+Address problem
+Safety concern
+
+Dispatch is notified automatically.
+
+Delivery List
+
+Displays:
+
+Assigned deliveries
+ETA estimates
+Status information
+Delivery destinations
+
+Drivers may refresh the list at any time.
+
+ETA Prediction
+
+ETA calculations are based on:
+
+Distance
+Traffic conditions
+Historical routing patterns
+Traffic Levels
+Light
+Moderate
+Heavy
+GPS Status
+
+The Profile page displays:
+
+Current GPS coordinates
+GPS accuracy
+Connectivity status
+
+GPS access is required for delivery verification.
+
+Common Operational Scenarios
+GPS Verification Failed
+Cause
+
+Driver is outside the geofence boundary.
+
+Action
+Move closer to destination.
+Refresh GPS location.
+Retry verification.
+Contact dispatch if issue persists.
+Driver Appears Offline
+Dispatcher Actions
+Verify driver is logged in.
+Verify device connectivity.
+Verify location services are enabled.
+Driver Actions
+Restart application.
+Check connectivity.
+Verify GPS permissions.
+Delivery Cannot Be Confirmed
+Possible Causes
+Missing proof image
+GPS not verified
+Connectivity interruption
+Action
+
+Complete required steps and retry.
+
+Photo Upload Failure
+Action
+Verify connectivity.
+Retake image if needed.
+Retry upload.
+Barcode Scanner Not Working
+Action
+Verify camera permissions.
+Ensure barcode visibility.
+Enter barcode manually if necessary.
+Administrator Operations
+
+Administrators are responsible for:
+
+User management
+Compliance oversight
+Operational audits
+Reporting
+Platform governance
+
+Administrators have access to all operational modules.
+
+Operational Escalation Matrix
+Issue	Escalation PathLogin Issues	Platform Administrator
+Driver Offline	Dispatch Supervisor
+GPS Failure	Dispatch Operations
+Delivery Exception	Operations Manager
+POD Upload Failure	Dispatch Operations
+Equipment Issue	Fleet Operations
+Application Error	Platform Support Team
+Glossary
+Term	DefinitionAssignment	Delivery work assigned to a driver
+Dispatch Job	Scheduled work item
+Driver	Field delivery personnel
+ETA	Estimated Time of Arrival
+Exception	Delivery issue requiring review
+Geofence	Geographic delivery boundary
+Heartbeat	Driver telemetry update
+Package	Individual delivery item
+POD	Proof of Delivery
+Route Playback	Historical route review
+Route Optimization	System-assisted route planning
+Telemetry	Operational location and status updates
+Tracking Session	Active location monitoring period
+Best Practices
+For Dispatchers
+Monitor dashboard metrics frequently.
+Investigate exceptions promptly.
+Maintain awareness of driver activity.
+Review completed deliveries daily.
+Escalate issues early.
+For Drivers
+Keep GPS enabled.
+Submit clear delivery photographs.
+Verify location before confirmation.
+Report exceptions immediately.
+Synchronize delivery data regularly.
+Support
+
+For operational or system issues:
+
+Contact your supervisor or dispatcher.
+Provide package, job, or delivery identifiers.
+Include screenshots when available.
+Follow established escalation procedures.
+Related Documentation
+Document	PurposeARCHITECTURE.md	Platform Architecture
+ROADMAP.md	Product Roadmap
+RUNBOOK.md	Operations Procedures
+PRODUCTION-READINESS.md	Production Readiness Program
+RECOVERY-CHECKLIST.md	Recovery Procedures
+TROUBLESHOOTING.md	Issue Resolution Guide
+KNOWN-ISSUES.md	Active Issues & Investigations
+Revision History
+Version	Date	Description1.0	Original Release	Initial User Guide
+2.0	September 2026	Production-ready workflow-based redesign
+
+Document Classification: Internal Use Only
+ Document Status: Approved for Operational Use
+ Document Owner: Chicago Cargo Courier LLC Operations
+ Version: 2.0
+
+Provide your feedback on BizChat
