@@ -44,8 +44,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@delivery_db:5432/delivery
-      - REDIS_URL=redis://delivery_redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@delivery_db:5432/delivery
+      REDIS_URL: redis://delivery_redis:6379
     volumes:
       - .:/app
       - app_uploads:/app/uploads
@@ -68,23 +68,5 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    networks:
-      - delivery_net
-
-  telemetry_worker:
-    build:
-      context: .
-      dockerfile: src/backend/Dockerfile
-    image: delivery_backend:latest
-    command: python -m celery -A src.backend.worker.celery_app worker --concurrency=4 --loglevel=info
-    restart: unless-stopped
-    deploy:
-      replicas: 3
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@delivery_db:5432/delivery
-      - REDIS_URL=redis://delivery_redis:6379
-    depends_on:
-      - delivery_db
-      - delivery_redis
     networks:
       - delivery_net
