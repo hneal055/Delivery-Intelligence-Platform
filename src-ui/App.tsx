@@ -105,7 +105,6 @@ export default function App() {
   // Initialize Leaflet Map when Live Map tab is active
   useEffect(() => {
     if (activeTab === 'Live Map') {
-      // Dynamically load Leaflet CSS & JS from CDN if not already present
       if (!document.getElementById('leaflet-css')) {
         const link = document.createElement('link');
         link.id = 'leaflet-css';
@@ -130,14 +129,22 @@ export default function App() {
     const container = document.getElementById('leaflet-map-container');
     if (!container) return;
 
+    const L = window.L;
+    if (!L) return;
+
+    // Fix Leaflet default marker icon paths broken by CDN/bundler
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    });
+
     // Clear previous map instance if it exists
     if (mapRef.current) {
       mapRef.current.remove();
       mapRef.current = null;
     }
-
-    const L = window.L;
-    if (!L) return;
 
     // Create map centered on Chicago
     const map = L.map('leaflet-map-container').setView([activeDriver.lat, activeDriver.lng], 12);
@@ -159,6 +166,42 @@ export default function App() {
       .bindPopup(`<b>${activeDriver.driver}</b><br/>Status: ${activeDriver.status}<br/>Speed: ${activeDriver.speed}`)
       .openPopup();
   };
+
+  // Real-time Redis WebSocket Telemetry Connection
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:8000/ws/telemetry');
+
+    ws.onopen = () => {
+      console.log('Connected to real-time telemetry WebSocket');
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const telemetry = JSON.parse(event.data);
+        setActiveDriver((prev: any) => {
+          if (prev.id === telemetry.dispatch_id) {
+            return {
+              ...prev,
+              lat: telemetry.lat,
+              lng: telemetry.lng,
+              speed: telemetry.speed || prev.speed,
+            };
+          }
+          return prev;
+        });
+      } catch (e) {
+        console.error('Failed to parse incoming telemetry packet', e);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.warn('WebSocket telemetry error:', error);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   // Update marker position when playback progress or active driver changes
   useEffect(() => {

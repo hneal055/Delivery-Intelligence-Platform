@@ -1,10 +1,10 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from jose import JWTError, jwt
-from src.backend.core.config import settings
-from src.backend.services.redis_manager import manager
 import json
 import logging
 import time
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from jose import JWTError, jwt
+from src.backend.core.config import settings
+from src.backend.services.redis_manager import manager
 
 router = APIRouter(tags=["websocket"])
 logger = logging.getLogger(__name__)
@@ -97,5 +97,3 @@ async def driver_ws(websocket: WebSocket, driver_id: str, token: str = Query(...
                 await websocket.send_json({"type": "error", "message": "Invalid JSON"})
     except WebSocketDisconnect:
         manager.disconnect_client(driver_id, websocket)
-
-
