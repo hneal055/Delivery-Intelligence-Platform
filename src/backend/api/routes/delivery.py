@@ -1,231 +1,135 @@
-from fastapi import (
-    APIRouter,
-    HTTPException,
-    Depends,
-    UploadFile,
-    File,
-    Form,
-    status,
-    Request,
-)
+import logging
+import os
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from typing import List, Optional, Any
+import redis.asyncio as aioredis
+from src.backend.api.routes.geofence import verify_geofence, GeofenceCheckRequest
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+logger = logging.getLogger(__name__)
+router = APIRouter()
 
-from src.backend.models.domain import Location, User
-from src.backend.models.sql_models import Package
-from src.backend.api.deps import get_current_active_user
-from src.backend.core.database import get_db
-from src.backend.core.storage import proof_storage, is_safe_filename
-from src.analytics.geofencing.core import is_in_delivery_zone
-from src.analytics.image_analysis.verifier import image_verifier
-from src.backend.api.metrics import DELIVERIES_COMPLETED
+# Target the Docker volume mounted at /app/uploads
+UPLOADS_DIR = Path("/app/uploads")
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+DATA_DIR = Path("/app/data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / "delivery_proofs.db"
 
-router = APIRouter(
-    prefix="/delivery",
-    tags=["delivery"],
-)
+REDIS_URL = os.getenv("REDIS_URL", "redis://delivery_redis:6379")
 
+def get_db():
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
 
-class LocationVerifyRequest(BaseModel):
-    driver_id: str = "unknown"
-    current_location: Location
-    target_delivery_location: Location
-    delivery_zone: Optional[List[Location]] = None
+async def publish_delivery_event(package_id: str, driver_id: str, status: str):
+    try:
+        client = aioredis.from_url(REDIS_URL, decode_responses=True)
+        await client.publish("fleet_events", f"Package {package_id} delivered by {driver_id}: {status}")
+        await client.close()
+    except Exception as e:
+        logger.error(f"Failed to publish Redis event: {e}")
 
-
-class ExceptionReportRequest(BaseModel):
+class DeliverySubmission(BaseModel):
     package_id: str
     driver_id: str
-    reason: str
+    status: str
+    dest_lat: float
+    dest_lon: float
+    target_lat: float
+    target_lon: float
+    radius_meters: float = 150.0
 
-
-@router.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-@router.post("/verify-location")
-async def verify_location(
-    payload: LocationVerifyRequest,
-    current_user: User = Depends(get_current_active_user),
+@router.post("/submit")
+async def submit_delivery(
+    package_id: str = Form(...),
+    driver_id: str = Form(...),
+    status: str = Form(...),
+    dest_lat: float = Form(...),
+    dest_lon: float = Form(...),
+    target_lat: float = Form(...),
+    target_lon: float = Form(...),
+    radius_meters: float = Form(150.0),
+    signature: Optional[UploadFile] = File(None),
+    photo: Optional[UploadFile] = File(None)
 ):
-    """
-    Verify if the driver's current location is within the acceptable delivery zone.
-    """
-    if payload.delivery_zone and len(payload.delivery_zone) >= 3:
-        in_zone = is_in_delivery_zone(
-            payload.current_location,
-            payload.delivery_zone,
+    """Submit proof of delivery with integrated geofence verification and Redis event broadcasting."""
+    try:
+        # 1. Verify geofence before accepting delivery
+        geofence_req = GeofenceCheckRequest(
+            driver_id=driver_id,
+            latitude=dest_lat,
+            longitude=dest_lon,
+            target_latitude=target_lat,
+            target_longitude=target_lon,
+            radius_meters=radius_meters
         )
-    else:
-        lat_diff = abs(
-            payload.current_location.lat
-            - payload.target_delivery_location.lat
-        )
-        lon_diff = abs(
-            payload.current_location.lon
-            - payload.target_delivery_location.lon
-        )
-
-        in_zone = (
-            lat_diff < 0.001
-            and lon_diff < 0.001
-        )
-
-    return {
-        "allowed": in_zone,
-        "driver_id": payload.driver_id,
-        "message": (
-            "Location verified successfully"
-            if in_zone
-            else "Driver is outside the delivery zone"
-        ),
-    }
-
-
-@router.post("/confirm")
-async def confirm_delivery(
-    request: Request,
-    package_id: Optional[Any] = Form(default=None),
-    driver_id: Optional[Any] = Form(default=None),
-    image: Optional[UploadFile] = File(default=None),
-    photo: Optional[UploadFile] = File(default=None),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Confirm package delivery with proof-of-delivery validation.
-    """
-    uploaded_file = image or photo
-
-    def safe_str(value: Any, default: str) -> str:
-        if value is None:
-            return default
-        if isinstance(value, bytes):
-            return value.decode("utf-8", errors="ignore").strip()
-        return str(value).strip()
-
-    pkg_str = safe_str(package_id, "pkg-unknown")
-    drv_str = safe_str(driver_id, "driver-unknown")
-
-    if pkg_str == "pkg-unknown" or drv_str == "driver-unknown":
-        try:
-            body = await request.json()
-            if pkg_str == "pkg-unknown":
-                pkg_str = safe_str(body.get("package_id"), "pkg-unknown")
-            if drv_str == "driver-unknown":
-                drv_str = safe_str(body.get("driver_id"), "driver-unknown")
-        except Exception:
-            pass
-
-    if pkg_str == "pkg-unknown":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Package ID is required",
-        )
-
-    filename = "proof.jpg"
-    if uploaded_file:
-        filename = uploaded_file.filename or "proof.jpg"
-        if uploaded_file.filename and not is_safe_filename(uploaded_file.filename):
+        geo_result = await verify_geofence(geofence_req)
+        
+        if not geo_result.get("is_inside", False):
+            logger.warning(f"Delivery submission rejected for package {package_id}: driver outside geofence radius ({geo_result.get('distance_meters')}m).")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid image filename or format",
+                status_code=400,
+                detail=f"Geofence validation failed: Driver is {geo_result.get('distance_meters')}m away from target (max allowed: {radius_meters}m)."
             )
 
-    file_bytes = await uploaded_file.read() if uploaded_file else b"mock_image_bytes"
+        # 2. Handle file uploads
+        signature_filename = None
+        if signature:
+            signature_path = UPLOADS_DIR / f"sig_{package_id}_{signature.filename}"
+            with open(signature_path, "wb") as buffer:
+                buffer.write(await signature.read())
+            signature_filename = str(signature_path.name)
 
-    # Invoke the image verifier service matching test expectations
-    try:
-        is_valid, reason = image_verifier.verify_proof_of_delivery(file_bytes)
-    except Exception:
-        is_valid = len(file_bytes) >= 10 and b"INVALID" not in file_bytes and b"notanimage" not in file_bytes
-        reason = "OK" if is_valid else "Image validation failed"
+        photo_filename = None
+        if photo:
+            photo_path = UPLOADS_DIR / f"photo_{package_id}_{photo.filename}"
+            with open(photo_path, "wb") as buffer:
+                buffer.write(await photo.read())
+            photo_filename = str(photo_path.name)
 
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid Proof: {reason}",
-        )
-
-    file_path = await proof_storage.save_proof(
-        pkg_str,
-        drv_str,
-        file_bytes,
-        filename,
-    )
-
-    result = await db.execute(select(Package).where(Package.id == pkg_str))
-    pkg_record = result.scalars().first()
-    if pkg_record:
-        pkg_record.status = "delivered"
-        await db.commit()
-
-    DELIVERIES_COMPLETED.inc()
-
-    return {
-        "status": "success",
-        "package_id": pkg_str,
-        "driver_id": drv_str,
-        "proof_path": file_path,
-        "message": "Delivery confirmed and marked delivered",
-    }
-
-
-@router.post("/exception")
-async def report_exception(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Report a delivery exception or blockade.
-    """
-    pkg_id = "pkg-unknown"
-    drv_id = "driver-unknown"
-    rsn = "unknown"
-
-    try:
-        body = await request.json()
-        pkg_id = body.get("package_id", pkg_id)
-        drv_id = body.get("driver_id", drv_id)
-        rsn = body.get("reason", rsn)
-    except Exception:
+        # 3. Save proof of delivery to database
+        conn = get_db()
         try:
-            form = await request.form()
-            pkg_id = form.get("package_id", pkg_id)
-            drv_id = form.get("driver_id", drv_id)
-            rsn = form.get("reason", rsn)
-        except Exception:
-            pass
+            conn.execute(
+                """
+                INSERT INTO delivery_proofs (
+                    package_id, driver_id, status, timestamp, dest_lat, dest_lon, signature_path, photo_filename
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    package_id,
+                    driver_id,
+                    status,
+                    datetime.now(timezone.utc).isoformat(),
+                    dest_lat,
+                    dest_lon,
+                    signature_filename,
+                    photo_filename
+                )
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
-    pkg_str = str(pkg_id).strip()
+        # 4. Broadcast event via Redis Pub/Sub
+        await publish_delivery_event(package_id, driver_id, status)
 
-    result = await db.execute(select(Package).where(Package.id == pkg_str))
-    pkg_record = result.scalars().first()
-    if pkg_record:
-        pkg_record.status = "exception"
-        await db.commit()
-        await db.refresh(pkg_record)
+        logger.info(f"Delivery proof recorded and broadcasted successfully for package {package_id} by driver {driver_id}")
+        return {
+            "status": "success",
+            "message": "Delivery proof recorded successfully with geofence validation and event broadcast.",
+            "package_id": package_id,
+            "geofence_distance_meters": geo_result.get("distance_meters")
+        }
 
-    return {
-        "status": "exception_reported",
-        "package_id": pkg_str,
-        "reason": str(rsn),
-        "message": "Exception successfully reported to dispatch",
-    }
-
-
-@router.get("/recent-proofs")
-async def recent_proofs(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Retrieve recent proof-of-delivery uploads (Manager/Admin only). Returns a list.
-    """
-    return []
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error submitting delivery proof: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

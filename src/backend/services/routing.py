@@ -1,6 +1,6 @@
 import math
 import logging
-from typing import List, Dict
+from typing import Tuple, List, Dict
 
 logger = logging.getLogger("delivery_platform.routing")
 
@@ -22,12 +22,7 @@ class RouteOptimizer:
         current_lat, current_lng = start_coords
 
         while unvisited:
-            # Find nearest unvisited stop
-            nearest = min(
-                unvisited,
-                key=lambda s: self.distance(current_lat, current_lng, s["lat"], s["lng"]) if "distance" in locals() else 0
-            )
-            # Better implementation using helper distance calculation:
+            # Find nearest unvisited stop using the helper distance calculation
             nearest = min(
                 unvisited,
                 key=lambda s: self.calculate_distance(current_lat, current_lng, s["lat"], s["lng"])
@@ -38,4 +33,4 @@ class RouteOptimizer:
 
         return optimized
 
-route_optimizer = RouteOptimizer()
+routing_service = RouteOptimizer()
