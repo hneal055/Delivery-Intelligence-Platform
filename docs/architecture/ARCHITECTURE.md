@@ -1,201 +1,278 @@
-# Delivery Intelligence Platform — Architecture
+Architecture Status Definitions
+Status	Meaning✅ Operational	Verified and functioning
+🔄 In Validation	Implemented but currently undergoing validation
+⬜ Planned	Target-state architecture not yet validated
+Architecture Overview
 
-## System Architecture Diagram
+The Delivery Intelligence Platform (DIP) is designed as a modular, cloud-native logistics intelligence platform supporting:
 
-```mermaid
-graph TB
-    subgraph Clients["Client Layer"]
-        Browser["Browser\n(Dispatcher Dashboard)"]
-        Mobile["Mobile App\n(Driver App)"]
-        External["External Systems\n(Webhooks / API)"]
-    end
+Dispatch Management
+Fleet Operations
+GPS Tracking
+Route Optimization
+Proof of Delivery
+Geospatial Intelligence
+Real-Time Telemetry
+Machine Learning Analytics
+Operational Command Center Functions
 
-    subgraph Gateway["Ingress Layer"]
-        Nginx["Nginx / k8s Ingress\n(TLS termination, rate limit)"]
-    end
+The architecture separates operational services into distinct layers to support scalability, observability, resiliency, and future Kubernetes deployment.
 
-    subgraph API["API Layer — FastAPI (Python 3.12)"]
-        Auth["Auth Routes\n/auth/*"]
-        Delivery["Delivery Routes\n/delivery/*"]
-        Dispatch["Dispatch Routes\n/dispatch/*"]
-        Tracking["Tracking Routes\n/tracking/*"]
-        Routing["Routing Routes\n/routing/*\n(haversine + Mapbox)"]
-        Analytics["Analytics Routes\n/analytics/*\n(ETA ML, geofencing)"]
-        AdvRouting["Advanced Routing\n/routing/advanced/*\n(time windows, vehicle profiles)"]
-        WS["WebSocket Routes\n/ws/dispatcher\n/ws/driver"]
-        Middleware["OTel Tracing\nSlowAPI Rate Limiting\nJWT Auth Middleware"]
-    end
+Current Validated Architecture (September 2026)
+Infrastructure
+Component	StatusDocker Compose Environment	✅
+FastAPI Backend	✅
+PostgreSQL 15	✅
+PostGIS	✅
+Redis	✅
+Swagger / OpenAPI	✅
+Alembic Migrations	✅
+JWT Authentication	✅
+OAuth2 Password Flow	✅
+Database Layer
+Component	Statususers	✅
+drivers	✅
+packages	✅
+dispatch_jobs	✅
+audit_logs	✅
+device_tokens	✅
+location_history	✅
+route_history	✅
+vehicle_profiles	✅
+time_window_constraints	✅
+Functional Services
+Service	StatusAuthentication	✅
+Dispatch Endpoint Access	✅
+Database Connectivity	✅
+Seeding Framework	✅
+Dispatch Functional Validation	🔄
+Tracking Validation	⬜
+Routing Validation	⬜
+Analytics Validation	⬜
+Target State System Architecture
+Component Inventory
+Component	Technology	Status	NotesAPI Backend	FastAPI + Uvicorn	✅	Operational
+PostgreSQL	PostgreSQL 15	✅	Operational
+Geospatial Engine	PostGIS 3.x	✅	Operational
+Cache / PubSub	Redis 7	✅	Operational
+Authentication	OAuth2 + JWT	✅	Operational
+Migrations	Alembic	✅	Operational
+ARQ Workers	ARQ	🔄	Not fully validated
+WebSockets	FastAPI WebSockets	🔄	Validation pending
+Mapbox Integration	Mapbox APIs	⬜	Not fully validated
+S3 Proof Storage	S3 / LocalStack	⬜	Validation pending
+ML ETA Services	Scikit-Learn	⬜	Validation pending
+Prometheus	Prometheus	⬜	Planned validation
+Grafana	Grafana	⬜	Planned validation
+Alertmanager	Alertmanager	⬜	Future deployment
+Kubernetes	Helm	⬜	Production target state
+Logical Application Architecture
+Authentication Layer
+Responsibilities
+User Authentication
+JWT Token Generation
+Role Verification
+Access Control Enforcement
+Current Status
 
-    subgraph Workers["Background Workers — ARQ"]
-        ARQWorker["ARQ Worker\n(async task queue)"]
-        Heartbeat["Heartbeat Service\n(driver location pings)"]
-        Notifications["Notifications Service\n(SMS via Twilio, email)"]
-    end
+✅ Operational
 
-    subgraph Data["Data Layer"]
-        PG[("PostgreSQL 15\n+ PostGIS 3.3\n\nDeliveries, Packages\nDrivers, Dispatchers\nTime Windows\nVehicle Profiles")]
-        Redis[("Redis 7\n\nPub/Sub broadcast\nRate limit counters\nSession cache")]
-        S3["S3 / LocalStack\n(Proof-of-delivery\nimage storage)"]
-    end
+Validated through:
 
-    subgraph RedisMgr["Redis Pub/Sub Manager"]
-        PubSub["RedisPubSubManager\n(auto-reconnect loop)\nBroadcast to dispatchers\nUnicast to drivers"]
-    end
+HTTP
+POST /auth/token
+Show more lines
 
-    subgraph Ext["External Services"]
-        Mapbox["Mapbox API\n(directions matrix\ngeocoding)"]
-        Twilio["Twilio / SMTP\n(SMS + email)"]
-    end
+Successful JWT issuance has been confirmed.
 
-    subgraph Observability["Observability Stack"]
-        Prometheus["Prometheus\n:9090"]
-        Grafana["Grafana\n:3001\n(10 dashboards)"]
-        Alertmanager["Alertmanager\n:9093\n(PagerDuty / Slack)"]
-        PGExporter["postgres_exporter"]
-        RedisExporter["redis_exporter"]
-        OTEL["OpenTelemetry SDK\n(traces → Jaeger / OTLP)"]
-    end
+Dispatch Layer
+Responsibilities
+Driver Assignment
+Job Scheduling
+Delivery Coordination
+Dispatch Monitoring
+Current Status
 
-    subgraph CI["CI/CD — GitHub Actions"]
-        Tests["pytest\n237 tests · 80% cov"]
-        HelmLint["helm lint\n(default + staging + prod)"]
-        Build["docker build + push\nGHCR (cosign signed)"]
-        Staging["deploy-staging\n(smoke test × 12)"]
-        LoadTest["Locust load test\n30 users · SLO enforced"]
-        Migrate["alembic upgrade head\n(prod — gated by staging)"]
-        Helm["helm upgrade\n(prod)"]
-    end
+🔄 Functional Validation In Progress
 
-    %% Client → Gateway → API
-    Browser --> Nginx
-    Mobile --> Nginx
-    External --> Nginx
-    Nginx --> Auth & Delivery & Dispatch & Tracking & Routing & Analytics & AdvRouting & WS
+Validated:
 
-    %% API → Data
-    Auth & Delivery & Dispatch & Tracking & Routing & Analytics & AdvRouting --> PG
-    Delivery --> S3
-    WS --> PubSub
+Endpoint Access
+Security Enforcement
+Authentication Protection
 
-    %% Pub/Sub → Redis
-    PubSub --> Redis
-    PubSub -.->|"fan-out\nmessages"| WS
+Pending:
 
-    %% API → Workers
-    Delivery & Dispatch & Notifications --> ARQWorker
-    ARQWorker --> Redis
-    ARQWorker --> Heartbeat & Notifications
+Dashboard Validation
+Driver Retrieval Validation
+Package Workflow Validation
+Dispatch Job Lifecycle Validation
+Tracking Layer
+Responsibilities
+Driver GPS Location Tracking
+Route Playback
+Live Telemetry
+Geospatial Event Processing
+Current Status
 
-    %% External
-    Routing --> Mapbox
-    Notifications --> Twilio
+⬜ Pending Validation
 
-    %% Observability wiring
-    API --> OTEL
-    PG --> PGExporter --> Prometheus
-    Redis --> RedisExporter --> Prometheus
-    Prometheus --> Grafana
-    Prometheus --> Alertmanager
+Routing Layer
+Responsibilities
+Route Optimization
+ETA Generation
+Geocoding
+Traffic-Based Adjustments
+Current Status
 
-    %% CI/CD pipeline order
-    Tests --> HelmLint --> Build --> Staging --> LoadTest
-    Staging --> Migrate --> Helm
-```
+⬜ Pending Validation
 
----
+Analytics Layer
+Responsibilities
+ETA Prediction
+Operational Analytics
+Driver Performance Reporting
+Predictive Intelligence
+Current Status
 
-## Component Inventory
+⬜ Pending Validation
 
-| Component | Technology | Port | Notes |
-|---|---|---|---|
-| API Backend | FastAPI + Uvicorn | 8002 | Async, OTel-instrumented |
-| Database | PostgreSQL 15 + PostGIS 3.3 | 5434 | Geospatial queries, Alembic migrations |
-| Cache / PubSub | Redis 7 | 6379 | Pub/Sub for WebSocket fan-out; rate limiting |
-| Background Workers | ARQ (asyncio task queue) | — | Delivery events, heartbeat, notifications |
-| Proof Storage | S3 / LocalStack (dev) | 4566 | SHA-keyed images, pre-signed URLs |
-| Routing Engine | Mapbox API + haversine 2-Opt | — | Falls back to haversine when no token |
-| ML / Analytics | scikit-learn ETAPredictor | — | Trained model persisted to disk |
-| Geofencing | Shapely + PostGIS | — | Circular zones + polygon containment |
-| Metrics | Prometheus + postgres/redis exporters | 9090 | Scraped every 15 s |
-| Dashboards | Grafana | 3001 | 10 pre-built panels |
-| Alerting | Alertmanager | 9093 | PagerDuty + Slack receivers |
-| Tracing | OpenTelemetry SDK | — | OTLP export (disabled in tests) |
-| Object Store (dev) | LocalStack | 4566 | Emulates S3, SQS, SNS |
+Data Flow: Proof of Delivery
+<img width="4032" height="1915" alt="image" src="https://github.com/user-attachments/assets/a78eac8f-26ef-469a-b670-26fd7d09e9fb" />
 
----
+Data Flow: Driver Telemetry
+<img width="4032" height="1861" alt="image" src="https://github.com/user-attachments/assets/e1611620-f99d-4db3-b60f-7d61f0a67c46" />
 
-## Data Flow: Proof-of-Delivery Upload
+Security Architecture
+Current Security Controls
+Control	StatusJWT Authentication	✅
+OAuth2 Password Flow	✅
+RBAC Authorization	✅
+FastAPI Dependency Security	✅
+Pydantic Validation	✅
+Audit Logging	✅
+Planned Production Security
+Control	StatusDocker Secrets	⬜
+TLS Automation	⬜
+Cert Manager	⬜
+Image Signing	⬜
+Dependency Verification	⬜
+Security Scanning	⬜
+Observability Architecture
+Current State
+Service	StatusApplication Logging	✅
+Docker Logging	✅
+Database Logging	✅
+Future State
+Service	StatusPrometheus Metrics	⬜
+Grafana Dashboards	⬜
+Alertmanager	⬜
+OpenTelemetry Tracing	⬜
+PagerDuty Integration	⬜
+CI/CD Architecture
+Current State
 
-```mermaid
-sequenceDiagram
-    participant Driver as Driver App
-    participant API as FastAPI Backend
-    participant DB as PostgreSQL
-    participant S3 as S3 / LocalStack
-    participant Dispatcher as Dispatcher Dashboard
+Manual deployment process.
 
-    Driver->>API: POST /delivery/{id}/proof (multipart image)
-    API->>API: Validate JWT + RBAC (driver role)
-    API->>S3: upload(key=PKG-{id}-{ts}.jpg, data)
-    S3-->>API: storage key
-    API->>DB: UPDATE delivery SET proof_url=key, status=delivered
-    DB-->>API: updated record
-    API->>API: RedisPubSubManager.broadcast_to_dispatchers()
-    API-->>Driver: 200 { proof_url }
-    API->>Dispatcher: WebSocket push { event: proof_uploaded, delivery_id }
-```
+Build
+docker compose build
 
----
+Startup
 
-## Data Flow: Real-Time Driver Tracking
+docker compose up -d
 
-```mermaid
-sequenceDiagram
-    participant Driver as Driver App
-    participant API as FastAPI Backend
-    participant Redis as Redis Pub/Sub
-    participant Worker as ARQ Worker
-    participant Dispatcher as Dispatcher Dashboard
+Migration
 
-    Driver->>API: WebSocket /ws/driver/{driver_id}
-    API->>Redis: SUBSCRIBE delivery_platform_broadcast
-    loop Every 5 s
-        Driver->>API: { lat, lon, timestamp }
-        API->>Worker: enqueue heartbeat_task(driver_id, location)
-        Worker->>Redis: PUBLISH broadcast { driver_id, lat, lon }
-        Redis-->>API: message delivered
-        API->>Dispatcher: WebSocket push { driver_id, location }
-    end
-```
+alembic upgrade head
 
----
+Seed
 
-## CI/CD Pipeline
+python -m tools.seed_db
 
-```mermaid
-graph LR
-    Push["git push main"] --> Test["test\n(pytest 237 tests)"]
-    Test --> Lint["helm-lint\n(3 value sets)"]
-    Lint --> Build["build-push\nGHCR + cosign sign"]
-    Build --> Staging["deploy-staging\n(k8s staging env)"]
-    Staging --> LoadTest["load-test\nLocust 30 users 2 min\nSLO: p95 < 500 ms"]
-    Staging --> Migrate["alembic migrate\n(prod — hard gate)"]
-    Migrate --> Deploy["helm upgrade\n(prod)"]
-```
+Target State
 
----
+GitHub Actions
+    ↓
+Unit Testing
+    ↓
+Container Builds
+    ↓
+Security Validation
+    ↓
+Staging Deployment
+    ↓
+Load Testing
+    ↓
+Production Deployment
 
-## Security Controls
+Planned Components:
 
-| Layer | Control |
-|---|---|
-| Transport | TLS via cert-manager (Let's Encrypt) |
-| Authentication | JWT (HS256), bcrypt password hashing |
-| Authorization | RBAC (admin / dispatcher / driver) via FastAPI deps |
-| Rate Limiting | SlowAPI (per-IP, per-endpoint limits) |
-| Input Validation | Pydantic v2 strict schemas on all endpoints |
-| Secrets | `.env` file (never committed); Docker secrets in production |
-| Dependencies | pip-compile with SHA-256 hashes (`--require-hashes`) |
-| Images | Cosign-signed GHCR images; non-root container user |
-| Storage | LocalStorage blocked in production; S3 enforced |
-| Monitoring | Alertmanager → PagerDuty on error rate / latency SLO breach |
+GitHub Actions
+Helm Charts
+Automated Testing
+Load Testing
+Container Signing
+Kubernetes Deployment
+Current Architectural Risks
+Dispatch Dashboard Authentication
+Status
+
+🔄 Active Investigation
+
+Endpoint
+
+GET /dispatch/dispatch/dashboard/summary
+
+Observed Behavior
+{
+  "detail": "Not authenticated"
+}
+
+Potential Causes
+JWT propagation failure
+Swagger authorization issue
+Router-level authentication configuration
+OAuth dependency wiring
+Future Architecture Enhancements
+Mobile Platform
+Offline operation
+Push notifications
+Route optimization
+Mobile proof-of-delivery workflows
+Command Center
+Fleet heat maps
+Live telemetry wallboards
+Dispatch command dashboard
+Capacity forecasting
+Predictive Intelligence
+Delivery risk scoring
+Demand forecasting
+Driver optimization
+Intelligent dispatch recommendations
+
+Architecture Summary
+Layer	StatusInfrastructure	✅ Operational
+Database	✅ Operational
+Authentication	✅ Operational
+Dispatch	🔄 In Validation
+Tracking	⬜ Pending
+Routing	⬜ Pending
+Analytics	⬜ Pending
+Monitoring	⬜ Planned
+Production CI/CD	⬜ Planned
+
+Current Architecture Maturity
+Infrastructure Recovery      ✅ COMPLETE
+Database Recovery            ✅ COMPLETE
+Authentication Recovery      ✅ COMPLETE
+Dispatch Validation          🔄 IN PROGRESS
+Tracking Validation          ⬜ PENDING
+Routing Validation           ⬜ PENDING
+Analytics Validation         ⬜ PENDING
+Production Hardening         ⬜ PENDING
+
+
+Architecture Status: Operational Foundation Established ✅
+ Next Architecture Milestone: Dispatch Functional Validation Complete 🔄
+
+
