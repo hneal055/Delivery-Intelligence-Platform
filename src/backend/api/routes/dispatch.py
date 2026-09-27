@@ -263,8 +263,22 @@ async def create_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new dispatch job. Requires manager or admin role."""
-    service = DispatchService(db)
-    return await service.create_job(job_data)
+
+    job = DispatchJobSQL(
+        driver_id=job_data.driver_id,
+        title=job_data.title,
+        type=job_data.type.value if hasattr(job_data.type, "value") else job_data.type,
+        priority=job_data.priority,
+        notes=job_data.notes,
+        scheduled_at=job_data.scheduled_at,
+        package_id=job_data.package_id,
+    )
+
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    return job
 
 
 @router.get("/jobs", response_model=List[DispatchJob])
