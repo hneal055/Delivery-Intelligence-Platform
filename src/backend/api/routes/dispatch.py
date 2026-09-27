@@ -274,8 +274,15 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
 ):
     """List dispatch jobs. Requires manager or admin role."""
-    service = DispatchService(db)
-    return await service.get_all_jobs(status)
+
+    query = select(DispatchJobSQL)
+
+    if status:
+        query = query.where(DispatchJobSQL.status == status)
+
+    result = await db.execute(query)
+
+    return result.scalars().all()
 
 
 @router.put("/jobs/{job_id}/assign")
