@@ -375,6 +375,7 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific dispatch job. Requires manager or admin role."""
+
     result = await db.execute(
         select(DispatchJobSQL).where(
             DispatchJobSQL.id == job_id
@@ -389,4 +390,4 @@ async def get_job(
             detail="Job not found"
         )
 
-    
+    return job
