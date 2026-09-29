@@ -263,22 +263,8 @@ async def create_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new dispatch job. Requires manager or admin role."""
-
-    job = DispatchJobSQL(
-        driver_id=job_data.driver_id,
-        title=job_data.title,
-        type=job_data.type.value if hasattr(job_data.type, "value") else job_data.type,
-        priority=job_data.priority,
-        notes=job_data.notes,
-        scheduled_at=job_data.scheduled_at,
-        package_id=job_data.package_id,
-    )
-
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
-
-    return job
+    service = DispatchService(db)
+    return await service.create_job(job_data)
 
 
 @router.get("/jobs", response_model=List[DispatchJob])
@@ -288,15 +274,8 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
 ):
     """List dispatch jobs. Requires manager or admin role."""
-
-    query = select(DispatchJobSQL)
-
-    if status:
-        query = query.where(DispatchJobSQL.status == status)
-
-    result = await db.execute(query)
-
-    return result.scalars().all()
+    service = DispatchService(db)
+    return await service.get_all_jobs(status)
 
 
 @router.put("/jobs/{job_id}/assign")
@@ -340,15 +319,8 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific dispatch job. Requires manager or admin role."""
-
-    result = await db.execute(
-        select(DispatchJobSQL).where(DispatchJobSQL.id == job_id)
-    )
-
-    job = result.scalar_one_or_none()
-
+    service = DispatchService(db)
+    job = await service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-
     return job
-
