@@ -3,15 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
-from src.backend.models.sql_models import (
-    Driver as DriverSQL,
-    Package as PackageSQL,
-    DispatchJob as DispatchJobSQL,
-    DriverAvailability,
-)
+from src.backend.api.deps import PermissionChecker
+
 from src.backend.core.database import get_db
-from src.backend.api.deps import get_current_active_user, PermissionChecker
+
 from src.backend.models.domain import User, DispatchJob, DispatchJobCreate, AvailabilityCreate
 from src.backend.models.sql_models import (
     Driver as DriverSQL,
@@ -263,8 +258,21 @@ async def create_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new dispatch job. Requires manager or admin role."""
-    service = DispatchService(db)
-    return await service.create_job(job_data)
+    job = DispatchJobSQL(
+        driver_id=job_data.driver_id,
+        title=job_data.title,
+        type=job_data.type.value if hasattr(job_data.type, "value") else job_data.type,
+        priority=job_data.priority,
+        notes=job_data.notes,
+        scheduled_at=job_data.scheduled_at,
+        package_id=job_data.package_id,
+    )
+
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    return job
 
 
 @router.get("/jobs", response_model=List[DispatchJob])
@@ -274,8 +282,16 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
 ):
     """List dispatch jobs. Requires manager or admin role."""
-    service = DispatchService(db)
-    return await service.get_all_jobs(status)
+    query = select(DispatchJobSQL)
+
+    if status:
+        query = query.where(
+            DispatchJobSQL.status == status
+        )
+
+    result = await db.execute(query)
+
+    return result.scalars().all()
 
 
 @router.put("/jobs/{job_id}/assign")
@@ -288,14 +304,41 @@ async def assign_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Assign a driver to a job. Requires manager or admin role."""
-    service = DispatchService(db)
-    try:
-        job = await service.assign_driver(job_id, driver_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    job_result = await db.execute(
+        select(DispatchJobSQL).where(
+            DispatchJobSQL.id == job_id
+        )
+    )
+
+    job = job_result.scalar_one_or_none()
+
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found"
+        )
+
+    driver_result = await db.execute(
+        select(DriverSQL).where(
+            DriverSQL.id == driver_id
+        )
+    )
+
+    driver = driver_result.scalar_one_or_none()
+
+    if not driver:
+        raise HTTPException(
+            status_code=404,
+            detail="Driver not found"
+        )
+
+    job.driver_id = driver_id
+    job.status = "assigned"
+
+    await db.commit()
+    await db.refresh(job)
+
+    return job
 
 
 @router.post("/availability")
@@ -307,9 +350,22 @@ async def set_availability(
     db: AsyncSession = Depends(get_db),
 ):
     """Set driver availability. Requires manager or admin role."""
-    service = DispatchService(db)
-    await service.set_availability(data.driver_id, data.date, data.is_available, data.start_time, data.end_time)
-    return {"message": "Availability updated"}
+    availability = DriverAvailability(
+        driver_id=data.driver_id,
+        date=data.date,
+        is_available=data.is_available,
+        start_time=data.start_time,
+        end_time=data.end_time,
+    )
+
+    db.add(availability)
+
+    await db.commit()
+
+    return {
+        "message": "Availability updated"
+    }
+
 
 
 @router.get("/jobs/{job_id}", response_model=DispatchJob)
@@ -319,8 +375,18 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific dispatch job. Requires manager or admin role."""
-    service = DispatchService(db)
-    job = await service.get_job(job_id)
+    result = await db.execute(
+        select(DispatchJobSQL).where(
+            DispatchJobSQL.id == job_id
+        )
+    )
+
+    job = result.scalar_one_or_none()
+
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found"
+        )
+
+    
