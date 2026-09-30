@@ -46,10 +46,32 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@delivery_db:5432/delivery
       REDIS_URL: redis://delivery_redis:6379
+      CELERY_BROKER_URL: redis://delivery_redis:6379/0
+      CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0
     volumes:
       - .:/app
       - app_uploads:/app/uploads
       - app_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - delivery_db
+      - delivery_redis
+    networks:
+      - delivery_net
+
+  telemetry_worker:
+    build:
+      context: .
+      dockerfile: src/backend/Dockerfile
+    image: delivery_backend:latest
+    command: python -m celery -A src.backend.worker.celery_app.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@delivery_db:5432/delivery
+      REDIS_URL: redis://delivery_redis:6379
+      CELERY_BROKER_URL: redis://delivery_redis:6379/0
+      CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0
+    volumes:
+      - .:/app
     restart: unless-stopped
     depends_on:
       - delivery_db
