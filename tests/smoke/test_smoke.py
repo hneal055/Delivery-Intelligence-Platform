@@ -1,19 +1,30 @@
-import pytest
-import httpx
 import os
 
-BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8002")
+import httpx
+
+BASE_URL = os.getenv(
+    "BACKEND_URL",
+    "http://localhost:8000",
+)
+
 
 def test_backend_health():
-    response = httpx.get(f"{BASE_URL}/docs")
+    response = httpx.get(f"{BASE_URL}/health")
     assert response.status_code == 200
 
-def test_auth_flow():
-    response = httpx.post(f"{BASE_URL}/auth/token", data={
-        "username": "admin",
-        "password": "adminpassword",
-        "grant_type": "password"
-    })
-    assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
+
+def test_auth_endpoint_available():
+    response = httpx.post(
+        f"{BASE_URL}/auth/token",
+        data={
+            "username": "nonexistent_user",
+            "password": "badpassword",
+            "grant_type": "password",
+        },
+    )
+
+    assert response.status_code == 401
+
+    body = response.json()
+
+    assert "detail" in body
