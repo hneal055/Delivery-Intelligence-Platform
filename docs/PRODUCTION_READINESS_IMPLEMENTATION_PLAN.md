@@ -94,10 +94,10 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
   - five orphaned mobile files saved under nested paths like `src/mobile/src/api/src/mobile/...`, which nothing imports
 
   *Kept:* `dummy_image.jpg`, which `tools/generate_traffic.ps1` uses.
-- [ ] **Clean the project root (untracked files)** *(owner action; the permission check blocked deleting untracked files because git cannot restore them)*: `nul`, `frontend.log`, `frontend_v2.log`, `simulation.log`, the empty directories `prometheus.yml/`, `prometheus-alerts.yml/`, `alertmanager.yml/` and `backend/`, and `rehab-session-2026-10-01.diff` (after the rehab work is committed).
+- [x] **Clean the project root (untracked files).** Deleted on 2026-10-08 with the owner's approval: `nul`, `frontend.log`, `frontend_v2.log`, `simulation.log` (3.4 MB), and the empty directories `prometheus.yml/`, `prometheus-alerts.yml/`, `alertmanager.yml/` and `backend/`. *Still to do:* `rehab-session-2026-10-01.diff`, once the rehab work is committed in Phase 2.
 - [x] **Merge the startup scripts** into [scripts/dev/start.ps1](../scripts/dev/start.ps1) and [scripts/dev/stop.ps1](../scripts/dev/stop.ps1). See the table under *Changes made*.
 - [x] **Monitoring mounts: no change needed.** The `./deploy/monitoring/...` paths are correct when the file is combined with the root compose file, as its header says. The root `*.yml` directories are leftovers from an older root compose file, and are listed under the untracked cleanup above.
-- [ ] **Use one Python environment** *(owner action)*. Delete `venv/` (184 MB, unused; `.venv` is the active one). Recreate `.venv` on Python 3.12 (`py -3.12 -m venv .venv`) to match Docker and CI; it is currently 3.14. Added `.python-version` (3.12).
+- [ ] **Use one Python environment.** ✅ `venv/` deleted (184 MB, unused). *Owner action still open:* recreate `.venv` on Python 3.12 (`py -3.12 -m venv .venv`) to match Docker and CI; it is currently 3.14. Added `.python-version` (3.12).
 - [x] **Move the manuals and reports** into `docs/manuals/` and `docs/reports/` with `git mv`.
 - [ ] **Clean up branches** *(owner decision)*. Merge or delete `stabilization/2026-09` and `feature/advanced-geofencing`, and work through the open Dependabot PRs.
 
@@ -125,7 +125,7 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 
 **Simulator:** restored `main()`, `--drivers` and `BACKEND_URL` in `tools/simulators/fleet_sim.py`. All three were accidentally removed in `e1130f76` (2026-09-27), so the simulator had been doing nothing when run.
 
-**Checkpoint:** ☐ Phase 1 in progress: 5 of 8 tasks done → readiness **51%** (54% when the owner actions are done)
+**Checkpoint:** ☐ Phase 1 in progress: 6 of 8 tasks done → readiness **52%** (54% when `.venv` is on 3.12 and the branches are cleaned up). Root entries: 61, down from about 90.
 
 ---
 
