@@ -213,6 +213,7 @@ _(fill in)_
 - [ ] **Test migrations in CI:** `alembic upgrade head` on an empty PostGIS database, then `alembic downgrade -1`, then upgrade again.
 - [ ] **Move proof photos to S3** (`PROOF_STORAGE=s3`; `services/storage.py` already supports it, per PLAN.md Phase 1), with a retention lifecycle rule.
 - [ ] **Automate Postgres backups** with daily `pg_dump` or managed snapshots, and **carry out one test restore** with timings recorded.
+- [ ] **Keep a copy of the backups off this machine**, on a network share or NAS. Today there is no backup tooling (`backups/` is empty) and no mapped network drives. Copy each daily dump, and the proof-of-delivery photos until they move to S3, to the share. Keep 7 daily and 4 weekly copies, and alert if a copy is missing or older than 26 hours. *Needs from owner:* the share's UNC path (`\\server\share\...`) and an account with write access.
 - [ ] **Remove ad-hoc database scripts** (`check_tables.py`, `init_spatial_db.sql`, `add_dispatcher.py`) or turn them into migrations or seed commands.
 
 ### Verify
@@ -300,6 +301,7 @@ _(fill in)_
 - [ ] **Replace `BASELINE.md`.** It describes an older branch; replace it with an up-to-date architecture overview, or delete it.
 - [ ] **Run a load test** with `tests/load/locustfile.py` against staging at about 2× expected peak fleet size, and record the results against the SLOs.
 - [ ] **Start a `CHANGELOG.md`** and tag `v1.0.0`.
+- [ ] **Add a real support contact to every user guide.** `docs/USER_GUIDE.md`, `docs/Recommended_User_Guides`, `docs/manuals/DISPATCHER_USER_MANUAL.txt` and `docs/manuals/DRIVER_USER_MANUAL.txt` only say "contact your supervisor/administrator" or "Development team". Give the name or role, email, phone, support hours, and an after-hours or urgent route for drivers on the road. The dispatcher manual also lists `localhost` URLs for the status page and Grafana; replace them with the real addresses. *Needs from owner:* the contact details.
 - [ ] **Complete a go-live checklist** with a named sign-off for security, data and operations.
 
 ### Verify

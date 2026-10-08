@@ -609,7 +609,7 @@ SYSTEM STATUS:
 PERFORMANCE MONITORING:
   Grafana: http://localhost:3500
   Username: admin
-  Password: new_bizness123
+  Password: ask your system administrator
 
 GETTING HELP:
 
