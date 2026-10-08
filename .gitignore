@@ -78,3 +78,21 @@ Delivery_Intelligence_Platform_Operational_Manual.md.pdf
 *.db-journal
 *.db-wal
 .env.backend
+
+# Runtime data: proof photos and signatures (use S3/R2 in prod)
+data/uploads/
+src/data/uploads/
+storage/
+
+# Bundled Node runtime for the mobile app (install Node instead)
+src/mobile/node.exe
+src/mobile/node-runtime/
+
+# Test and coverage output
+.coverage
+htmlcov/
+
+# Local dumps
+auth_inventory.txt
+dispatch_full.txt
+*.diff

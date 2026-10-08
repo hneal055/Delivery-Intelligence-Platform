@@ -81,29 +81,51 @@ Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 �
 **Why:** the repo has 61,024 tracked files (60,589 of them proof photos) and a 94 MB `.git`. The root has about 90 items, including 9 different start/stop scripts. This slows every clone, search, review and Docker build.
 
 ### Planned changes
-- [ ] **Stop tracking generated data and binaries** (`git rm -r --cached`):
-  - `src/uploads/`, `data/uploads/`, `storage/proofs/`
-  - `src/mobile/node.exe`, `src/mobile/node-runtime/` (two identical 42 MB copies of Node)
-  - `auth_inventory.txt` (9 MB UTF-16 search dump), `.coverage`
-  - `src/analytics/ml_models/eta_model.joblib`: move to artifact storage, or regenerate in the build
-  - the stray tracked directories `token_response.json/` and `verify_deployment.ps1/`
-- [ ] **Clean the project root.** Delete the files whose names start with `# ` (three of them), `nul`, `*.log`, `refresh_response.json`, `token_response.json`, `test_sig.txt`, `dummy_image.jpg`, `dispatch_full.txt` and `rehab-session-2026-10-01.diff` (after the rehab work is committed).
-- [ ] **Merge the startup scripts into one start and one stop script.** Today there are `start_all`, `start_platform`, `start-dev`, `daily_startup`, `clean_start`, `initialize_backend`, `load_env`, `stop-dev` and `verify_deployment`. Keep `scripts/dev/start.ps1` and `scripts/dev/stop.ps1`, and delete or archive the rest.
-- [ ] **Replace the two misnamed directories.** `prometheus.yml/`, `prometheus-alerts.yml/` and `alertmanager.yml/` at the root are *directories*; Docker creates these when a mount source is missing. Delete them and point the compose mounts at real files under `deploy/monitoring/`.
-- [ ] **Use one Python environment.** Delete `venv/` and keep `.venv/`. Pin Python 3.12 with a `.python-version` file to match the Dockerfile and CI (the local `.venv` currently runs 3.14).
-- [ ] **Move the manuals** (`DISPATCHER_USER_MANUAL.txt`, `DRIVER_USER_MANUAL.txt`, the operational manual PDF, `ANDROID_DEPLOYMENT_RUNBOOK.md`, `REAL_DEVICE_TESTING.txt`, `TEST_RESULTS.txt`) into `docs/`.
-- [ ] **Remove the empty `backend/` directory** at the root (`src/backend` is the real one).
-- [ ] **Clean up branches.** Merge or delete `stabilization/2026-09` and `feature/advanced-geofencing`, and work through the open Dependabot PRs.
+Phase 1 has 8 tasks, each worth 8/8 = 1%.
+
+- [x] **Stop tracking generated data and binaries** (`git rm -r --cached`; the files stay on disk): `src/uploads/`, `data/uploads/`, `storage/proofs/`, `src/data/uploads/`, `src/mobile/node.exe`, `src/mobile/node-runtime/`, `auth_inventory.txt`, `.coverage`, `token_response.json`, `refresh_response.json`. Added to `.gitignore`.
+  - *Kept:* `src/analytics/ml_models/eta_model.joblib`. `eta_predictor.py` loads it at runtime, so untracking it would break ETA predictions in built images. Revisit in Phase 6 (artifact storage).
+  - *Correction:* `token_response.json` and `verify_deployment.ps1` are ordinary files, not directories.
+- [x] **Clean the project root (tracked files).** Removed with `git rm`, so all of them are recoverable from history:
+  - the three files whose names start with `# ` (day-1 scaffolding)
+  - `DELIVERYINTELLIGENCEPLATORM.txt` (an outdated folder tree)
+  - `launch.json` (misplaced VS Code config)
+  - `test_sig.txt`, and `dispatch_full.txt` (a stale copy of `dispatch.py`)
+  - five orphaned mobile files saved under nested paths like `src/mobile/src/api/src/mobile/...`, which nothing imports
+
+  *Kept:* `dummy_image.jpg`, which `tools/generate_traffic.ps1` uses.
+- [ ] **Clean the project root (untracked files)** *(owner action; the permission check blocked deleting untracked files because git cannot restore them)*: `nul`, `frontend.log`, `frontend_v2.log`, `simulation.log`, the empty directories `prometheus.yml/`, `prometheus-alerts.yml/`, `alertmanager.yml/` and `backend/`, and `rehab-session-2026-10-01.diff` (after the rehab work is committed).
+- [x] **Merge the startup scripts** into [scripts/dev/start.ps1](../scripts/dev/start.ps1) and [scripts/dev/stop.ps1](../scripts/dev/stop.ps1). See the table under *Changes made*.
+- [x] **Monitoring mounts: no change needed.** The `./deploy/monitoring/...` paths are correct when the file is combined with the root compose file, as its header says. The root `*.yml` directories are leftovers from an older root compose file, and are listed under the untracked cleanup above.
+- [ ] **Use one Python environment** *(owner action)*. Delete `venv/` (184 MB, unused; `.venv` is the active one). Recreate `.venv` on Python 3.12 (`py -3.12 -m venv .venv`) to match Docker and CI; it is currently 3.14. Added `.python-version` (3.12).
+- [x] **Move the manuals and reports** into `docs/manuals/` and `docs/reports/` with `git mv`.
+- [ ] **Clean up branches** *(owner decision)*. Merge or delete `stabilization/2026-09` and `feature/advanced-geofencing`, and work through the open Dependabot PRs.
 
 ### Verify
-- `git ls-files | wc -l` is under 1,500.
-- The root has 25 or fewer entries.
-- A fresh clone, `scripts/dev/start.ps1`, and `/health` returning 200 all work on a clean machine.
+- [x] `git ls-files | wc -l` is under 1,500.
+- [ ] The root has 25 or fewer entries *(after the owner's untracked cleanup)*.
+- [ ] A fresh clone, then `scripts/dev/start.ps1`, then `/health` returning 200 all work. *Not run: Docker Desktop is stopped.*
 
-### Changes made
-_(fill in)_
+### Changes made (2026-10-08)
+**Startup scripts**: 13 root scripts replaced by 4 in `scripts/dev/`:
 
-**Checkpoint:** ☐ Phase 1 complete → readiness **57%**
+| Old script | What happened |
+|---|---|
+| `daily_startup.ps1` | Basis for `start.ps1` (preflight checks, data kept between runs) |
+| `start_all.ps1`, `clean_start.ps1`, `tools/simulators/start_all.ps1` | Removed. They ran `docker compose down --volumes` on every start, which **wiped the database**. `clean_start` also stopped **every container on the machine** and killed all `python`/`node` processes. A wipe is now opt-in: `start.ps1 -Reset`, which asks for confirmation. Their database wait loop always timed out, because compose had no healthcheck; `delivery_db` now has one. |
+| `start_platform.ps1` | Removed. It was stale (port 8002, a Grafana service no longer in compose) and **hardcoded and printed a Grafana admin password**, which has been in git history since March. Monitoring is now `start.ps1 -Monitoring`. |
+| `start-dev.ps1` / `stop-dev.ps1` | Emulator, `adb reverse` and Expo steps moved into `start.ps1 -Mobile` and `stop.ps1`. The backend now runs in Docker, not a local uvicorn window. |
+| `run_simulation.ps1`, `run_fleet_simulator.ps1` | Replaced by `start.ps1 -Simulate -Drivers N`. `run_simulation` hardcoded a driver password; `run_fleet_simulator` set a variable the simulator never read. |
+| `initialize_backend.ps1` + `src/backend/init_db.py` | Removed. `init_db.py` imported modules that don't exist; Alembic migrations create the schema. |
+| `load_env.ps1` | Folded into `start.ps1` |
+| `verify_deployment.ps1` | Health check folded into `start.ps1`. Its `/api/dispatches` check called a route that doesn't exist. |
+| `setup_secrets.ps1`, `configure-mobile-env.ps1` | Moved to `scripts/dev/`. Paths fixed, the mobile port changed from 8002 to 8000, and an optional dispatcher password prompt added. |
+
+**Seeding:** new `tools/seed_dev_data.py`, replacing `tools/seed_db.py` and the inline seeds that set `admin` to a hardcoded password on every start. It reads passwords from `.env.backend`, creates only missing accounts, adds driver profiles D001–Dnnn, and refuses to run with `ENVIRONMENT=production`.
+
+**Simulator:** restored `main()`, `--drivers` and `BACKEND_URL` in `tools/simulators/fleet_sim.py`. All three were accidentally removed in `e1130f76` (2026-09-27), so the simulator had been doing nothing when run.
+
+**Checkpoint:** ☐ Phase 1 in progress: 5 of 8 tasks done → readiness **51%** (54% when the owner actions are done)
 
 ---
 
@@ -233,6 +255,7 @@ _(fill in)_
 - [ ] **Separate liveness from readiness.** `/health` (liveness) is already at `main.py:156`. Add `/ready`, which checks the database, Redis and the storage backend.
 - [ ] **Use structured JSON logs with request IDs**, and turn on the existing OpenTelemetry setup (`core/tracing.py`) in staging and production.
 - [ ] **Add error tracking** (Sentry or similar) for the backend, web and mobile apps.
+- [ ] **Fix the monitoring exporters.** In `deploy/monitoring/docker-compose.monitoring.yml`, `redis_exporter` points at `redis:6379` on an isolated `monitoring` network. The real services are `delivery_redis` and `delivery_db` on `delivery_net`, so neither exporter can reach anything. Attach them to `delivery_net` and fix the hostnames.
 - [ ] **Connect the Prometheus alerts** to a real Alertmanager receiver (email, Slack or a pager), and fire a test alert.
 - [ ] **Define service levels (SLOs):** API availability, p95 latency per key endpoint, and maximum delay for telemetry ingestion.
 - [ ] **Rewrite `RUNBOOK.md`** as a real runbook: start/stop, deploy, rollback, restore from backup, rotate secrets, and an on-call contact.

@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import os
 import random
@@ -6,6 +7,7 @@ import httpx
 
 DRIVER_PASSWORD = os.getenv("DRIVER_PASSWORD")
 DEVICE_API_KEY = os.getenv("DEVICE_API_KEY") or os.getenv("DIAD_API_KEY", "")
+BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 if not DRIVER_PASSWORD:
     print("ERROR: DRIVER_PASSWORD environment variable is required for the simulator.", file=sys.stderr)
@@ -71,3 +73,18 @@ class FleetSimulator:
                     print(f"Network error during simulation loop: {e}", file=sys.stderr)
                 
                 await asyncio.sleep(self.interval)
+
+
+async def main(drivers: int):
+    # Drivers D001..Dnnn log in with the same username (see tools/seed_dev_data.py)
+    tasks = [
+        FleetSimulator(BASE_URL, f"D{i:03d}", f"D{i:03d}").simulate()
+        for i in range(1, drivers + 1)
+    ]
+    await asyncio.gather(*tasks)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Simulate driver location telemetry")
+    parser.add_argument("--drivers", type=int, default=5, help="number of drivers to simulate")
+    asyncio.run(main(parser.parse_args().drivers))

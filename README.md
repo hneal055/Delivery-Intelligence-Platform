@@ -144,8 +144,11 @@ DIP serves as the operational intelligence layer for delivery execution, providi
 Fix:
  
 ```powershell
-python -m tools.seed_db
+python -m tools.seed_dev_data
 ```
+
+(Needs the passwords in `.env.backend`; run `.\scripts\dev\setup_secrets.ps1` first. `.\scripts\dev\start.ps1` runs this automatically.)
+
  
 ---
  
