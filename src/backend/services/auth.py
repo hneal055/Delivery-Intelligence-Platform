@@ -1,46 +1,61 @@
-from fastapi import Security, HTTPException, status
-from fastapi.security import APIKeyHeader
-import os
 from typing import Optional
+import hmac
 
-# Setup API Key security schema
-# Using a header 'X-DIAD-Token' for the device connection
-api_key_header = APIKeyHeader(name="X-DIAD-Token", auto_error=False)
+from fastapi import HTTPException, Security, status
+from fastapi.security import APIKeyHeader
+
+from src.backend.core.config import settings
+
+# Device authentication header
+api_key_header = APIKeyHeader(
+    name="X-DIAD-Token",
+    auto_error=False,
+)
+
 
 class AuthService:
     """
     Handles authentication for DIAD devices and backend services.
-    Crucial for securing device connections.
     """
-    
-    def __init__(self):
-        # In production, load this from secure env vars or secrets manager
-        self.msg_api_key = os.getenv("DIAD_API_KEY", "dev-secret-key-123")
 
-    async def validate_device_token(self, api_key_header: str = Security(api_key_header)):
-        """
-        Dependency for FastAPI routes to validate the device API key.
-        """
-        if api_key_header == self.msg_api_key:
-            return True
-        
-        # If we had JWT logic (python-jose), it would go here.
-        
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate device credentials"
+    def __init__(self, api_key: Optional[str] = None):
+        self.msg_api_key = (
+            api_key if api_key is not None else settings.DIAD_API_KEY
         )
 
-    def generate_temp_token(self, driver_id: str) -> str:
-        """
-        Mock method to generate a session token for a driver.
-        """
-        return f"session-{driver_id}-xyz"
+    async def validate_device_token(
+        self,
+        api_key=None,
+        api_key_header=None,
+    ):
+        token = api_key if api_key is not None else api_key_header
+
+        # Fail closed: with no key configured, no device is accepted.
+        # compare_digest keeps the check constant-time.
+        if (
+            self.msg_api_key
+            and token
+            and hmac.compare_digest(
+                token.encode(),
+                self.msg_api_key.encode(),
+            )
+        ):
+            return True
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate device credentials",
+        )
+
 
 auth_service = AuthService()
 
-async def get_current_device(api_key: str = Security(api_key_header)):
+
+async def get_current_device(
+    api_key: Optional[str] = Security(api_key_header),
+) -> bool:
     """
-    FastAPI Dependency to enforce auth on routes.
+    FastAPI dependency enforcing DIAD authentication.
     """
+
     return await auth_service.validate_device_token(api_key)

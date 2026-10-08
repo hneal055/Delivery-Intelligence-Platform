@@ -1,0 +1,298 @@
+# Production Readiness Plan — Delivery Intelligence Platform
+
+**Created:** 2026-10-07
+**Branch at assessment:** `rehab-investigation-20261001` (35 commits ahead of `main`)
+**Baseline readiness:** **42%**
+**Target:** 100% = safe to run real deliveries for real customers
+
+---
+
+## How progress is measured
+
+Readiness is scored across 10 areas, weighted by how much each matters to a safe launch. Each phase below closes out one area. Each area starts with partial credit for work that already exists (Helm charts, CI pipeline, 173 passing tests, production config checks, and so on).
+
+| # | Area | Weight | Baseline credit | Readiness after phase |
+|---|------|-------:|----------------:|----------------------:|
+| 0 | Secrets & credential exposure | 10 | 3 | **49%** |
+| 1 | Repository hygiene | 10 | 2 | **57%** |
+| 2 | API contract & in-flight rehab work | 10 | 5 | **62%** |
+| 3 | Test suite reliability | 15 | 8 | **69%** |
+| 4 | Application security hardening | 15 | 6 | **78%** |
+| 5 | Data, migrations & backups | 8 | 5 | **81%** |
+| 6 | Build & deployment pipeline | 12 | 6 | **87%** |
+| 7 | Observability & operations | 10 | 4 | **93%** |
+| 8 | Client apps (web + mobile) | 5 | 2 | **96%** |
+| 9 | Documentation & release | 5 | 1 | **100%** |
+|   | **Total** | **100** | **42** | |
+
+**Scoring a phase partway through:** each task in a phase is worth an equal share of the points that phase still has to earn. Example: Phase 0 has 7 points left across 7 tasks, so each finished task adds 1%.
+
+After each phase, fill in its **Changes made** log and its **Checkpoint** line. A phase counts as done only when every item under its *Verify* heading passes.
+
+---
+
+## Phase 0 — Secrets & credential exposure  (49% when done)
+
+**Why first:** credentials are exposed now. Every day they stay valid adds risk, and nothing later in the plan reduces it.
+
+### Planned changes
+Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 ≈ 0.8%.
+
+- [ ] **Rotate the Expo account password** *(owner action)*. It was committed in plain text in `RUNBOOK.md` and has been in git history since at least commit `f68d80f1`. ✅ Removed from the file; the password itself is not yet rotated.
+- [ ] **Revoke the leaked TomTom API key** *(owner action, added after scan)*. A real key was committed to `.env.example` in `70fab920` and `bc97e9e5`. It is no longer in `.env` but is still in `.env.bak-20260803` and in git history.
+- [x] **Remove the hardcoded device key default.** `DIAD_API_KEY` now comes from `settings` with no default. If no key is set, every device request is rejected, and production refuses to start with no key or with the old `dev-secret-key-123`.
+- [x] **Use a constant-time comparison** for the device token (`hmac.compare_digest`).
+- [x] **Delete `generate_temp_token`** from `services/auth.py`.
+- [x] **Keep `.env` out of the Docker image.** Added env files, virtualenvs, caches, uploads, backups and dumps to `.dockerignore`. *(`*.txt` was not added, because it would exclude `requirements.txt`.)*
+- [x] **Scan the full git history with gitleaks.** Also **fixed `.gitleaks.toml`**: it defined no rules and didn't extend the defaults, so every scan reported "no leaks found". It also allowlisted `.env.example`, which is where the TomTom key leaked.
+- [ ] **Consider rotating `SECRET_KEY`** *(owner action, added after scan)*. Five admin/manager JWTs were committed (in `src/mobile/App.js`, `test_ws.py`, and a file named `$token = eyJ….md`). All of them expired between 2026-02-06 and 2026-09-22, so none can be replayed. If any was signed with the real production key, rotating it is a cheap precaution.
+- [ ] **Decide on rewriting history** *(owner decision)*. Removing secrets and large binaries from history (`git filter-repo`) means everyone must re-clone. Record the decision here.
+
+### Verify
+- [x] gitleaks (default rules) finds nothing in the working tree: `src/`, `tests/`, `tools/`, `deploy/`, `.github/`, `docs/` and the root docs.
+- [ ] `docker run --rm delivery_backend:latest ls -a /app | grep .env` prints nothing. *Not run yet: Docker Desktop was stopped.*
+- [x] The backend refuses to start with `ENVIRONMENT=production` and no `DIAD_API_KEY`, or with the old default (`tests/unit/test_device_auth.py`).
+
+### Changes made (2026-10-08, not yet committed)
+| File | Change |
+|---|---|
+| `src/backend/core/config.py` | Added `DIAD_API_KEY` setting (no default) and a production startup check that rejects an empty key or the old default |
+| `src/backend/services/auth.py` | Reads the key from `settings`; rejects all requests when no key is set; `hmac.compare_digest`; removed `generate_temp_token`; `AuthService(api_key=...)` for tests |
+| `tests/unit/test_device_auth.py` | **New**: 11 tests covering accept, reject, no key configured, and production startup with and without a key |
+| `tests/conftest.py` | Sets `DIAD_API_KEY=test-device-key` before the app loads |
+| `tests/unit/test_api_basics.py`, `test_api_health.py`, `test_routing_api.py` | Use the test key, not the old hardcoded one |
+| `tests/unit/test_final_coverage.py` | Removed the test for the deleted `generate_temp_token` |
+| `tools/simulators/fleet_sim.py` | No hardcoded key; uses `DEVICE_API_KEY` or `DIAD_API_KEY` |
+| `test_ws.py` | Reads the token from `DISPATCH_TOKEN`; the committed JWT is removed |
+| `RUNBOOK.md` | Password removed; placeholder until Phase 7 |
+| `.gitleaks.toml` | Extends the default rules; path allowlist removed |
+| `.dockerignore` | Excludes `.env*`, virtualenvs, caches, uploads, backups, dumps |
+| `deploy/helm/.../secret.yaml`, `values*.yaml` | Added a `DIAD_API_KEY` secret entry |
+| `.github/workflows/ci.yml` | Staging deploy passes `secrets.STAGING_DIAD_API_KEY` |
+
+**Test result:** 183 passed, 35 failed. Before: 173 passed, 35 failed. All 35 failures existed before this phase; see Phase 3. The 11 new tests all pass.
+
+**Checkpoint:** ☐ Phase 0 in progress: 5 of 9 tasks done → readiness **46%** (49% when the owner actions are done)
+
+---
+
+## Phase 1 — Repository hygiene  (57% when done)
+
+**Why:** the repo has 61,024 tracked files (60,589 of them proof photos) and a 94 MB `.git`. The root has about 90 items, including 9 different start/stop scripts. This slows every clone, search, review and Docker build.
+
+### Planned changes
+- [ ] **Stop tracking generated data and binaries** (`git rm -r --cached`):
+  - `src/uploads/`, `data/uploads/`, `storage/proofs/`
+  - `src/mobile/node.exe`, `src/mobile/node-runtime/` (two identical 42 MB copies of Node)
+  - `auth_inventory.txt` (9 MB UTF-16 search dump), `.coverage`
+  - `src/analytics/ml_models/eta_model.joblib`: move to artifact storage, or regenerate in the build
+  - the stray tracked directories `token_response.json/` and `verify_deployment.ps1/`
+- [ ] **Clean the project root.** Delete the files whose names start with `# ` (three of them), `nul`, `*.log`, `refresh_response.json`, `token_response.json`, `test_sig.txt`, `dummy_image.jpg`, `dispatch_full.txt` and `rehab-session-2026-10-01.diff` (after the rehab work is committed).
+- [ ] **Merge the startup scripts into one start and one stop script.** Today there are `start_all`, `start_platform`, `start-dev`, `daily_startup`, `clean_start`, `initialize_backend`, `load_env`, `stop-dev` and `verify_deployment`. Keep `scripts/dev/start.ps1` and `scripts/dev/stop.ps1`, and delete or archive the rest.
+- [ ] **Replace the two misnamed directories.** `prometheus.yml/`, `prometheus-alerts.yml/` and `alertmanager.yml/` at the root are *directories*; Docker creates these when a mount source is missing. Delete them and point the compose mounts at real files under `deploy/monitoring/`.
+- [ ] **Use one Python environment.** Delete `venv/` and keep `.venv/`. Pin Python 3.12 with a `.python-version` file to match the Dockerfile and CI (the local `.venv` currently runs 3.14).
+- [ ] **Move the manuals** (`DISPATCHER_USER_MANUAL.txt`, `DRIVER_USER_MANUAL.txt`, the operational manual PDF, `ANDROID_DEPLOYMENT_RUNBOOK.md`, `REAL_DEVICE_TESTING.txt`, `TEST_RESULTS.txt`) into `docs/`.
+- [ ] **Remove the empty `backend/` directory** at the root (`src/backend` is the real one).
+- [ ] **Clean up branches.** Merge or delete `stabilization/2026-09` and `feature/advanced-geofencing`, and work through the open Dependabot PRs.
+
+### Verify
+- `git ls-files | wc -l` is under 1,500.
+- The root has 25 or fewer entries.
+- A fresh clone, `scripts/dev/start.ps1`, and `/health` returning 200 all work on a clean machine.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 1 complete → readiness **57%**
+
+---
+
+## Phase 2 — API contract & in-flight rehab work  (62% when done)
+
+**Why:** the uncommitted rehab session changes public URLs. The web and mobile clients must agree with the backend before anything else is built on top.
+
+### Planned changes
+- [ ] **Fix the router prefixes.** The working-copy change to `src/backend/api/main.py` removes the prefixes passed in `main.py` so each router's own prefix applies. That fixes double paths like `/dispatch/dispatch/*`, but some routes move:
+  - `geofence.py` has no prefix of its own, so `POST /geofence/verify` becomes `POST /verify`. Add `prefix="/geofence"` to the router.
+  - Command center moves from `/command-center/api/*` to `/api/*`. Pick one path and update the clients.
+  - Advanced routing moves from `/advanced-routing/advanced-route/*` to `/advanced-route/*`. Confirm the clients use the new path.
+- [ ] **Add a route snapshot test.** It should list every `METHOD /path` the app exposes and fail on any unplanned change.
+- [ ] **Make startup fail when a router doesn't load.** `safe_include` (`main.py:114-124`) logs a warning and carries on for every router except websocket, so a broken import silently removes whole APIs. In production, raise on any failure.
+- [ ] **Remove the direct SQLite connection** from `main.py` (lines 4 and 50-52). Every request should go through the SQLAlchemy/Postgres session.
+- [ ] **Keep one delivery router.** Delete `delivery_backup.py` and `delivery.py.corrupt.backup`; the old versions remain in git history.
+- [ ] **Commit the rehab work in small, reviewable commits**, then merge `rehab-investigation-20261001` into `main` through a PR so CI runs.
+
+### Verify
+- The route snapshot test passes and the snapshot has been reviewed.
+- The web dashboard and mobile app can log in, list jobs, complete a delivery and check a geofence against the local stack.
+- `main` contains all the rehab work, and CI is green on the merge.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 2 complete → readiness **62%**
+
+---
+
+## Phase 3 — Test suite reliability  (69% when done)
+
+**Why:** 35 of 208 unit and smoke tests fail locally. Most need a live Redis, so a red run doesn't separate real bugs from environment noise.
+
+### Planned changes
+- [ ] **Swap live Redis for `fakeredis`** in a shared fixture in `tests/conftest.py`. This fixes the 23 `redis.exceptions.ConnectionError` failures.
+- [ ] **Look into the 8 status-code failures** (403 or 404 returned where 200 or 400 was expected) in `test_api_health.py`, `test_auth_routes.py` and `test_routing_api.py`. Fix the code or the test, and record which one was wrong.
+- [ ] **Fix the stale API tests.** `test_api_basics.py` and `test_api_health.py` call `/secure-ping`, which the backend no longer has (404). They also expect `/health` to return `{"status": "online"}`, but it now returns `"ok"` plus a timestamp. Either restore the endpoints or update the tests, and record which was correct.
+- [ ] **Separate the smoke tests.** Mark `tests/smoke/` with `@pytest.mark.smoke` and leave them out of the default run; they need a running server. Run them only after a deploy.
+- [ ] **Replace the coverage-padding files.** Fold `test_coverage_boost.py` and `test_final_coverage.py` into tests named after the behaviour they check.
+- [ ] **Bring the warning count down.** It is about 17,000; start with the `httpx`/`starlette` TestClient deprecation and any `datetime.utcnow` use.
+- [ ] **Run integration tests against real services.** In CI, add `postgis/postgis` and `redis` service containers and run `tests/integration` and `tests/e2e` against them, not SQLite in memory.
+- [ ] **Raise the coverage gate in steps.** It is 35% today (`.github/workflows/ci.yml`); move to 50%, then 70%.
+
+### Verify
+- `pytest` reports 0 failures locally with Docker stopped (unit) and with it running (integration and e2e).
+- CI is green on 3 consecutive runs with no reruns.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 3 complete → readiness **69%**
+
+---
+
+## Phase 4 — Application security hardening  (78% when done)
+
+### Planned changes
+- [ ] **Read CORS from one place.** `main.py:36-45` reads `CORS_ORIGINS` itself, so the production checks on `BACKEND_CORS_ORIGINS` in `core/config.py:126-139` (no `*`, must be set) never apply to the middleware. Use `settings.BACKEND_CORS_ORIGINS` in `main.py`.
+- [ ] **Shorten token lifetime.** Access tokens currently last 8 hours (`ACCESS_TOKEN_EXPIRE_MINUTES=480`). Cut that to 15–60 minutes, rely on refresh tokens, and add revocation when a driver is deactivated.
+- [ ] **Give each device its own key.** Every device now shares one `DIAD_API_KEY`. Issue a key per device so a lost handset can be revoked alone.
+- [ ] **Rate limit the auth endpoints** (`/auth/login`, `/auth/refresh`) with the existing `slowapi` limiter. Today only advanced routing uses it.
+- [ ] **Validate proof-of-delivery uploads:** maximum size, allowed image types (checked by file signature, not file extension), and filenames generated by the server.
+- [ ] **Audit dependencies.** Add `pip-audit` and `npm audit --production` to CI, and fail on high or critical findings.
+- [ ] **Harden the container.** Use a multi-stage Dockerfile, run as a non-root `USER`, leave `build-essential` out of the final image, and pin the base image by digest.
+- [ ] **Run a security review** of the full backend (`/security-review`), and fix or formally accept every finding.
+
+### Verify
+- Starting with `ENV=production` and a weak or missing secret, `*` CORS, or no device key fails fast.
+- OWASP ZAP baseline scan against staging: no high findings.
+- `pip-audit` and `npm audit` are clean, or exceptions are documented.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 4 complete → readiness **78%**
+
+---
+
+## Phase 5 — Data, migrations & backups  (81% when done)
+
+### Planned changes
+- [ ] **Keep one Alembic setup.** Keep the root `alembic.ini` → `migrations/`, and remove `src/backend/alembic/` and `src/backend/alembic.ini`.
+- [ ] **Rename `xxxx_add_advanced_routing_tables.py`** to a proper revision ID.
+- [ ] **Test migrations in CI:** `alembic upgrade head` on an empty PostGIS database, then `alembic downgrade -1`, then upgrade again.
+- [ ] **Move proof photos to S3** (`PROOF_STORAGE=s3`; `services/storage.py` already supports it, per PLAN.md Phase 1), with a retention lifecycle rule.
+- [ ] **Automate Postgres backups** with daily `pg_dump` or managed snapshots, and **carry out one test restore** with timings recorded.
+- [ ] **Remove ad-hoc database scripts** (`check_tables.py`, `init_spatial_db.sql`, `add_dispatcher.py`) or turn them into migrations or seed commands.
+
+### Verify
+- CI migration job is green.
+- A test restore has been completed and its recovery time written down in the runbook.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 5 complete → readiness **81%**
+
+---
+
+## Phase 6 — Build & deployment pipeline  (87% when done)
+
+### Planned changes
+- [ ] **Pick one production target.** The Dockerfile mentions Railway; CI deploys to Kubernetes with Helm. Choose one and remove the other path.
+- [ ] **Set `ENVIRONMENT=production` in the deployment** (Helm values or Railway variables). No Helm values file sets it, so pods run in development mode and the production startup checks in `core/config.py` (secret key, CORS, device key) never run there.
+- [ ] **Add the Celery `telemetry_worker`** to the chosen deployment. It runs in `docker-compose.yml` but has no Helm template.
+- [ ] **Stop exposing Postgres and Redis ports** in any production compose file or values file; they are published in `docker-compose.yml`.
+- [ ] **Add a container `HEALTHCHECK`** and Kubernetes liveness/readiness probes (these depend on Phase 7's `/ready`).
+- [ ] **Manage secrets** with external-secrets or sealed-secrets (the comment in `deploy/helm/.../secret.yaml` already calls for this), not values passed with `--set`.
+- [ ] **Add deploy gates:** staging deploy, then smoke tests, then manual approval, then production. Write down a tested rollback (`helm rollback`).
+- [ ] **Require CI to pass before merging** into `main`, using branch protection.
+
+### Verify
+- One push to `main` builds, signs, deploys to staging and passes smoke tests with no manual steps.
+- A rollback has been practised in staging.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 6 complete → readiness **87%**
+
+---
+
+## Phase 7 — Observability & operations  (93% when done)
+
+### Planned changes
+- [ ] **Separate liveness from readiness.** `/health` (liveness) is already at `main.py:156`. Add `/ready`, which checks the database, Redis and the storage backend.
+- [ ] **Use structured JSON logs with request IDs**, and turn on the existing OpenTelemetry setup (`core/tracing.py`) in staging and production.
+- [ ] **Add error tracking** (Sentry or similar) for the backend, web and mobile apps.
+- [ ] **Connect the Prometheus alerts** to a real Alertmanager receiver (email, Slack or a pager), and fire a test alert.
+- [ ] **Define service levels (SLOs):** API availability, p95 latency per key endpoint, and maximum delay for telemetry ingestion.
+- [ ] **Rewrite `RUNBOOK.md`** as a real runbook: start/stop, deploy, rollback, restore from backup, rotate secrets, and an on-call contact.
+
+### Verify
+- A deliberately failed database connection shows up as an alert within 5 minutes.
+- Someone other than the author can follow the runbook to restore staging.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 7 complete → readiness **93%**
+
+---
+
+## Phase 8 — Client apps (web + mobile)  (96% when done)
+
+### Planned changes
+- [ ] **Choose one dashboard.** `src/web` has 66 files, `src-ui` 7 and `src/frontend` 2. Keep the live one and archive the others. Decide whether `DeliveryIntelligence.Domain` (C#) stays.
+- [ ] **Add frontend CI:** lint, type-check and production build for the dashboard and mobile app.
+- [ ] **Configure API URLs per environment** for the dashboard and mobile app, with no hardcoded hosts.
+- [ ] **Set up a production mobile build:** an EAS production profile, signing, and the permissions schema checked against the store requirements in `ANDROID_DEPLOYMENT_RUNBOOK.md`.
+- [ ] **Test on real devices** against staging, covering offline queue sync, proof capture and the background heartbeat.
+
+### Verify
+- Both apps build in CI.
+- A real-device test pass against staging is recorded in `docs/`.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 8 complete → readiness **96%**
+
+---
+
+## Phase 9 — Documentation & release  (100% when done)
+
+### Planned changes
+- [ ] **Make the README status table reflect real test and deploy results.** It currently says "Operational ✅" for everything.
+- [ ] **Replace `BASELINE.md`.** It describes an older branch; replace it with an up-to-date architecture overview, or delete it.
+- [ ] **Run a load test** with `tests/load/locustfile.py` against staging at about 2× expected peak fleet size, and record the results against the SLOs.
+- [ ] **Start a `CHANGELOG.md`** and tag `v1.0.0`.
+- [ ] **Complete a go-live checklist** with a named sign-off for security, data and operations.
+
+### Verify
+- The load test meets the SLOs.
+- The go-live checklist is signed off.
+
+### Changes made
+_(fill in)_
+
+**Checkpoint:** ☐ Phase 9 complete → readiness **100%** 🚀
+
+---
+
+## Recommended sequencing
+
+- **Week 1:** Phases 0–2. Removes the immediate exposure and gives a stable, merged `main`.
+- **Week 2:** Phases 3–4. A trustworthy test suite, then security fixes verified by it.
+- **Week 3:** Phases 5–7. Infrastructure, deployment and operations.
+- **Week 4:** Phases 8–9. Client apps, load test and launch.
+
+Phases 0, 1 and 2 must be done in order. From Phase 3 on, data (5) and client apps (8) can run alongside the others.

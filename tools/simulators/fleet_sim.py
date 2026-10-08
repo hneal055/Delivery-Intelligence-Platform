@@ -5,7 +5,7 @@ import sys
 import httpx
 
 DRIVER_PASSWORD = os.getenv("DRIVER_PASSWORD")
-DEVICE_API_KEY = os.getenv("DEVICE_API_KEY", "default-device-key")
+DEVICE_API_KEY = os.getenv("DEVICE_API_KEY") or os.getenv("DIAD_API_KEY", "")
 
 if not DRIVER_PASSWORD:
     print("ERROR: DRIVER_PASSWORD environment variable is required for the simulator.", file=sys.stderr)

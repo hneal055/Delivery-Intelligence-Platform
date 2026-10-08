@@ -16,7 +16,7 @@ async def test_optimize_route_success():
             ]
         }
 
-        headers = {"X-DIAD-Token": "dev-secret-key-123"}
+        headers = {"X-DIAD-Token": "test-device-key"}
 
         response = await client.post("/routing/optimize", json=payload, headers=headers)
 
@@ -40,7 +40,7 @@ async def test_optimize_route_empty():
             "current_location": {"lat": 40.7128, "lon": -74.0060},
             "stops": []
         }
-        headers = {"X-DIAD-Token": "dev-secret-key-123"}
+        headers = {"X-DIAD-Token": "test-device-key"}
         response = await client.post("/routing/optimize", json=payload, headers=headers)
         assert response.status_code == 400
 

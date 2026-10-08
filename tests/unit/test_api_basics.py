@@ -15,7 +15,7 @@ def test_secure_ping_unauthorized():
 def test_secure_ping_authorized():
     response = client.post(
         "/secure-ping",
-        headers={"X-DIAD-Token": "dev-secret-key-123"}
+        headers={"X-DIAD-Token": "test-device-key"}
     )
     assert response.status_code == 200
     assert response.json() == {"msg": "Device Authenticated"}

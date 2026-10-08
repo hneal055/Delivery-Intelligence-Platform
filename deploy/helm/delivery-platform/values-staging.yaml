@@ -71,6 +71,7 @@ env:
 secret:
   DATABASE_URL: ""    # STAGING_DATABASE_URL GitHub secret
   SECRET_KEY: ""      # STAGING_SECRET_KEY   GitHub secret
+  DIAD_API_KEY: ""      # STAGING_DIAD_API_KEY GitHub secret
   REDIS_URL: ""       # STAGING_REDIS_URL    GitHub secret
   SMTP_HOST: ""
   SMTP_USER: ""

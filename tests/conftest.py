@@ -1,6 +1,8 @@
 import os
 # Disable OTel SDK during tests to prevent background exporter thread noise on teardown
 os.environ.setdefault("OTEL_SDK_DISABLED", "true")
+# Device key used by tests that send X-DIAD-Token; must be set before settings load
+os.environ.setdefault("DIAD_API_KEY", "test-device-key")
 """
 Shared pytest fixtures for the Delivery Intelligence Platform test suite.
 

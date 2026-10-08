@@ -222,6 +222,7 @@ jobs:
             -f deploy/helm/delivery-platform/values-staging.yaml \
             --set image.tag="${IMAGE_TAG}" \
             --set secret.SECRET_KEY="${{ secrets.STAGING_SECRET_KEY }}" \
+            --set secret.DIAD_API_KEY="${{ secrets.STAGING_DIAD_API_KEY }}" \
             --set secret.DATABASE_URL="${{ secrets.STAGING_DATABASE_URL }}" \
             --set secret.REDIS_URL="${{ secrets.STAGING_REDIS_URL }}" \
             --namespace staging \

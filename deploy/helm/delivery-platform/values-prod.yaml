@@ -68,6 +68,7 @@ env:
 secret:
   DATABASE_URL: ""          # postgresql+asyncpg://user:pass@postgres-host:5432/deliverydb
   SECRET_KEY: ""            # 64+ random bytes, e.g. openssl rand -hex 32
+  DIAD_API_KEY: ""          # openssl rand -hex 32
   REDIS_URL: ""             # redis://:password@redis-host:6379/0
   SMTP_HOST: ""
   SMTP_USER: ""
