@@ -97,7 +97,7 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 - [x] **Clean the project root (untracked files).** Deleted on 2026-10-08 with the owner's approval: `nul`, `frontend.log`, `frontend_v2.log`, `simulation.log` (3.4 MB), and the empty directories `prometheus.yml/`, `prometheus-alerts.yml/`, `alertmanager.yml/` and `backend/`. *Still to do:* `rehab-session-2026-10-01.diff`, once the rehab work is committed in Phase 2.
 - [x] **Merge the startup scripts** into [scripts/dev/start.ps1](../scripts/dev/start.ps1) and [scripts/dev/stop.ps1](../scripts/dev/stop.ps1). See the table under *Changes made*.
 - [x] **Monitoring mounts: no change needed.** The `./deploy/monitoring/...` paths are correct when the file is combined with the root compose file, as its header says. The root `*.yml` directories are leftovers from an older root compose file, and are listed under the untracked cleanup above.
-- [ ] **Use one Python environment.** ✅ `venv/` deleted (184 MB, unused). *Owner action still open:* recreate `.venv` on Python 3.12 (`py -3.12 -m venv .venv`) to match Docker and CI; it is currently 3.14. Added `.python-version` (3.12).
+- [x] **Use one Python environment.** `venv/` deleted (184 MB, unused). On 2026-10-08 `.venv` was rebuilt on Python 3.12.10 from `requirements.txt` (223 packages, `pip check` clean). The unit suite gives the same result as on 3.14 (183 passed, the 33 known failures), and warnings fell from about 17,400 to 1,513. Original task: recreate `.venv` on Python 3.12 (`py -3.12 -m venv .venv`) to match Docker and CI; it is currently 3.14. Added `.python-version` (3.12).
 - [x] **Move the manuals and reports** into `docs/manuals/` and `docs/reports/` with `git mv`.
 - [ ] **Clean up branches** *(owner decision)*. Merge or delete `stabilization/2026-09` and `feature/advanced-geofencing`, and work through the open Dependabot PRs.
 
@@ -125,7 +125,7 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 
 **Simulator:** restored `main()`, `--drivers` and `BACKEND_URL` in `tools/simulators/fleet_sim.py`. All three were accidentally removed in `e1130f76` (2026-09-27), so the simulator had been doing nothing when run.
 
-**Checkpoint:** ☐ Phase 1 in progress: 6 of 8 tasks done → readiness **52%** (54% when `.venv` is on 3.12 and the branches are cleaned up). Root entries: 61, down from about 90.
+**Checkpoint:** ☐ Phase 1 in progress: 7 of 8 tasks done → readiness **53%** (54% when the branches are cleaned up). Root entries: 61, down from about 90.
 
 ---
 
@@ -236,6 +236,8 @@ _(fill in)_
 - [ ] **Add a container `HEALTHCHECK`** and Kubernetes liveness/readiness probes (these depend on Phase 7's `/ready`).
 - [ ] **Manage secrets** with external-secrets or sealed-secrets (the comment in `deploy/helm/.../secret.yaml` already calls for this), not values passed with `--set`.
 - [ ] **Add deploy gates:** staging deploy, then smoke tests, then manual approval, then production. Write down a tested rollback (`helm rollback`).
+- [ ] **Fix the CI dependency install.** CI runs `pip install --require-hashes -r requirements.txt`, but `requirements.txt` has no hashes, so that step fails. Regenerate it with `pip-compile --generate-hashes requirements.in`.
+- [ ] **Split runtime and dev dependencies.** `requirements.txt` (which the Docker image installs) includes pytest, black, flake8 and coverage. It also conflicts with `requirements-dev.txt` (`pytest==7.4.3` against `pytest>=8.0.0`), so the two files can't be installed together. Keep test and lint tools only in the dev file.
 - [ ] **Require CI to pass before merging** into `main`, using branch protection.
 
 ### Verify
