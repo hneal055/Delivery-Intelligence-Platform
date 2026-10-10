@@ -46,7 +46,7 @@ jobs:
         env:
           ENV: development
           SECRET_KEY: ci-test-secret-key-not-used-in-prod
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           NOTIFICATIONS_ENABLED: "false"
           REDIS_URL: ""
         run: |
@@ -61,7 +61,7 @@ jobs:
         env:
           ENV: development
           SECRET_KEY: ci-test-secret-key-not-used-in-prod
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           NOTIFICATIONS_ENABLED: "false"
           REDIS_URL: ""
         run: |
