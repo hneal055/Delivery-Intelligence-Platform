@@ -38,7 +38,7 @@ After each phase, fill in its **Changes made** log and its **Checkpoint** line. 
 ### Planned changes
 Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 ≈ 0.8%.
 
-- [ ] **Rotate the Expo account password** *(owner action)*. It was committed in plain text in `RUNBOOK.md` and has been in git history since at least commit `f68d80f1`. ✅ Removed from the file; the password itself is not yet rotated.
+- [ ] **Rotate the Expo account password** *(owner action)*. It was committed in plain text in `RUNBOOK.md` and has been in git history since at least commit `f68d80f1`. ✅ Removed from the file. 2026-10-09: two-factor authentication turned on and access tokens revoked. *Still to do:* change the password itself.
 - [ ] **Revoke the leaked TomTom API key** *(owner action, added after scan)*. A real key was committed to `.env.example` in `70fab920` and `bc97e9e5`. It is no longer in `.env` but is still in `.env.bak-20260803` and in git history.
 - [x] **Remove the hardcoded device key default.** `DIAD_API_KEY` now comes from `settings` with no default. If no key is set, every device request is rejected, and production refuses to start with no key or with the old `dev-secret-key-123`.
 - [x] **Use a constant-time comparison** for the device token (`hmac.compare_digest`).
@@ -53,7 +53,7 @@ Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 �
 - [ ] `docker run --rm delivery_backend:latest ls -a /app | grep .env` prints nothing. *Not run yet: Docker Desktop was stopped.*
 - [x] The backend refuses to start with `ENVIRONMENT=production` and no `DIAD_API_KEY`, or with the old default (`tests/unit/test_device_auth.py`).
 
-### Changes made (2026-10-08, not yet committed)
+### Changes made (2026-10-08, committed in `4f9df4c9`)
 | File | Change |
 |---|---|
 | `src/backend/core/config.py` | Added `DIAD_API_KEY` setting (no default) and a production startup check that rejects an empty key or the old default |
