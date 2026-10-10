@@ -48,6 +48,26 @@ def parse_proof_meta(filename: str) -> dict:
     }
 
 
+_EPOCH = datetime.fromtimestamp(0, timezone.utc)
+# Current names end in _YYYYmmddTHHMMSSZ; older simulator names embed a Unix
+# timestamp, e.g. PKG-D001-1770914907-5763_D001.jpg.
+_STAMP_SUFFIX = re.compile(r"_(\d{8}T\d{6}Z)\.\w+$")
+_UNIX_STAMP = re.compile(r"-(\d{10})-")
+
+
+def filename_timestamp(filename: str) -> Optional[datetime]:
+    """Capture time encoded in a proof filename, or None if there is none."""
+    match = _STAMP_SUFFIX.search(filename)
+    if match:
+        return datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    match = _UNIX_STAMP.search(filename)
+    if match:
+        return datetime.fromtimestamp(int(match.group(1)), timezone.utc)
+    return None
+
+
 def build_proof_filename(package_id: str, driver_id: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return "{0}_{1}_{2}.jpg".format(
@@ -87,28 +107,39 @@ class LocalProofStorage:
             return handle.read()
 
     async def list_recent(self, limit: int = 50) -> List[dict]:
+        return await asyncio.to_thread(self._list_recent, limit)
+
+    def _list_recent(self, limit: int) -> List[dict]:
+        # Sort by the time in the filename and stat only the files returned:
+        # one stat per file is ~ms on a Docker-for-Windows bind mount, which
+        # made this take >30s with ~90k simulator proofs on disk.
         if not os.path.isdir(self.base_dir):
             return []
-        items = []
+        dated = []
         for name in os.listdir(self.base_dir):
-            if not name.lower().endswith(ALLOWED_EXTENSIONS):
-                continue
-            path = os.path.join(self.base_dir, name)
-            stat = os.stat(path)
+            if name.lower().endswith(ALLOWED_EXTENSIONS):
+                dated.append((filename_timestamp(name), name))
+        dated.sort(key=lambda pair: pair[0] or _EPOCH, reverse=True)
+
+        items = []
+        for stamp, name in dated[:limit]:
+            if stamp is None:
+                stamp = datetime.fromtimestamp(
+                    os.stat(os.path.join(self.base_dir, name)).st_mtime,
+                    timezone.utc,
+                )
             meta = parse_proof_meta(name)
             items.append(
                 {
                     "packageId": meta["packageId"],
                     "driverId": meta["driverId"],
-                    "timestamp": datetime.fromtimestamp(
-                        stat.st_mtime
-                    ).isoformat(),
+                    "timestamp": stamp.isoformat(),
                     "filename": name,
                     "url": "/delivery/proof/" + name,
                 }
             )
         items.sort(key=lambda item: item["timestamp"], reverse=True)
-        return items[:limit]
+        return items
 
 
 class R2ProofStorage:
