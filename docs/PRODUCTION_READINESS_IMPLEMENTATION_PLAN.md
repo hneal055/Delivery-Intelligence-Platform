@@ -138,11 +138,12 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
   - `geofence.py` has no prefix of its own, so `POST /geofence/verify` becomes `POST /verify`. Add `prefix="/geofence"` to the router. ✅
   - Command center moves from `/command-center/api/*` to `/api/*`. Pick one path and update the clients. ✅ No client in the repo calls it; kept `/api/*`.
   - Advanced routing moves from `/advanced-routing/advanced-route/*` to `/advanced-route/*`. Confirm the clients use the new path. ✅ No client in the repo calls it.
-- [ ] **Restore the delivery endpoints the mobile app calls** *(added 2026-10-10)*. The app calls `POST /delivery/confirm`, `POST /delivery/scan` and `GET /delivery/recent-proofs`. None of them exist in the committed `delivery.py` or in the uncommitted rewrite, so proof of delivery cannot be submitted from the phone. The 6 failing tests in `tests/integration/test_delivery_flow.py` cover these endpoints.
-- [ ] **Add a route snapshot test.** It should list every `METHOD /path` the app exposes and fail on any unplanned change.
-- [ ] **Make startup fail when a router doesn't load.** `safe_include` (`main.py:114-124`) logs a warning and carries on for every router except websocket, so a broken import silently removes whole APIs. In production, raise on any failure.
-- [ ] **Remove the direct SQLite connection** from `main.py` (lines 4 and 50-52). Every request should go through the SQLAlchemy/Postgres session.
-- [ ] **Keep one delivery router.** Delete `delivery_backup.py` and `delivery.py.corrupt.backup`; the old versions remain in git history.
+- [x] **Restore the delivery endpoints the mobile app calls** *(added 2026-10-10)*. The app calls `POST /delivery/confirm`, `POST /delivery/scan` and `GET /delivery/recent-proofs`. None of them exist in the committed `delivery.py` or in the uncommitted rewrite, so proof of delivery cannot be submitted from the phone. The 6 failing tests in `tests/integration/test_delivery_flow.py` cover these endpoints.
+- [x] **Add a route snapshot test.** It should list every `METHOD /path` the app exposes and fail on any unplanned change. *(HTTP routes only; WebSocket routes are not in the OpenAPI schema.)*
+- [x] **Make startup fail when a router doesn't load.** `safe_include` (`main.py:114-124`) logs a warning and carries on for every router except websocket, so a broken import silently removes whole APIs. In production, raise on any failure. *(Raises in every environment unless `ALLOW_DEGRADED_STARTUP=1`.)*
+- [x] **Remove the direct SQLite connection** from `main.py` (lines 4 and 50-52). Every request should go through the SQLAlchemy/Postgres session.
+- [ ] **Keep one delivery router.** Delete `delivery_backup.py` and `delivery.py.corrupt.backup`; the old versions remain in git history. *(`.corrupt.backup` removed. `delivery_backup.py` is untracked, so deleting it is permanent; it is fully superseded by `dfa6fdce` and can go once the owner agrees.)*
+- [ ] **Make the mobile app build and log in** *(added 2026-10-10; blocks Verify)*. `App.js` imports `./screens/*`, but the screens live in `./src/screens/`. `src/api/client.js` has no default export, yet `authStore`, `HomeScreen`, `offlineQueueService` and `notificationService` import one, so login crashes. `package.json` is missing packages the code imports (`axios`, `expo-location`, `@react-navigation/*`, `expo-secure-store`, `expo-notifications`, AsyncStorage, `expo-sqlite`). No request sends the login token, and every `/delivery/*` endpoint now requires one. `offlineQueueService` marks any 4xx as FAILED, so a 401 would strand a proof; it must retry after login instead. Other calls with no backend route: `GET /routing/sample-route/{id}`, `POST /notifications/register-token` and `POST /debug/reset-db` (mobile), and `POST /dispatch/assign` (web; the API has `PUT /dispatch/jobs/{id}/assign`).
 - [ ] **Commit the rehab work in small, reviewable commits**, then merge `rehab-investigation-20261001` into `main` through a PR so CI runs.
 
 ### Verify
@@ -161,13 +162,23 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 | `92a087b6` | Restored the truncated `tests/e2e/conftest.py`; the 11 e2e tests now load and skip unless `E2E_DATABASE_URL` is set |
 | `b5f327d8` | Removed the empty `delivery.py.corrupt.backup` |
 
-**Not committed, waiting on a decision:**
+**2026-10-10 (continued):** delivery endpoints and the rest of the backend Phase 2 items. Suite: 9 failed, 259 passed, 12 skipped. Each commit was tested on its own in a clean checkout.
 
-- `src/backend/api/routes/delivery.py` rewrite. It moves delivery onto Postgres, which is what this phase wants, but it removes `POST /delivery/submit`, which handled the photo, signature and geofence check, and adds nothing the mobile app calls. Nothing in the repo calls `/submit` either.
-- `src/backend/api/routes/delivery_backup.py` (untracked). It contains `/recent-proofs`, a version the app does call. Keep it as a reference until the delivery router is settled.
+| Commit | Change |
+|---|---|
+| `2ae267fb` | Restored proof storage (`core/storage.py` from `a5163284`): Cloudflare R2 when configured, local disk otherwise. The cut-down copy could save photos but not list or show them |
+| `dfa6fdce` | Delivery router rebuilt from `a5163284`, the uncommitted rewrite and `delivery_backup.py`: `confirm` saves the photo first, 404s on unknown packages instead of inventing them, and closes the dispatch job; new `scan` loads a package by ID or tracking code; all endpoints require login. 15 new tests |
+| `573bc740` | SQLite proof database removed from `main.py`; a router that fails to import now stops startup |
+| `1d6b597d` | Route snapshot test (`tests/unit/route_snapshot.txt`, 58 routes) |
+
+**Not committed:**
+
+- `src/backend/api/routes/delivery_backup.py` (untracked; superseded, delete when agreed).
 - `src/analytics/ml_models/eta_model.joblib`. Running the test suite rewrites this tracked file, so the change is a test side effect, not work to commit. The tests should write to a temporary path instead (Phase 3).
 
-**Still failing (present before and after):** 6 delivery-flow tests (missing endpoints, above); 8 health and secure-ping tests in `tests/unit/test_api_basics.py` and `tests/unit/test_api_health.py`; and `tests/test_heartbeat.py`.
+**Still failing (Phase 3):** 8 tests in `tests/unit/test_api_basics.py` and `tests/unit/test_api_health.py` expect `/health` to return `{"status": "online"}`, a `/secure-ping` endpoint and a `/` → docs redirect, none of which the API provides; decide which side is right. `tests/test_heartbeat.py` counts 49 where it expects at least 50.
+
+**Not yet verified live:** the running `delivery_backend` container still has the old code. Rebuild it (`docker compose up --build -d backend`) before testing against the local stack.
 
 **Checkpoint:** ☐ Phase 2 complete → readiness **62%**
 
