@@ -51,6 +51,30 @@ async def _get_package(db: AsyncSession, package_id: str) -> Optional[Package]:
     return result.scalars().first()
 
 
+# A package in one of these states has been closed out by a driver.
+FINAL_STATUSES = {"delivered", "exception"}
+
+
+def _acting_driver(current_user: User, claimed_driver_id: str) -> str:
+    """Who the delivery is recorded against. A driver is always themselves
+    (their username is their driver ID), whatever the form says; office
+    roles may record on behalf of the named driver."""
+    if current_user.role == UserRole.DRIVER:
+        return current_user.username
+    return claimed_driver_id
+
+
+def _check_can_close(current_user: User, package: Package) -> None:
+    """Drivers may only close out packages assigned to them, and nobody may
+    close a package twice."""
+    if current_user.role == UserRole.DRIVER and package.driver_id != current_user.username:
+        raise HTTPException(status_code=403, detail="Package is not assigned to you")
+    if package.status in FINAL_STATUSES:
+        raise HTTPException(
+            status_code=409, detail=f"Package already {package.status}"
+        )
+
+
 @router.get("/recent-proofs")
 async def get_recent_proofs(
     limit: int = Query(50, ge=1, le=200),
@@ -184,21 +208,26 @@ async def confirm_delivery(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
+    driver_id = _acting_driver(current_user, driver_id)
     driver_heartbeats[driver_id] = time.time()
-
-    # 1. Persist the proof FIRST -- it is evidence and must survive even
-    #    if the checks below reject the request.
     content = await photo.read()
-    saved_filename = await proof_storage.save_proof(
-        package_id, driver_id, content
-    )
 
-    # 2. Only real packages can be delivered; never invent one here.
+    # 1. Only real packages can be delivered; never invent one. The photo of
+    #    an unknown package is still kept as evidence.
     package = await _get_package(db, package_id)
     if package is None:
+        await proof_storage.save_proof(package_id, driver_id, content)
         raise HTTPException(status_code=404, detail="Package not found")
 
-    # 3. Quality check (blur/darkness). Reject so the driver retakes,
+    # 2. Not someone else's package, and not already closed (this also makes
+    #    a resent upload a harmless 409 instead of a duplicate proof).
+    _check_can_close(current_user, package)
+
+    # 3. Persist the proof before the quality check: a rejected photo is
+    #    still evidence and stays in storage.
+    saved_filename = await proof_storage.save_proof(package_id, driver_id, content)
+
+    # 4. Quality check (blur/darkness). Reject so the driver retakes,
     #    but the original stays in storage.
     is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)
     if not is_valid_image:
@@ -207,7 +236,7 @@ async def confirm_delivery(
             detail="Invalid Proof of Delivery: {0}".format(reason),
         )
 
-    # 4. Record where the driver was. Recorded, not enforced: offline
+    # 5. Record where the driver was. Recorded, not enforced: offline
     #    captures can arrive without a fresh fix.
     distance = None
     if dest_lat is not None and dest_lon is not None:
@@ -257,9 +286,12 @@ async def report_exception(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
+    driver_id = _acting_driver(current_user, driver_id)
     driver_heartbeats[driver_id] = time.time()
-    if await _get_package(db, package_id) is None:
+    package = await _get_package(db, package_id)
+    if package is None:
         raise HTTPException(status_code=404, detail="Package not found")
+    _check_can_close(current_user, package)
 
     await delivery_service.update_package_status(
         db, package_id, "exception", driver_id

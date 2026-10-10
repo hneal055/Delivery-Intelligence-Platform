@@ -212,7 +212,8 @@ async function uploadQueuedItemWithTimeout(item) {
 /**
  * Syncs the queue with per-item atomic commits and timeout resilience.
  * Network failures and 401 (login needed) stop the run and keep everything;
- * other 4xx responses mark that item failed; 5xx is retried next run.
+ * 409 means the server already has it (removed as synced); other 4xx mark
+ * that item failed; 5xx is retried next run.
  */
 export async function syncOfflineQueue(onProgress) {
   const queue = (await getOfflineQueue()).filter((i) => !i.failed);
@@ -239,6 +240,13 @@ export async function syncOfflineQueue(onProgress) {
       await new Promise((res) => setTimeout(res, 50));
     } catch (err) {
       console.warn(`[Sync] Failed for package ${item.package_id}: ${err.message}`);
+      if (err.status === 409) {
+        // The server already has this delivery (an earlier upload got
+        // through after the phone gave up waiting): nothing left to send.
+        await removeQueueItemById(item.id);
+        syncedCount++;
+        continue;
+      }
       if (!err.status || err.status === 401) {
         console.warn('[Sync] Offline or logged out. Halting queue sync to preserve state.');
         break;

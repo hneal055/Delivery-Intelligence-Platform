@@ -54,7 +54,7 @@ async def test_verify_location_out_of_zone(int_client_driver):
 async def test_confirm_delivery_marks_package_delivered(int_client_driver):
     """POST /delivery/confirm changes package status to delivered."""
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, driver_id=drv.id, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
 
     # Minimal valid JPEG (1x1 white pixel) so image_verifier gets real bytes
     minimal_jpeg = (
@@ -72,7 +72,7 @@ async def test_confirm_delivery_marks_package_delivered(int_client_driver):
                return_value=(True, "mock-ok")):
         resp = await client.post(
             "/delivery/confirm",
-            data={"package_id": pkg.id, "driver_id": drv.id},
+            data={"package_id": pkg.id, "driver_id": drv.username},
             files={"photo": ("test.jpg", io.BytesIO(minimal_jpeg), "image/jpeg")},
         )
 
@@ -89,13 +89,13 @@ async def test_confirm_delivery_marks_package_delivered(int_client_driver):
 async def test_confirm_delivery_invalid_image_rejected(int_client_driver):
     """A photo that fails image verification returns 400."""
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, driver_id=drv.id, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
 
     with patch("src.analytics.image_analysis.verifier.image_verifier.verify_proof_of_delivery",
                return_value=(False, "Image too blurry")):
         resp = await client.post(
             "/delivery/confirm",
-            data={"package_id": pkg.id, "driver_id": drv.id},
+            data={"package_id": pkg.id, "driver_id": drv.username},
             files={"photo": ("bad.jpg", io.BytesIO(b"notanimage"), "image/jpeg")},
         )
 
@@ -107,7 +107,7 @@ async def test_confirm_delivery_invalid_image_rejected(int_client_driver):
 async def test_report_exception(int_client_driver):
     """POST /delivery/exception marks package as exception."""
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, driver_id=drv.id, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
 
     resp = await client.post(
         "/delivery/exception",
@@ -138,7 +138,7 @@ async def test_recent_proofs_accessible_by_manager(int_client_manager):
 async def test_confirm_completes_dispatch_job(int_client_driver):
     """Confirming delivery closes the dispatch job linked to the package."""
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
     job = DispatchJob(title="Drop", package_id=pkg.id, status="assigned")
     db.add(job)
     await db.commit()
@@ -147,7 +147,7 @@ async def test_confirm_completes_dispatch_job(int_client_driver):
                return_value=(True, "mock-ok")):
         resp = await client.post(
             "/delivery/confirm",
-            data={"package_id": pkg.id, "driver_id": drv.id},
+            data={"package_id": pkg.id, "driver_id": drv.username},
             files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
         )
 
@@ -180,13 +180,13 @@ async def test_confirm_unknown_package_returns_404_and_keeps_photo(int_client_dr
 async def test_rejected_photo_is_still_stored(int_client_driver, _proofs_in_tmp):
     """A photo that fails the quality check is kept; the package stays undelivered."""
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
 
     with patch("src.analytics.image_analysis.verifier.image_verifier.verify_proof_of_delivery",
                return_value=(False, "Image too dark")):
         resp = await client.post(
             "/delivery/confirm",
-            data={"package_id": pkg.id, "driver_id": drv.id},
+            data={"package_id": pkg.id, "driver_id": drv.username},
             files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
         )
 
@@ -200,7 +200,7 @@ async def test_rejected_photo_is_still_stored(int_client_driver, _proofs_in_tmp)
 async def test_recent_proofs_lists_saved_photo(int_client_driver):
     """A confirmed delivery is recorded with its photo, signature and location."""
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
 
     with patch("src.analytics.image_analysis.verifier.image_verifier.verify_proof_of_delivery",
                return_value=(True, "mock-ok")):
@@ -232,7 +232,7 @@ async def test_recent_proofs_lists_saved_photo(int_client_driver):
 @pytest.mark.asyncio
 async def test_driver_sees_only_own_proofs(int_client_driver):
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
     db.add(DeliveryProof(package_id=pkg.id, driver_id="someone-else", photo_key="x.jpg"))
     await db.commit()
 
@@ -243,7 +243,7 @@ async def test_driver_sees_only_own_proofs(int_client_driver):
 @pytest.mark.asyncio
 async def test_rejected_photo_records_no_proof(int_client_driver):
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
 
     with patch("src.analytics.image_analysis.verifier.image_verifier.verify_proof_of_delivery",
                return_value=(False, "Image too dark")):
@@ -272,7 +272,7 @@ async def test_exception_unknown_package_returns_404(int_client_driver):
 async def test_scan_loads_pending_package(int_client_driver):
     """Scanning a pending package marks it loaded and stamps loaded_at."""
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
 
     resp = await client.post("/delivery/scan", json={"barcode": pkg.id, "scan_type": "qr"})
 
@@ -286,7 +286,7 @@ async def test_scan_loads_pending_package(int_client_driver):
 @pytest.mark.asyncio
 async def test_scan_by_tracking_code(int_client_driver):
     client, db, drv = int_client_driver
-    pkg = await int_db_seed_package(db, status="pending")
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="pending")
     pkg.tracking_code = "TRK-123"
     await db.commit()
 
@@ -330,3 +330,85 @@ async def test_delivery_endpoints_require_login(int_client_anon, method, path):
 
     resp = await getattr(client, method)(path)
     assert resp.status_code == 401
+
+
+def _ok_photo():
+    return patch("src.analytics.image_analysis.verifier.image_verifier.verify_proof_of_delivery",
+                 return_value=(True, "mock-ok"))
+
+
+@pytest.mark.asyncio
+async def test_driver_cannot_confirm_someone_elses_package(int_client_driver, _proofs_in_tmp):
+    """Another driver's package is refused, nothing changes, no photo is stored."""
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, driver_id="other-driver", status="assigned")
+
+    with _ok_photo():
+        resp = await client.post(
+            "/delivery/confirm",
+            data={"package_id": pkg.id, "driver_id": "other-driver"},
+            files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
+        )
+
+    assert resp.status_code == 403
+    await db.refresh(pkg)
+    assert pkg.status == "assigned"
+    assert list(_proofs_in_tmp.iterdir()) == []
+    exc = await client.post(
+        "/delivery/exception",
+        data={"package_id": pkg.id, "driver_id": "other-driver", "reason": "x"},
+    )
+    assert exc.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_proof_is_recorded_against_the_logged_in_driver(int_client_driver):
+    """A driver cannot record a delivery under another name."""
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="assigned")
+
+    with _ok_photo():
+        resp = await client.post(
+            "/delivery/confirm",
+            data={"package_id": pkg.id, "driver_id": "someone-else"},
+            files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
+        )
+
+    assert resp.status_code == 200
+    proof = (await db.execute(select(DeliveryProof))).scalar_one()
+    assert proof.driver_id == drv.username
+
+
+@pytest.mark.asyncio
+async def test_second_confirm_is_rejected_without_duplicate_proof(int_client_driver):
+    """A resent upload (e.g. after a phone-side timeout) does not add a second proof."""
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="assigned")
+
+    for expected in (200, 409):
+        with _ok_photo():
+            resp = await client.post(
+                "/delivery/confirm",
+                data={"package_id": pkg.id, "driver_id": drv.username},
+                files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
+            )
+        assert resp.status_code == expected
+
+    assert len((await db.execute(select(DeliveryProof))).scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_office_can_confirm_on_behalf_of_driver(int_client_manager):
+    client, db, mgr = int_client_manager
+    pkg = await int_db_seed_package(db, driver_id="driver2", status="assigned")
+
+    with _ok_photo():
+        resp = await client.post(
+            "/delivery/confirm",
+            data={"package_id": pkg.id, "driver_id": "driver2"},
+            files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
+        )
+
+    assert resp.status_code == 200
+    proof = (await db.execute(select(DeliveryProof))).scalar_one()
+    assert proof.driver_id == "driver2"

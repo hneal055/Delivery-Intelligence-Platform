@@ -196,6 +196,11 @@ export default function ScannerScreen({ route, navigation }) {
         // Photo failed the quality check: retake, nothing is queued
         Alert.alert('Retake Photo', err.message);
         setPhotoUri(null);
+      } else if (err.status === 409) {
+        // Already closed out (e.g. an earlier attempt did get through)
+        Alert.alert('Already Delivered', err.message, [{ text: 'OK', onPress: resetAfterDelivery }]);
+      } else if (err.status === 403) {
+        Alert.alert('Not Your Package', `${scannedPackageId} is not assigned to you. Check with dispatch.`);
       } else if (err.status === 401) {
         Alert.alert('Session Expired', 'Log in again, then confirm this delivery.');
       } else if (err.status === 404) {
