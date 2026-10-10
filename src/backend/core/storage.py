@@ -8,13 +8,14 @@ Backends:
   - LocalProofStorage: Local disk under src/uploads/proofs. Development
                        fallback only -- ephemeral on Railway.
 
-Filenames: {package_id}_{driver_id}_{utc_timestamp}.jpg
-The timestamp suffix means a redelivery attempt NEVER overwrites the
-photographic evidence of a prior attempt.
+Filenames: {package_id}_{driver_id}_{utc_timestamp}-{random}.jpg
+The timestamp plus a random suffix means no upload -- a redelivery attempt
+or two in the same second -- ever overwrites earlier photographic evidence.
 """
 import asyncio
 import os
 import re
+import secrets
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -51,7 +52,7 @@ def parse_proof_meta(filename: str) -> dict:
 _EPOCH = datetime.fromtimestamp(0, timezone.utc)
 # Current names end in _YYYYmmddTHHMMSSZ; older simulator names embed a Unix
 # timestamp, e.g. PKG-D001-1770914907-5763_D001.jpg.
-_STAMP_SUFFIX = re.compile(r"_(\d{8}T\d{6}Z)\.\w+$")
+_STAMP_SUFFIX = re.compile(r"_(\d{8}T\d{6}Z)(?:-[0-9a-f]+)?\.\w+$")
 _UNIX_STAMP = re.compile(r"-(\d{10})-")
 
 
@@ -70,8 +71,11 @@ def filename_timestamp(filename: str) -> Optional[datetime]:
 
 def build_proof_filename(package_id: str, driver_id: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return "{0}_{1}_{2}.jpg".format(
-        sanitize_component(package_id), sanitize_component(driver_id), stamp
+    return "{0}_{1}_{2}-{3}.jpg".format(
+        sanitize_component(package_id),
+        sanitize_component(driver_id),
+        stamp,
+        secrets.token_hex(4),
     )
 
 
@@ -93,7 +97,8 @@ class LocalProofStorage:
         filename = build_proof_filename(package_id, driver_id)
         os.makedirs(self.base_dir, exist_ok=True)
         path = os.path.join(self.base_dir, filename)
-        with open(path, "wb") as handle:
+        # "xb": never overwrite an existing proof, even on a name collision
+        with open(path, "xb") as handle:
             handle.write(content)
         return filename
 

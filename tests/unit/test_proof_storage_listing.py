@@ -50,3 +50,25 @@ async def test_list_recent_falls_back_to_mtime(tmp_path):
     items = await store.list_recent()
 
     assert items[0]["timestamp"] == datetime.fromtimestamp(1_800_000_000, timezone.utc).isoformat()
+
+
+def test_proof_filenames_are_unique_within_a_second():
+    from src.backend.core.storage import build_proof_filename
+    names = {build_proof_filename("PKG1", "driver2") for _ in range(50)}
+    assert len(names) == 50
+
+
+def test_timestamp_parsed_from_suffixed_filename():
+    stamp = filename_timestamp("PKG1_driver2_20261010T143000Z-1a2b3c4d.jpg")
+    assert stamp == datetime(2026, 10, 10, 14, 30, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_two_saves_in_the_same_second_keep_both_photos(tmp_path):
+    store = LocalProofStorage()
+    store.base_dir = str(tmp_path)
+    first = await store.save_proof("PKG1", "driver2", b"first")
+    second = await store.save_proof("PKG1", "driver2", b"second")
+    assert first != second
+    assert await store.get_proof(first) == b"first"
+    assert await store.get_proof(second) == b"second"
