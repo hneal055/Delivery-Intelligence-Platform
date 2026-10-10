@@ -7,7 +7,7 @@ from src.backend.api.deps import PermissionChecker
 
 from src.backend.core.database import get_db
 
-from src.backend.models.domain import User, DispatchJob, DispatchJobCreate, AvailabilityCreate
+from src.backend.models.domain import User, UserRole, DispatchJob, DispatchJobCreate, AvailabilityCreate
 from src.backend.models.sql_models import (
     Driver as DriverSQL,
     Package as PackageSQL,
@@ -138,6 +138,9 @@ async def list_deliveries(
     db: AsyncSession = Depends(get_db),
 ):
     """Mobile-friendly package list. Drivers see only their assigned packages."""
+    # A driver's ID is their login username (see drivers table).
+    if current_user.role == UserRole.DRIVER:
+        driver_id = current_user.username
     query = select(PackageSQL)
     if status:
         query = query.where(PackageSQL.status == status)
@@ -334,6 +337,14 @@ async def assign_job(
 
     job.driver_id = driver_id
     job.status = "assigned"
+
+    # The package goes with the job, so it shows on the driver's manifest.
+    if job.package_id:
+        package = await db.get(PackageSQL, job.package_id)
+        if package:
+            package.driver_id = driver_id
+            if package.status == "pending":
+                package.status = "assigned"
 
     await db.commit()
     await db.refresh(job)

@@ -140,3 +140,40 @@ async def test_list_drivers(int_client_manager):
     resp = await client.get("/dispatch/drivers")
     assert resp.status_code == 200
     assert len(resp.json()) >= 1
+
+
+@pytest.mark.asyncio
+async def test_assign_job_assigns_its_package(int_client_manager):
+    """Assigning a job puts its package on the driver's manifest."""
+    client, db, mgr = int_client_manager
+    driver = await int_db_seed_driver(db, "Van Driver")
+    pkg = await int_db_seed_package(db, status="pending")
+
+    create_resp = await client.post(
+        "/dispatch/jobs", json={"title": "Drop", "type": "delivery", "package_id": pkg.id}
+    )
+    job_id = create_resp.json()["id"]
+    resp = await client.put(f"/dispatch/jobs/{job_id}/assign", params={"driver_id": driver.id})
+
+    assert resp.status_code == 200
+    await db.refresh(pkg)
+    assert pkg.driver_id == driver.id
+    assert pkg.status == "assigned"
+
+
+@pytest.mark.asyncio
+async def test_driver_sees_only_own_deliveries(int_client_driver):
+    """A driver's /dispatch/deliveries is limited to packages assigned to them,
+    even if they ask for another driver's."""
+    client, db, drv = int_client_driver
+    mine = await int_db_seed_driver(db, "mine")
+    mine.id = drv.username  # driver ID == login username
+    other = await int_db_seed_driver(db, "other")
+    await db.commit()
+    own_pkg = await int_db_seed_package(db, driver_id=drv.username)
+    await int_db_seed_package(db, driver_id=other.id)
+
+    for params in ({}, {"driver_id": other.id}):
+        resp = await client.get("/dispatch/deliveries", params=params)
+        assert resp.status_code == 200
+        assert [p["id"] for p in resp.json()] == [own_pkg.id]
