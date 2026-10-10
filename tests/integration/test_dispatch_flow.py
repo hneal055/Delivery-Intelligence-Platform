@@ -223,3 +223,56 @@ async def test_availability_set_and_list(int_client_manager):
     })
     assert resp.status_code == 200
     assert [a["start_time"] for a in resp.json()] == ["08:00"]
+
+
+from unittest.mock import AsyncMock, patch
+from sqlalchemy import select
+from src.backend.models.sql_models import Package as PackageSQL
+from src.backend.services.geocoding import GeocodeResult
+
+MART = GeocodeResult(lat=41.888, lon=-87.634, matched_address="222 W MERCHANDISE MART PLZ, CHICAGO, IL, 60654")
+
+
+@pytest.mark.asyncio
+async def test_create_delivery_job_from_address(int_client_manager):
+    """A delivery job with an address creates a geocoded package on the driver's manifest."""
+    client, db, mgr = int_client_manager
+    driver = await int_db_seed_driver(db, "Van")
+
+    with patch("src.backend.api.routes.dispatch.geocode_address", AsyncMock(return_value=MART)):
+        resp = await client.post("/dispatch/jobs", json={
+            "title": "Emergency construction parts",
+            "type": "delivery",
+            "driver_id": driver.id,
+            "dest_address": "222 W Merchandise Mart Plaza, Chicago, IL",
+        })
+
+    assert resp.status_code == 200
+    job = resp.json()
+    assert job["status"] == "assigned"
+    pkg = (await db.execute(select(PackageSQL).where(PackageSQL.id == job["package_id"]))).scalar_one()
+    assert pkg.dest_address == MART.matched_address
+    assert (pkg.dest_lat, pkg.dest_lon) == (MART.lat, MART.lon)
+    assert pkg.driver_id == driver.id
+    assert pkg.status == "assigned"
+    assert pkg.tracking_code.startswith("CCC-")
+
+
+@pytest.mark.asyncio
+async def test_create_job_unknown_address_is_rejected(int_client_manager):
+    client, db, mgr = int_client_manager
+
+    with patch("src.backend.api.routes.dispatch.geocode_address", AsyncMock(return_value=None)):
+        resp = await client.post("/dispatch/jobs", json={"title": "X", "dest_address": "nowhere at all"})
+
+    assert resp.status_code == 422
+    assert "Address not found" in resp.json()["detail"]
+    assert (await db.execute(select(PackageSQL))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_create_job_rejects_unknown_driver_or_package(int_client_manager):
+    client, db, mgr = int_client_manager
+
+    assert (await client.post("/dispatch/jobs", json={"title": "X", "driver_id": "ghost"})).status_code == 404
+    assert (await client.post("/dispatch/jobs", json={"title": "X", "package_id": "ghost"})).status_code == 404

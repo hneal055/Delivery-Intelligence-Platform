@@ -1,3 +1,6 @@
+import secrets
+import uuid
+
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -16,6 +19,7 @@ from src.backend.models.sql_models import (
     DriverAvailability,
 )
 from src.backend.services.heartbeat import heartbeat_service
+from src.backend.services.geocoding import geocode_address
 from src.backend.core.permissions import Permission
 
 
@@ -261,7 +265,41 @@ async def create_job(
     current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new dispatch job. Requires manager or admin role."""
+    """Create a new dispatch job. Requires manager or admin role.
+
+    With dest_address (and no package_id) the address is geocoded and a new
+    package is created for the job. If a driver is given, the job's package
+    is assigned to them so it appears on their manifest.
+    """
+    if job_data.driver_id and await db.get(DriverSQL, job_data.driver_id) is None:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    package = None
+    if job_data.package_id:
+        package = await db.get(PackageSQL, job_data.package_id)
+        if package is None:
+            raise HTTPException(status_code=404, detail="Package not found")
+    elif job_data.dest_address and job_data.dest_address.strip():
+        location = await geocode_address(job_data.dest_address.strip())
+        if location is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Address not found. Check the street, city and state.",
+            )
+        package = PackageSQL(
+            id=str(uuid.uuid4()),
+            dest_lat=location.lat,
+            dest_lon=location.lon,
+            dest_address=location.matched_address,
+            status="pending",
+            priority=job_data.priority,
+            tracking_code=_new_tracking_code(),
+        )
+        db.add(package)
+        # Insert the package before the job that references it; there is no
+        # ORM relationship to make SQLAlchemy order these for us.
+        await db.flush()
+
     job = DispatchJobSQL(
         driver_id=job_data.driver_id,
         title=job_data.title,
@@ -269,14 +307,25 @@ async def create_job(
         priority=job_data.priority,
         notes=job_data.notes,
         scheduled_at=job_data.scheduled_at,
-        package_id=job_data.package_id,
+        package_id=package.id if package else None,
+        status="assigned" if job_data.driver_id else "pending",
     )
+    if package and job_data.driver_id:
+        package.driver_id = job_data.driver_id
+        if package.status == "pending":
+            package.status = "assigned"
 
     db.add(job)
     await db.commit()
     await db.refresh(job)
 
     return job
+
+
+def _new_tracking_code() -> str:
+    """Short code for labels and barcodes, e.g. CCC-7K3QX9M2."""
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L
+    return "CCC-" + "".join(secrets.choice(alphabet) for _ in range(8))
 
 
 @router.get("/jobs", response_model=List[DispatchJob])
