@@ -1,21 +1,18 @@
-import React, { Component, useEffect, useState, createContext, useContext } from "react";
+import React, { Component, useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import * as SecureStore from "expo-secure-store";
 import * as Notifications from "expo-notifications";
 
-// ── Screens ──────────────────────────────────────────────────────────────────
-// NOTE: adjust these paths to match your actual layout.
-// If App.js lives in src/mobile/, the screens are ./screens/*
-import HomeScreen from "./screens/HomeScreen";
-import ManifestScreen from "./screens/ManifestScreen";
-import ScannerScreen from "./screens/ScannerScreen";
-import DeliveryHistoryScreen from "./screens/DeliveryHistoryScreen";
-import LoginScreen from "./screens/LoginScreen";
+import HomeScreen from "./src/screens/HomeScreen";
+import ManifestScreen from "./src/screens/ManifestScreen";
+import ScannerScreen from "./src/screens/ScannerScreen";
+import DeliveryHistoryScreen from "./src/screens/DeliveryHistoryScreen";
+import LoginScreen from "./src/screens/LoginScreen";
+import { useAuthStore } from "./src/stores/authStore";
 
 const Tab = createBottomTabNavigator();
 
@@ -47,43 +44,6 @@ class ErrorBoundary extends Component {
     }
     return this.props.children;
   }
-}
-
-// ── Auth Context ─────────────────────────────────────────────────────────────
-const AuthContext = createContext(null);
-
-const TOKEN_KEY = "dip_access_token";
-
-function AuthProvider({ children }) {
-  const [token, setToken] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    SecureStore.getItemAsync(TOKEN_KEY)
-      .then(setToken)
-      .catch(() => setToken(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const signIn = async (newToken) => {
-    await SecureStore.setItemAsync(TOKEN_KEY, newToken);
-    setToken(newToken);
-  };
-
-  const signOut = async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    setToken(null);
-  };
-
-  return (
-    <AuthContext.Provider value={{ token, signIn, signOut, loading }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  return useContext(AuthContext);
 }
 
 // ── Notification Setup ───────────────────────────────────────────────────────
@@ -197,10 +157,12 @@ function AppTabs() {
 
 // ── Root ─────────────────────────────────────────────────────────────────────
 function Root() {
-  const { token, loading } = useAuth();
+  // Same store LoginScreen writes to, so a successful login shows the app.
+  const token = useAuthStore((s) => s.token);
+  const hydrated = useAuthStore((s) => s._hasHydrated);
   useNotificationListeners();
 
-  if (loading) {
+  if (!hydrated) {
     return (
       <View style={styles.fallback}>
         <ActivityIndicator size="large" color="#38bdf8" />
@@ -220,9 +182,7 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <StatusBar style="light" backgroundColor="#0f172a" />
-        <AuthProvider>
-          <Root />
-        </AuthProvider>
+        <Root />
       </SafeAreaProvider>
     </ErrorBoundary>
   );
