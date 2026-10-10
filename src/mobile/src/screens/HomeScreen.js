@@ -10,51 +10,41 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import client from "../api/client";
+import { getMyPackages } from "../api/client";
+import { useAuthStore } from "../stores/authStore";
 
 export default function HomeScreen({ navigation }) {
+  const driverId = useAuthStore((s) => s.driverId);
+  const logout = useAuthStore((s) => s.logout);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({
-    assigned: 5,
-    completed: 4,
-    remaining: 1,
-  });
-  const [nextStop, setNextStop] = useState({
-    stopNumber: 5,
-    packageId: "pkg-005",
-    address: "222 W Merchandise Mart Plaza",
-    tier: "Priority",
-  });
+  const [stats, setStats] = useState({ assigned: 0, completed: 0, remaining: 0 });
+  const [nextStop, setNextStop] = useState(null);
 
   const refreshHomeData = useCallback(async () => {
     try {
-      const res = await client.get("/delivery/recent-proofs", {
-        params: { limit: 50 },
+      const packages = await getMyPackages();
+      const done = packages.filter((p) => p.status === "delivered" || p.status === "exception");
+      const open = packages.filter((p) => !done.includes(p));
+
+      setStats({
+        assigned: packages.length,
+        completed: done.length,
+        remaining: open.length,
       });
-      if (res && Array.isArray(res.data)) {
-        const completedCount = res.data.length;
-        const totalAssigned = Math.max(5, completedCount);
-        const remainingCount = Math.max(0, totalAssigned - completedCount);
 
-        setStats({
-          assigned: totalAssigned,
-          completed: completedCount,
-          remaining: remainingCount,
-        });
-
-        if (remainingCount > 0) {
-          setNextStop({
-            stopNumber: completedCount + 1,
-            packageId: `pkg-00${completedCount + 1}`,
-            address: "222 W Merchandise Mart Plaza",
-            tier: "Priority",
-          });
-        } else {
-          setNextStop(null);
-        }
-      }
+      const next = open[0];
+      setNextStop(
+        next
+          ? {
+              stopNumber: done.length + 1,
+              packageId: next.id,
+              address: next.dest_address || `${next.dest_lat.toFixed(5)}, ${next.dest_lon.toFixed(5)}`,
+              tier: next.status === "loaded" ? "Loaded" : "Assigned",
+            }
+          : null
+      );
     } catch (_) {
-      // Offline fallback retaining previous state silently
+      // Offline: keep the last values shown
     } finally {
       setRefreshing(false);
     }
@@ -82,13 +72,8 @@ export default function HomeScreen({ navigation }) {
         { 
           text: "Sign Out", 
           style: "destructive", 
-          onPress: () => {
-            // Add your auth reset / navigation reset logic here
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            });
-          } 
+          // Clearing the session switches App back to the login screen
+          onPress: () => logout(),
         }
       ]
     );
@@ -100,7 +85,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.header}>
           <View>
             <Text style={styles.headerPortal}>DRIVER PORTAL</Text>
-            <Text style={styles.headerTitle}>Driver D001</Text>
+            <Text style={styles.headerTitle}>Driver {driverId}</Text>
           </View>
           <TouchableOpacity 
             style={styles.logoutButton} 

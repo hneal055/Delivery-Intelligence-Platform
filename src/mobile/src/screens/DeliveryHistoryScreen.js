@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,15 +16,35 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { getRecentProofs, resetDatabase, BASE_URL } from '../api/client';
+import { getRecentProofs, BASE_URL, authHeaders } from '../api/client';
 import { getOfflineQueue, syncOfflineQueue } from '../utils/offlineQueue';
+
+/** Map a /delivery/recent-proofs record to the fields this screen renders. */
+function toProofRow(p) {
+  return {
+    id: p.filename,
+    package_id: p.packageId,
+    driver_id: p.driverId,
+    status: 'delivered',
+    timestamp: p.timestamp,
+    dest_lat: p.lat,
+    dest_lon: p.lon,
+    distance_m: p.distanceMeters,
+    signature_path: p.signature,
+    photo_url: p.url,
+  };
+}
+
+async function loadProofRows() {
+  const data = await getRecentProofs(50);
+  return (data || []).map(toProofRow);
+}
 
 export default function DeliveryHistoryScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [proofs, setProofs] = useState([]);
-  const [resetting, setResetting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   // Network health and auto-sync state
@@ -40,7 +60,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
   const fetchProofsAndQueue = useCallback(async () => {
     try {
       const [data, queue] = await Promise.all([
-        getRecentProofs(50).catch(() => []),
+        loadProofRows().catch(() => []),
         getOfflineQueue().catch(() => []),
       ]);
       setProofs(data || []);
@@ -86,7 +106,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
           setIsAutoSyncing(true);
           try {
             await syncOfflineQueue();
-            const freshProofs = await getRecentProofs(50);
+            const freshProofs = await loadProofRows();
             setProofs(freshProofs || []);
             const remaining = await getOfflineQueue();
             setOfflineCount(remaining.length);
@@ -146,32 +166,6 @@ export default function DeliveryHistoryScreen({ navigation }) {
     }
   };
 
-  const handleReset = () => {
-    Alert.alert(
-      'Reset Proof Database',
-      'This will delete all delivery proof records and clear photo storage on the backend. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setResetting(true);
-              await resetDatabase();
-              await fetchProofsAndQueue();
-              Alert.alert('Success', 'Database and stored delivery proofs cleared.');
-            } catch (err) {
-              Alert.alert('Reset Failed', err.message || 'Could not reset backend state.');
-            } finally {
-              setResetting(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const downloadAndShareExport = async (format) => {
     try {
       setExporting(true);
@@ -185,14 +179,16 @@ export default function DeliveryHistoryScreen({ navigation }) {
       const filename = `delivery_proofs_${timestamp}.${format}`;
       const fileUri = `${FileSystem.cacheDirectory}${filename}`;
 
-      const downloadUrl = `${BASE_URL}/delivery/export?format=${format}`;
-      const downloadResult = await FileSystem.downloadAsync(downloadUrl, fileUri);
+      const fields = ['package_id', 'driver_id', 'timestamp', 'dest_lat', 'dest_lon', 'distance_m', 'photo_url'];
+      const body =
+        format === 'csv'
+          ? [fields.join(',')]
+              .concat(proofs.map((p) => fields.map((f) => JSON.stringify(p[f] ?? '')).join(',')))
+              .join('\n')
+          : JSON.stringify(proofs, null, 2);
+      await FileSystem.writeAsStringAsync(fileUri, body);
 
-      if (downloadResult.status !== 200) {
-        throw new Error(`Download failed with status ${downloadResult.status}`);
-      }
-
-      await Sharing.shareAsync(downloadResult.uri, {
+      await Sharing.shareAsync(fileUri, {
         mimeType: format === 'csv' ? 'text/csv' : 'application/json',
         dialogTitle: `Export Delivery Proofs (${format.toUpperCase()})`,
         UTI: format === 'csv' ? 'public.comma-separated-values-text' : 'public.json',
@@ -235,7 +231,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
         <View style={styles.cardHeader}>
           <View style={styles.headerLeft}>
             <Text style={styles.packageIdText}>{item.package_id}</Text>
-            <Text style={styles.driverTag}>Driver {item.driver_id || 'D001'}</Text>
+            <Text style={styles.driverTag}>Driver {item.driver_id}</Text>
           </View>
           <View style={styles.statusBadge}>
             <Text style={styles.statusBadgeText}>{item.status}</Text>
@@ -245,7 +241,7 @@ export default function DeliveryHistoryScreen({ navigation }) {
         <View style={styles.cardBody}>
           {photoFullUrl ? (
             <Image
-              source={{ uri: photoFullUrl }}
+              source={{ uri: photoFullUrl, headers: authHeaders() }}
               style={styles.proofThumbnail}
               resizeMode="cover"
             />
@@ -280,8 +276,10 @@ export default function DeliveryHistoryScreen({ navigation }) {
             </View>
 
             <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Record ID:</Text>
-              <Text style={styles.metaValue}>#{item.id}</Text>
+              <Text style={styles.metaLabel}>From drop:</Text>
+              <Text style={styles.metaValue}>
+                {item.distance_m != null ? `${Math.round(item.distance_m)} m` : 'No GPS'}
+              </Text>
             </View>
           </View>
         </View>
@@ -363,17 +361,6 @@ export default function DeliveryHistoryScreen({ navigation }) {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.resetButton, resetting && styles.buttonDisabled]}
-              onPress={handleReset}
-              disabled={resetting}
-            >
-              {resetting ? (
-                <ActivityIndicator size="small" color="#f87171" />
-              ) : (
-                <Text style={styles.resetButtonText}>Clear DB</Text>
-              )}
-            </TouchableOpacity>
           </View>
         </View>
 
