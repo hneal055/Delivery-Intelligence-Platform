@@ -1,7 +1,9 @@
 import type { WebSocketMessage } from "../types";
 
 const _apiUrl: string = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const WS_BASE: string = import.meta.env.VITE_WS_URL || _apiUrl.replace(/^http/, "ws");
+// A relative API URL (e.g. "/api" behind nginx) resolves against the page.
+const _apiAbsolute: string = new URL(_apiUrl, window.location.href).href.replace(/\/$/, "");
+const WS_BASE: string = import.meta.env.VITE_WS_URL || _apiAbsolute.replace(/^http/, "ws");
 
 type MessageHandler = (message: WebSocketMessage) => void;
 

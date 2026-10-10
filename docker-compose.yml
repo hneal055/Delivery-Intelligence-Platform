@@ -86,7 +86,7 @@ services:
 
   frontend:
     build:
-      context: ./src-ui
+      context: ./src/web
       dockerfile: Dockerfile
     image: delivery_frontend:latest
     container_name: delivery_frontend
