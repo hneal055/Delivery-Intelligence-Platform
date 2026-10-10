@@ -4,6 +4,7 @@ import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
 import { JOB_TYPES } from '../../constants/dispatch';
+import type { JobType } from '../../constants/dispatch';
 
 interface CreateJobModalProps {
   opened: boolean;
@@ -90,7 +91,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       {
         title: values.title.trim(),
         notes: values.notes.trim() || undefined,
-        type: values.type,
+        type: values.type as JobType,
         priority: values.priority,
         scheduled_at: values.scheduled_at.toISOString(),
         driver_id: values.driver_id || undefined,

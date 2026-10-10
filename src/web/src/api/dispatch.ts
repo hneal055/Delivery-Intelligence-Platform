@@ -91,12 +91,12 @@ export async function getAvailability(
   const params: Record<string, string> = { start_date, end_date };
   if (driver_id) params.driver_id = driver_id;
 
-  const response = await apiClient.get<DriverAvailability[]>("/dispatch/availability/", { params });
+  const response = await apiClient.get<DriverAvailability[]>("/dispatch/availability", { params });
   return response.data;
 }
 
 export async function setAvailability(availability: DriverAvailabilityCreate): Promise<DriverAvailability> {
-  const response = await apiClient.post<DriverAvailability>("/dispatch/availability/", availability);
+  const response = await apiClient.post<DriverAvailability>("/dispatch/availability", availability);
   return response.data;
 }
 
