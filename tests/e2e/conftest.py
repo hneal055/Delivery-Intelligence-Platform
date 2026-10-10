@@ -70,13 +70,52 @@ async def e2e_engine():
 
     async with engine.begin() as conn:
         await conn.execute(
-            text(
-                "CREATE EXTENSION IF NOT EXISTS postgis"
-            )
+            text("CREATE EXTENSION IF NOT EXISTS postgis")
         )
 
-        await conn.run_sync(
-            Base.metadata.drop_all
-        )
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
 
-        await conn.run_
+    yield engine
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def e2e_db(e2e_engine):
+    """
+    Per-test transactional session.
+    """
+
+    Session = sessionmaker(
+        e2e_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with Session() as session:
+        yield session
+        await session.rollback()
+
+
+@pytest_asyncio.fixture
+async def e2e_client(e2e_db):
+    """
+    HTTP client wired to the real PostGIS-backed session.
+    """
+
+    app.dependency_overrides[get_db] = lambda: e2e_db
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        yield ac, e2e_db
+
+    app.dependency_overrides.pop(
+        get_db,
+        None,
+    )
