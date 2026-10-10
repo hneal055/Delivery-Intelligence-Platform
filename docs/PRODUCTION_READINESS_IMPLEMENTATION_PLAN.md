@@ -134,10 +134,11 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 **Why:** the uncommitted rehab session changes public URLs. The web and mobile clients must agree with the backend before anything else is built on top.
 
 ### Planned changes
-- [ ] **Fix the router prefixes.** The working-copy change to `src/backend/api/main.py` removes the prefixes passed in `main.py` so each router's own prefix applies. That fixes double paths like `/dispatch/dispatch/*`, but some routes move:
-  - `geofence.py` has no prefix of its own, so `POST /geofence/verify` becomes `POST /verify`. Add `prefix="/geofence"` to the router.
-  - Command center moves from `/command-center/api/*` to `/api/*`. Pick one path and update the clients.
-  - Advanced routing moves from `/advanced-routing/advanced-route/*` to `/advanced-route/*`. Confirm the clients use the new path.
+- [x] **Fix the router prefixes.** The working-copy change to `src/backend/api/main.py` removes the prefixes passed in `main.py` so each router's own prefix applies. That fixes double paths like `/dispatch/dispatch/*`, but some routes move:
+  - `geofence.py` has no prefix of its own, so `POST /geofence/verify` becomes `POST /verify`. Add `prefix="/geofence"` to the router. ✅
+  - Command center moves from `/command-center/api/*` to `/api/*`. Pick one path and update the clients. ✅ No client in the repo calls it; kept `/api/*`.
+  - Advanced routing moves from `/advanced-routing/advanced-route/*` to `/advanced-route/*`. Confirm the clients use the new path. ✅ No client in the repo calls it.
+- [ ] **Restore the delivery endpoints the mobile app calls** *(added 2026-10-10)*. The app calls `POST /delivery/confirm`, `POST /delivery/scan` and `GET /delivery/recent-proofs`. None of them exist in the committed `delivery.py` or in the uncommitted rewrite, so proof of delivery cannot be submitted from the phone. The 6 failing tests in `tests/integration/test_delivery_flow.py` cover these endpoints.
 - [ ] **Add a route snapshot test.** It should list every `METHOD /path` the app exposes and fail on any unplanned change.
 - [ ] **Make startup fail when a router doesn't load.** `safe_include` (`main.py:114-124`) logs a warning and carries on for every router except websocket, so a broken import silently removes whole APIs. In production, raise on any failure.
 - [ ] **Remove the direct SQLite connection** from `main.py` (lines 4 and 50-52). Every request should go through the SQLAlchemy/Postgres session.
@@ -150,7 +151,23 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 - `main` contains all the rehab work, and CI is green on the merge.
 
 ### Changes made
-_(fill in)_
+**2026-10-10:** reviewed the uncommitted rehab changes and committed the safe parts. With Docker running, the full suite went from 31 failed and 11 errors to 15 failed, 237 passed and 12 skipped, with no new failures.
+
+| Commit | Change |
+|---|---|
+| `9aa98ede` | Phase 0 status note (Expo 2FA, tokens revoked) |
+| `1adcd127` | Routers own their prefixes; `/route` → `/routing`; geofence keeps `/geofence/verify` |
+| `8b13b728` | Dispatch test: unknown driver on assign returns 404, not 400. The rehab copy also deleted 5 dispatch tests; they pass with the prefix fix, so they were kept |
+| `92a087b6` | Restored the truncated `tests/e2e/conftest.py`; the 11 e2e tests now load and skip unless `E2E_DATABASE_URL` is set |
+| `b5f327d8` | Removed the empty `delivery.py.corrupt.backup` |
+
+**Not committed, waiting on a decision:**
+
+- `src/backend/api/routes/delivery.py` rewrite. It moves delivery onto Postgres, which is what this phase wants, but it removes `POST /delivery/submit`, which handled the photo, signature and geofence check, and adds nothing the mobile app calls. Nothing in the repo calls `/submit` either.
+- `src/backend/api/routes/delivery_backup.py` (untracked). It contains `/recent-proofs`, a version the app does call. Keep it as a reference until the delivery router is settled.
+- `src/analytics/ml_models/eta_model.joblib`. Running the test suite rewrites this tracked file, so the change is a test side effect, not work to commit. The tests should write to a temporary path instead (Phase 3).
+
+**Still failing (present before and after):** 6 delivery-flow tests (missing endpoints, above); 8 health and secure-ping tests in `tests/unit/test_api_basics.py` and `tests/unit/test_api_health.py`; and `tests/test_heartbeat.py`.
 
 **Checkpoint:** ☐ Phase 2 complete → readiness **62%**
 
