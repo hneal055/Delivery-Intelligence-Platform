@@ -106,6 +106,7 @@ export interface DispatchJobCreate {
   notes?: string;
   scheduled_at?: string;
   package_id?: string;
+  dest_address?: string;
 }
 
 export interface DriverAvailability {
