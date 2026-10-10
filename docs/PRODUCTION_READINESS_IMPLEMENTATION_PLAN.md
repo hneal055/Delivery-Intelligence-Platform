@@ -142,8 +142,8 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 - [x] **Add a route snapshot test.** It should list every `METHOD /path` the app exposes and fail on any unplanned change. *(HTTP routes only; WebSocket routes are not in the OpenAPI schema.)*
 - [x] **Make startup fail when a router doesn't load.** `safe_include` (`main.py:114-124`) logs a warning and carries on for every router except websocket, so a broken import silently removes whole APIs. In production, raise on any failure. *(Raises in every environment unless `ALLOW_DEGRADED_STARTUP=1`.)*
 - [x] **Remove the direct SQLite connection** from `main.py` (lines 4 and 50-52). Every request should go through the SQLAlchemy/Postgres session.
-- [ ] **Keep one delivery router.** Delete `delivery_backup.py` and `delivery.py.corrupt.backup`; the old versions remain in git history. *(`.corrupt.backup` removed. `delivery_backup.py` is untracked, so deleting it is permanent; it is fully superseded by `dfa6fdce` and can go once the owner agrees.)*
-- [ ] **Make the mobile app build and log in** *(added 2026-10-10; blocks Verify)*. `App.js` imports `./screens/*`, but the screens live in `./src/screens/`. `src/api/client.js` has no default export, yet `authStore`, `HomeScreen`, `offlineQueueService` and `notificationService` import one, so login crashes. `package.json` is missing packages the code imports (`axios`, `expo-location`, `@react-navigation/*`, `expo-secure-store`, `expo-notifications`, AsyncStorage, `expo-sqlite`). No request sends the login token, and every `/delivery/*` endpoint now requires one. `offlineQueueService` marks any 4xx as FAILED, so a 401 would strand a proof; it must retry after login instead. Other calls with no backend route: `GET /routing/sample-route/{id}`, `POST /notifications/register-token` and `POST /debug/reset-db` (mobile), and `POST /dispatch/assign` (web; the API has `PUT /dispatch/jobs/{id}/assign`).
+- [x] **Keep one delivery router.** Delete `delivery_backup.py` and `delivery.py.corrupt.backup`; the old versions remain in git history. *(Both gone; `delivery_backup.py` deleted with the owner's approval.)*
+- [x] **Make the mobile app build and log in** *(added 2026-10-10)*. *Done: bundles for Android and iOS, expo-doctor 21/21. Login on a real phone still to be confirmed (see Verify).* `App.js` imports `./screens/*`, but the screens live in `./src/screens/`. `src/api/client.js` has no default export, yet `authStore`, `HomeScreen`, `offlineQueueService` and `notificationService` import one, so login crashes. `package.json` is missing packages the code imports (`axios`, `expo-location`, `@react-navigation/*`, `expo-secure-store`, `expo-notifications`, AsyncStorage, `expo-sqlite`). No request sends the login token, and every `/delivery/*` endpoint now requires one. `offlineQueueService` marks any 4xx as FAILED, so a 401 would strand a proof; it must retry after login instead. Other calls with no backend route: `GET /routing/sample-route/{id}`, `POST /notifications/register-token` and `POST /debug/reset-db` (mobile), and `POST /dispatch/assign` (web; the API has `PUT /dispatch/jobs/{id}/assign`).
 - [ ] **Commit the rehab work in small, reviewable commits**, then merge `rehab-investigation-20261001` into `main` through a PR so CI runs.
 
 ### Verify
@@ -171,14 +171,29 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 | `573bc740` | SQLite proof database removed from `main.py`; a router that fails to import now stops startup |
 | `1d6b597d` | Route snapshot test (`tests/unit/route_snapshot.txt`, 58 routes) |
 
-**Not committed:**
+**2026-10-10 (afternoon):** remaining failures, live verification, proof records and the mobile app. Suite: **277 passed, 0 failed**, 12 skipped. Backend container rebuilt; migration `d1e2f3a4b5c6` applied to the local database.
 
-- `src/backend/api/routes/delivery_backup.py` (untracked; superseded, delete when agreed).
-- `src/analytics/ml_models/eta_model.joblib`. Running the test suite rewrites this tracked file, so the change is a test side effect, not work to commit. The tests should write to a temporary path instead (Phase 3).
+| Commit | Change |
+|---|---|
+| `75caf0c1` | Tests no longer overwrite the committed `eta_model.joblib` |
+| `63be15ae` | Health and device-auth tests aligned with the API (the API was right). Device-key auth is now tested through `POST /routing/optimize` |
+| `ecd039f2` | Heartbeat service no longer invents 50 online drivers at startup |
+| `fd2bd522` | Proof listing reads the time from filenames instead of checking ~91k files one by one (was >30 s) |
+| `647b353a` | Assigning a job assigns its package; `/dispatch/deliveries` limits drivers to their own packages |
+| `d56151f7` | New `delivery_proofs` table: package, driver, photo, signature, GPS and distance from the drop for every delivery. `recent-proofs` reads it; drivers see only their own |
+| `1bfbb38a` | Mobile: Expo SDK 57 dependencies restored (wiped by `2965177e`); `app.json` fixed for SDK 57 |
+| `d806b377` | Mobile: shared API client restored with token and 401 handling; login now opens the app; session in SecureStore |
+| `119287e8` | Mobile: proof-of-delivery screen and offline queue restored and fixed; manifest, home and history use real driver data |
 
-**Still failing (Phase 3):** 8 tests in `tests/unit/test_api_basics.py` and `tests/unit/test_api_health.py` expect `/health` to return `{"status": "online"}`, a `/secure-ping` endpoint and a `/` → docs redirect, none of which the API provides; decide which side is right. `tests/test_heartbeat.py` counts 49 where it expects at least 50.
+**Live check against Docker** (script `c:/tmp/dip_e2e_smoke.py`, 10/10 steps): dispatcher creates and assigns a job; driver scans, passes the location check, confirms with photo, signature and GPS; the proof lists and downloads; the job closes; an anonymous confirm gets 401. Test package `E2E-TEST-001` remains in the local database.
 
-**Not yet verified live:** the running `delivery_backend` container still has the old code. Rebuild it (`docker compose up --build -d backend`) before testing against the local stack.
+**Still to do for Phase 2:**
+
+- On a phone: log in as a driver, see the assigned package, deliver it with photo and signature, and see it in the history. Set `src/mobile/.env` to `EXPO_PUBLIC_API_PORT=8000` for Docker (it says 8002, the `run.py` port).
+- Web dashboard: `FleetDashboard.tsx` calls `POST /dispatch/assign` and `GET http://localhost:8000/dispatch/drivers` without a token; the API has `PUT /dispatch/jobs/{id}/assign` and requires login.
+- Merge to `main` through a PR so CI runs.
+
+**Known gaps, not blocking:** driver route optimisation (`/routing/optimize` takes the device key, not a driver login, so the manifest is unoptimised); `/notifications/register-token` does not exist; drivers can download any proof photo if they know its filename; `src/uploads/proofs` holds ~91k old simulator photos.
 
 **Checkpoint:** ☐ Phase 2 complete → readiness **62%**
 
