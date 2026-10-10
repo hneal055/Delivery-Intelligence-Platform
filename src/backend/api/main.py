@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -174,91 +174,3 @@ async def readiness_check():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         )
-
-@app.get("/api/dispatches/live")
-async def get_live_dispatches():
-    """Alias endpoint for live active dispatches and telemetry streams."""
-    return {
-        "status": "online",
-        "active_dispatches": 3,
-        "dispatches": [
-            {
-                "dispatch_id": "DSP-101",
-                "assigned_driver": "Marcus Vance",
-                "destination": "Loop Chicago",
-                "gps_coordinates": "41.8781° N, -87.6298° W",
-                "status": "In Transit"
-            },
-            {
-                "dispatch_id": "DSP-102",
-                "assigned_driver": "Sarah Jenkins",
-                "destination": "West Loop",
-                "gps_coordinates": "41.8850° N, -87.6400° W",
-                "status": "Dispatched"
-            },
-            {
-                "dispatch_id": "DSP-103",
-                "assigned_driver": "David Ross",
-                "destination": "O'Hare Corridor",
-                "gps_coordinates": "41.9742° N, -87.9073° W",
-                "status": "In Transit"
-            }
-        ]
-    }
-
-@app.get("/api/dispatches/geojson")
-async def get_dispatches_geojson():
-    """GeoJSON endpoint for map integration."""
-    return {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [-87.6298, 41.8781]},
-                "properties": {"dispatch_id": "DSP-101", "driver": "Marcus Vance", "status": "In Transit"}
-            },
-            {
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [-87.6400, 41.8850]},
-                "properties": {"dispatch_id": "DSP-102", "driver": "Sarah Jenkins", "status": "Dispatched"}
-            }
-        ]
-    }
-
-@app.get("/api/dispatches")
-async def get_dispatches():
-    """List all dispatches with keys matching frontend table expectations."""
-    return [
-        {
-            "dispatch_id": "DSP-101",
-            "assigned_driver": "Marcus Vance",
-            "destination": "Loop Chicago",
-            "gps_coordinates": "41.8781° N, -87.6298° W",
-            "status": "In Transit"
-        },
-        {
-            "dispatch_id": "DSP-102",
-            "assigned_driver": "Sarah Jenkins",
-            "destination": "West Loop",
-            "gps_coordinates": "41.8850° N, -87.6400° W",
-            "status": "Dispatched"
-        },
-        {
-            "dispatch_id": "DSP-103",
-            "assigned_driver": "David Ross",
-            "destination": "O'Hare Corridor",
-            "gps_coordinates": "41.9742° N, -87.9073° W",
-            "status": "In Transit"
-        }
-    ]
-
-@app.websocket("/ws/telemetry")
-async def telemetry_websocket(websocket: WebSocket):
-    """WebSocket endpoint for real-time fleet telemetry streaming."""
-    await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_json()
-            await websocket.send_json({"status": "received", "data": data})
-    except Exception:
-        await websocket.close()
