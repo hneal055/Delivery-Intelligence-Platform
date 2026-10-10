@@ -36,6 +36,13 @@ def anyio_backend():
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def _eta_model_in_tmp(tmp_path, monkeypatch):
+    """Training in tests must not overwrite the committed ETA model."""
+    from src.analytics.ml_models.eta_predictor import eta_predictor
+    monkeypatch.setattr(eta_predictor, "model_path", str(tmp_path / "eta_model.joblib"))
+
+
 @pytest_asyncio.fixture(scope="function")
 async def test_db():
     """Create a fresh in-memory SQLite DB for each test function."""
