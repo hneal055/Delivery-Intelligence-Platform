@@ -1,7 +1,7 @@
 """
 Integration tests: Routing flow
-- POST /route/optimize → haversine fallback (no Mapbox token in tests)
-- POST /route/optimize with empty stops → 400
+- POST /routing/optimize → haversine fallback (no Mapbox token in tests)
+- POST /routing/optimize with empty stops → 400
 - GET  /tracking/live              → managers see live driver list
 - POST /tracking/{driver_id}/location → updates driver position
 - GET  /tracking/{driver_id}/history  → returns breadcrumb list
@@ -26,7 +26,7 @@ async def test_route_optimize_haversine_fallback(int_client_driver):
     from src.backend.api.main import app
     app.dependency_overrides[get_current_device] = _authorized
 
-    resp = await client.post("/route/optimize", json={
+    resp = await client.post("/routing/optimize", json={
         "driver_id": drv.id,
         "current_location": {"lat": 40.7128, "lon": -74.0060},
         "stops": [
@@ -53,7 +53,7 @@ async def test_route_optimize_empty_stops_returns_400(int_client_driver):
     from src.backend.api.main import app
     app.dependency_overrides[get_current_device] = _authorized
 
-    resp = await client.post("/route/optimize", json={
+    resp = await client.post("/routing/optimize", json={
         "driver_id": drv.id,
         "current_location": {"lat": 40.7128, "lon": -74.0060},
         "stops": []

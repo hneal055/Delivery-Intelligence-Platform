@@ -126,16 +126,19 @@ def safe_include(router_import_path: str, prefix: str = "", tags: list[str] = No
 # Include all core project routers
 safe_include("src.backend.api.routes.websocket.router")
 safe_include("src.backend.api.routes.auth.router", prefix="/auth", tags=["Auth"])
-safe_include("src.backend.api.routes.users.router", prefix="/users", tags=["Users"])
+safe_include(
+    "src.backend.api.routes.users.router",
+    tags=["Users"],
+)
 safe_include("src.backend.api.routes.delivery.router", prefix="/delivery", tags=["Delivery"])
-safe_include("src.backend.api.routes.dispatch.router", prefix="/dispatch", tags=["Dispatch"])
-safe_include("src.backend.api.routes.routing.router", prefix="/routing", tags=["Routing"])
-safe_include("src.backend.api.routes.advanced_routing.router", prefix="/advanced-routing", tags=["Advanced Routing"])
-safe_include("src.backend.api.routes.analytics.router", prefix="/analytics", tags=["Analytics"])
-safe_include("src.backend.api.routes.tracking.router", prefix="/tracking", tags=["Tracking"])
-safe_include("src.backend.api.routes.command_center.router", prefix="/command-center", tags=["Command Center"])
-safe_include("src.backend.api.routes.oidc.router", prefix="/oidc", tags=["OIDC"])
-safe_include("src.backend.api.routes.geofence.router", prefix="/geofence", tags=["Geofence"])
+safe_include("src.backend.api.routes.dispatch.router", tags=["Dispatch"])
+safe_include("src.backend.api.routes.routing.router", tags=["Routing"])
+safe_include("src.backend.api.routes.advanced_routing.router", tags=["Advanced Routing"])
+safe_include("src.backend.api.routes.analytics.router", tags=["Analytics"])
+safe_include("src.backend.api.routes.tracking.router", tags=["Tracking"])
+safe_include("src.backend.api.routes.command_center.router", tags=["Command Center"])
+safe_include("src.backend.api.routes.oidc.router", tags=["OIDC"])
+safe_include("src.backend.api.routes.geofence.router", tags=["Geofence"])
 
 # ---------------------------------------------------------------------------
 # Static files
