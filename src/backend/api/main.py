@@ -1,14 +1,26 @@
+import asyncio
 import logging
-import math
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
-from fastapi import APIRouter, FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy import select
+from starlette.middleware.sessions import SessionMiddleware
+
+from src.backend.api.limiter import limiter
+from src.backend.api.metrics import ACTIVE_DRIVERS
+from src.backend.core.config import settings
+from src.backend.core.database import AsyncSessionLocal, engine
+from src.backend.core.tracing import setup_tracing
+from src.backend.services.heartbeat import heartbeat_service
+from src.backend.services.redis_manager import manager as ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -22,25 +34,17 @@ UPLOADS_DIR = DATA_DIR / "uploads"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-# ---------------------------------------------------------------------------
-# Environment configuration
-# ---------------------------------------------------------------------------
-POSTGRES_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@delivery_db:5432/delivery_db",
-)
-REDIS_URL = os.getenv("REDIS_URL", "redis://delivery_redis:6379")
-
-CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ORIGINS",
-        "http://localhost:3000,http://localhost:5173",
-    ).split(",")
-    if origin.strip()
-]
-
 ALLOW_DEGRADED_STARTUP = os.getenv("ALLOW_DEGRADED_STARTUP", "0") == "1"
+
+
+async def update_active_drivers():
+    while True:
+        try:
+            ACTIVE_DRIVERS.set(await heartbeat_service.get_online_count())
+        except Exception as e:
+            logger.error(f"Error updating active drivers metric: {e}")
+        await asyncio.sleep(5)
+
 
 # ---------------------------------------------------------------------------
 # Application lifespan
@@ -48,8 +52,17 @@ ALLOW_DEGRADED_STARTUP = os.getenv("ALLOW_DEGRADED_STARTUP", "0") == "1"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Delivery Intelligence Platform API starting up")
+    # Redis pub/sub so live updates reach dispatchers on every API instance.
+    # No seeding here: accounts are created deliberately (Phase 0 removed the
+    # hardcoded admin/driver passwords the old init_data() created).
+    await ws_manager.connect()
+    driver_metric_task = asyncio.create_task(update_active_drivers())
     yield
     logger.info("Delivery Intelligence Platform API shutting down")
+    driver_metric_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await driver_metric_task
+    await ws_manager.disconnect()
 
 
 app = FastAPI(
@@ -63,15 +76,35 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# Middleware
+# Middleware, rate limiting, observability
 # ---------------------------------------------------------------------------
+# Origins come from BACKEND_CORS_ORIGINS, which config.py requires (and
+# forbids "*") in production.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Session support required by Authlib OIDC (/oidc/*)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
+setup_tracing(
+    app,
+    service_name=settings.OTEL_SERVICE_NAME,
+    service_version=settings.OTEL_SERVICE_VERSION,
+    otlp_endpoint=settings.OTLP_ENDPOINT or None,
+    db_engine=engine,
+)
+
+# Routes use @limiter.limit; without these, exceeding a limit is a 500, not a 429
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Prometheus metrics at /metrics
+Instrumentator().instrument(app).expose(app)
 
 # ---------------------------------------------------------------------------
 # Router registrations
@@ -127,6 +160,20 @@ def health_check():
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/health/ready")
+async def readiness_check():
+    """Ready only when the database answers (for load balancers / k8s)."""
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(select(1))
+        return {"status": "ready"}
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        )
 
 @app.get("/api/dispatches/live")
 async def get_live_dispatches():

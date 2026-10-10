@@ -21,6 +21,8 @@ GET /dispatch/jobs
 GET /dispatch/jobs/{job_id}
 GET /dispatch/packages
 GET /health
+GET /health/ready
+GET /metrics
 GET /oidc/admin
 GET /oidc/callback
 GET /oidc/config
