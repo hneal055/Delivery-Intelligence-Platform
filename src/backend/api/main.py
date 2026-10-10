@@ -130,7 +130,7 @@ safe_include(
     "src.backend.api.routes.users.router",
     tags=["Users"],
 )
-safe_include("src.backend.api.routes.delivery.router", prefix="/delivery", tags=["Delivery"])
+safe_include("src.backend.api.routes.delivery.router", tags=["Delivery"])
 safe_include("src.backend.api.routes.dispatch.router", tags=["Dispatch"])
 safe_include("src.backend.api.routes.routing.router", tags=["Routing"])
 safe_include("src.backend.api.routes.advanced_routing.router", tags=["Advanced Routing"])
