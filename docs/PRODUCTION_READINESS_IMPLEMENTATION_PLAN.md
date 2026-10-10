@@ -189,7 +189,7 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 
 **Still to do for Phase 2:**
 
-- On a phone: log in as a driver, see the assigned package, deliver it with photo and signature, and see it in the history. Set `src/mobile/.env` to `EXPO_PUBLIC_API_PORT=8000` for Docker (it says 8002, the `run.py` port).
+- ~~On a phone: log in as a driver, see the assigned package, deliver it with photo and signature, and see it in the history.~~ **Done 2026-10-10** on an iPhone via Expo Go as `driver2`: `PHONE-TEST-001` and `PHONE-TEST-002` delivered; the second proof has photo, signature and real GPS. The first had no GPS, which was a bug: the last-known position was discarded when the fresh fix failed (fixed in `c0adf5ba`). Also fixed on the way: a stray `src/mobile/node.exe` (v20.18.0) shadowed the installed Node 24 (renamed), and `src/scripts/set_user_password.py` was added for password resets (`c46dfc1a`).
 - Web dashboard: `FleetDashboard.tsx` calls `POST /dispatch/assign` and `GET http://localhost:8000/dispatch/drivers` without a token; the API has `PUT /dispatch/jobs/{id}/assign` and requires login.
 - Merge to `main` through a PR so CI runs.
 
