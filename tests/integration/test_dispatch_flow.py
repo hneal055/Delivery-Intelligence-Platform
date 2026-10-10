@@ -76,7 +76,7 @@ async def test_assign_job_to_driver(int_client_manager):
 
 @pytest.mark.asyncio
 async def test_assign_job_unknown_driver(int_client_manager):
-    """Assigning to a non-existent driver_id returns 400."""
+    """Assigning to a non-existent driver_id returns 404."""
     client, db, mgr = int_client_manager
 
     create_resp = await client.post("/dispatch/jobs", json={"title": "Fail Job", "type": "delivery"})
@@ -86,7 +86,8 @@ async def test_assign_job_unknown_driver(int_client_manager):
         f"/dispatch/jobs/{job_id}/assign",
         params={"driver_id": "nonexistent-driver-id"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Driver not found"
 
 
 @pytest.mark.asyncio
