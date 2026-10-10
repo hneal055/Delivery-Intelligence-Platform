@@ -4,6 +4,8 @@ import time
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
 from src.backend.core.config import settings
+from src.backend.core.permissions import Permission, ROLE_PERMISSIONS
+from src.backend.models.domain import UserRole
 from src.backend.services.redis_manager import manager
 
 router = APIRouter(tags=["websocket"])
@@ -22,10 +24,19 @@ def validate_ws_token(token: str) -> dict:
         return None
 
 
+def _can_manage_jobs(role: str) -> bool:
+    try:
+        return Permission.MANAGE_JOBS in ROLE_PERMISSIONS.get(UserRole(role), set())
+    except ValueError:
+        return False
+
+
 @router.websocket("/ws/dispatch")
 async def dispatch_ws(websocket: WebSocket, token: str = Query(...)):
     user = validate_ws_token(token)
-    if not user or user["role"] not in ("manager", "admin"):
+    # Same rule as the REST dispatch endpoints: anyone who can manage jobs
+    # (dispatcher, manager, admin) gets the live dispatch feed.
+    if not user or not _can_manage_jobs(user["role"]):
         await websocket.close(code=4003, reason="Forbidden")
         return
 
