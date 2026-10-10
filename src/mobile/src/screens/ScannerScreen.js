@@ -166,6 +166,10 @@ export default function ScannerScreen({ route, navigation }) {
     // GPS on the proof rather than a made-up one.
     const effectiveLoc = await getEffectiveLocation();
     const coords = effectiveLoc.coords && !effectiveLoc.isMocked ? effectiveLoc.coords : null;
+    setLocationStatus(
+      effectiveLoc.isMocked ? 'Chicago Sim (Dev Mode) - not recorded' : effectiveLoc.statusText
+    );
+    setCurrentCoords(coords);
     const signatureData = paths.length > 0 ? paths.join(' ') : null;
 
     const delivery = {
@@ -181,7 +185,9 @@ export default function ScannerScreen({ route, navigation }) {
       Alert.alert(
         'Delivery Verified',
         `Package ${scannedPackageId} confirmed!${
-          coords ? `\nGPS: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}` : '\nNo GPS fix recorded'
+          coords
+            ? `\nGPS: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`
+            : `\nNo GPS recorded (${effectiveLoc.statusText})`
         }${signatureData ? '\nCustomer Signature Captured' : ''}`,
         [{ text: 'OK', onPress: resetAfterDelivery }]
       );
@@ -270,7 +276,8 @@ export default function ScannerScreen({ route, navigation }) {
           <Text
             style={[
               styles.telemetryValue,
-              locationStatus.includes('Sim') || locationStatus.includes('Live')
+              // Only a real fix is recorded on the proof; the simulator is not
+              locationStatus.includes('Live') || locationStatus.includes('Last known')
                 ? styles.gpsActive
                 : styles.gpsInactive,
             ]}

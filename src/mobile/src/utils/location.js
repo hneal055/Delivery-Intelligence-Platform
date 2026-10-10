@@ -46,39 +46,52 @@ export async function getEffectiveLocation() {
     };
   }
 
+  let status;
   try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      return {
-        coords: null,
-        statusText: 'GPS Permission Denied',
-        isMocked: false,
-      };
-    }
+    ({ status } = await Location.requestForegroundPermissionsAsync());
+  } catch (err) {
+    return { coords: null, statusText: `GPS Error: ${err.message}`, isMocked: false };
+  }
+  if (status !== 'granted') {
+    return { coords: null, statusText: 'GPS Permission Denied', isMocked: false };
+  }
 
-    let coords = null;
-    try {
-      const lastKnown = await Location.getLastKnownPositionAsync();
-      if (lastKnown) coords = lastKnown.coords;
-    } catch {}
+  // A fresh, accurate fix is preferred; if it fails or is slow, a recent
+  // last-known position is still a truthful record of where the phone was.
+  let lastKnown = null;
+  try {
+    lastKnown = await Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS });
+  } catch {}
 
-    const fresh = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    if (fresh) coords = fresh.coords;
-
+  try {
+    const fresh = await withTimeout(
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+      FRESH_FIX_TIMEOUT_MS
+    );
     return {
-      coords,
-      statusText: coords
-        ? `Live GPS (±${Math.round(coords.accuracy || 0)}m)`
-        : 'GPS Fix Unavailable',
+      coords: fresh.coords,
+      statusText: `Live GPS (±${Math.round(fresh.coords.accuracy || 0)}m)`,
       isMocked: false,
     };
   } catch (err) {
-    return {
-      coords: null,
-      statusText: 'GPS Error',
-      isMocked: false,
-    };
+    if (lastKnown) {
+      return {
+        coords: lastKnown.coords,
+        statusText: `Last known GPS (±${Math.round(lastKnown.coords.accuracy || 0)}m)`,
+        isMocked: false,
+      };
+    }
+    return { coords: null, statusText: `GPS Error: ${err.message}`, isMocked: false };
   }
+}
+
+const FRESH_FIX_TIMEOUT_MS = 10000;
+const LAST_KNOWN_MAX_AGE_MS = 2 * 60 * 1000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no fix within ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
