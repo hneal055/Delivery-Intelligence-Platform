@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel
 from src.backend.api.deps import PermissionChecker
 
 from src.backend.core.database import get_db
 
-from src.backend.models.domain import User, UserRole, DispatchJob, DispatchJobCreate, AvailabilityCreate
+from src.backend.models.domain import User, UserRole, DispatchJob, DispatchJobCreate, AvailabilityCreate, JobStatus
 from src.backend.models.sql_models import (
     Driver as DriverSQL,
     Package as PackageSQL,
@@ -372,10 +373,39 @@ async def set_availability(
     db.add(availability)
 
     await db.commit()
+    await db.refresh(availability)
 
+    return _availability_dict(availability)
+
+
+def _availability_dict(a: DriverAvailability) -> dict:
     return {
-        "message": "Availability updated"
+        "id": a.id,
+        "driver_id": a.driver_id,
+        "date": a.date.isoformat() if a.date else None,
+        "is_available": a.is_available,
+        "start_time": a.start_time,
+        "end_time": a.end_time,
     }
+
+
+@router.get("/availability")
+async def list_availability(
+    start_date: datetime = Query(...),
+    end_date: datetime = Query(...),
+    driver_id: Optional[str] = Query(None),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Driver availability between two dates. Requires manager or admin role."""
+    query = select(DriverAvailability).where(
+        DriverAvailability.date >= start_date,
+        DriverAvailability.date <= end_date,
+    )
+    if driver_id:
+        query = query.where(DriverAvailability.driver_id == driver_id)
+    result = await db.execute(query.order_by(DriverAvailability.date))
+    return [_availability_dict(a) for a in result.scalars().all()]
 
 
 
@@ -402,3 +432,41 @@ async def get_job(
         )
 
     return job
+
+
+@router.put("/jobs/{job_id}/status", response_model=DispatchJob)
+async def update_job_status(
+    job_id: str,
+    status: JobStatus = Query(...),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a job's status. Requires manager or admin role."""
+    job = await db.get(DispatchJobSQL, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job.status = status.value
+    job.completed_at = datetime.now(timezone.utc) if status == JobStatus.COMPLETED else None
+    await db.commit()
+    await db.refresh(job)
+    return job
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+async def delete_job(
+    job_id: str,
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a job. Completed jobs are part of the delivery record and are
+    kept; cancel a job instead if it should not be done. Requires manager or
+    admin role."""
+    job = await db.get(DispatchJobSQL, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == JobStatus.COMPLETED.value:
+        raise HTTPException(status_code=409, detail="Completed jobs cannot be deleted")
+
+    await db.delete(job)
+    await db.commit()

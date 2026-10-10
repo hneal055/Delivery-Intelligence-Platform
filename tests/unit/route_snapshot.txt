@@ -1,3 +1,4 @@
+DELETE /dispatch/jobs/{job_id}
 GET /
 GET /advanced-route/analytics/capacity-utilization
 GET /advanced-route/analytics/capacity-utilization-summary
@@ -11,6 +12,7 @@ GET /auth/oidc/config
 GET /auth/users/me
 GET /delivery/proof/{filename}
 GET /delivery/recent-proofs
+GET /dispatch/availability
 GET /dispatch/dashboard/summary
 GET /dispatch/deliveries
 GET /dispatch/drivers
@@ -53,6 +55,7 @@ POST /routing/optimize
 POST /routing/reverse-geocode
 POST /tracking/{driver_id}/location
 PUT /dispatch/jobs/{job_id}/assign
+PUT /dispatch/jobs/{job_id}/status
 PUT /users/{user_id}/disable
 PUT /users/{user_id}/enable
 PUT /users/{user_id}/role

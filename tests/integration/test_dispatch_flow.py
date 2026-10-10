@@ -177,3 +177,49 @@ async def test_driver_sees_only_own_deliveries(int_client_driver):
         resp = await client.get("/dispatch/deliveries", params=params)
         assert resp.status_code == 200
         assert [p["id"] for p in resp.json()] == [own_pkg.id]
+
+
+@pytest.mark.asyncio
+async def test_update_job_status(int_client_manager):
+    client, db, mgr = int_client_manager
+    job_id = (await client.post("/dispatch/jobs", json={"title": "S"})).json()["id"]
+
+    resp = await client.put(f"/dispatch/jobs/{job_id}/status", params={"status": "completed"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "completed"
+    assert resp.json()["completed_at"] is not None
+
+    bad = await client.put(f"/dispatch/jobs/{job_id}/status", params={"status": "bogus"})
+    assert bad.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delete_job_keeps_completed(int_client_manager):
+    client, db, mgr = int_client_manager
+    open_id = (await client.post("/dispatch/jobs", json={"title": "A"})).json()["id"]
+    done_id = (await client.post("/dispatch/jobs", json={"title": "B"})).json()["id"]
+    await client.put(f"/dispatch/jobs/{done_id}/status", params={"status": "completed"})
+
+    assert (await client.delete(f"/dispatch/jobs/{open_id}")).status_code == 204
+    assert (await client.get(f"/dispatch/jobs/{open_id}")).status_code == 404
+    assert (await client.delete(f"/dispatch/jobs/{done_id}")).status_code == 409
+    assert (await client.delete("/dispatch/jobs/nope")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_availability_set_and_list(int_client_manager):
+    client, db, mgr = int_client_manager
+    driver = await int_db_seed_driver(db)
+
+    created = await client.post("/dispatch/availability", json={
+        "driver_id": driver.id, "date": "2026-10-12T00:00:00Z",
+        "is_available": True, "start_time": "08:00", "end_time": "16:00",
+    })
+    assert created.status_code == 200
+    assert created.json()["driver_id"] == driver.id
+
+    resp = await client.get("/dispatch/availability", params={
+        "start_date": "2026-10-11T00:00:00Z", "end_date": "2026-10-13T00:00:00Z",
+    })
+    assert resp.status_code == 200
+    assert [a["start_time"] for a in resp.json()] == ["08:00"]
