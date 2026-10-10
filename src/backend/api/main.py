@@ -1,7 +1,6 @@
 import logging
 import math
 import os
-import sqlite3
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 UPLOADS_DIR = DATA_DIR / "uploads"
-DB_PATH = DATA_DIR / "delivery_proofs.db"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,44 +43,11 @@ CORS_ORIGINS = [
 ALLOW_DEGRADED_STARTUP = os.getenv("ALLOW_DEGRADED_STARTUP", "0") == "1"
 
 # ---------------------------------------------------------------------------
-# Database helpers
-# ---------------------------------------------------------------------------
-def get_db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db() -> None:
-    conn = get_db_connection()
-    try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS delivery_proofs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                package_id TEXT NOT NULL,
-                driver_id TEXT NOT NULL,
-                status TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                dest_lat REAL,
-                dest_lon REAL,
-                signature_path TEXT,
-                photo_filename TEXT
-            )
-            """
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
-# ---------------------------------------------------------------------------
 # Application lifespan
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    logger.info("Delivery Intelligence Platform API starting up & Database initialized")
+    logger.info("Delivery Intelligence Platform API starting up")
     yield
     logger.info("Delivery Intelligence Platform API shutting down")
 
@@ -109,9 +74,12 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# Router registrations with safe fallbacks
+# Router registrations
 # ---------------------------------------------------------------------------
 def safe_include(router_import_path: str, prefix: str = "", tags: list[str] = None):
+    """Include a router. A router that fails to load stops startup, because
+    carrying on would silently remove a whole API. ALLOW_DEGRADED_STARTUP=1
+    downgrades the failure to a warning (local debugging only)."""
     try:
         module_path, attr_name = router_import_path.rsplit(".", 1)
         mod = __import__(module_path, fromlist=[attr_name])
@@ -119,9 +87,9 @@ def safe_include(router_import_path: str, prefix: str = "", tags: list[str] = No
         app.include_router(router, prefix=prefix, tags=tags)
         logger.info(f"Successfully loaded router: {router_import_path}")
     except Exception as e:
+        if not ALLOW_DEGRADED_STARTUP:
+            raise RuntimeError(f"Could not load router {router_import_path}") from e
         logger.warning(f"Could not load router {router_import_path}: {e}")
-        if not ALLOW_DEGRADED_STARTUP and "websocket" in router_import_path:
-            raise
 
 # Include all core project routers
 safe_include("src.backend.api.routes.websocket.router")
