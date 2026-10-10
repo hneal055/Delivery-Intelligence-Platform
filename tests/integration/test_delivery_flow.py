@@ -412,3 +412,28 @@ async def test_office_can_confirm_on_behalf_of_driver(int_client_manager):
     assert resp.status_code == 200
     proof = (await db.execute(select(DeliveryProof))).scalar_one()
     assert proof.driver_id == "driver2"
+
+
+@pytest.mark.asyncio
+async def test_driver_cannot_download_other_drivers_proof_photo(int_client_driver, _proofs_in_tmp):
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, driver_id="other", status="delivered")
+    (_proofs_in_tmp / "theirs.jpg").write_bytes(b"secret")
+    (_proofs_in_tmp / "mine.jpg").write_bytes(b"ok")
+    db.add(DeliveryProof(package_id=pkg.id, driver_id="other", photo_key="theirs.jpg"))
+    db.add(DeliveryProof(package_id=pkg.id, driver_id=drv.username, photo_key="mine.jpg"))
+    await db.commit()
+
+    assert (await client.get("/delivery/proof/theirs.jpg")).status_code == 404
+    assert (await client.get("/delivery/proof/unrecorded.jpg")).status_code == 404
+    mine = await client.get("/delivery/proof/mine.jpg")
+    assert mine.status_code == 200 and mine.content == b"ok"
+
+
+@pytest.mark.asyncio
+async def test_office_can_download_any_proof_photo(int_client_manager, _proofs_in_tmp):
+    client, db, mgr = int_client_manager
+    (_proofs_in_tmp / "theirs.jpg").write_bytes(b"photo")
+
+    resp = await client.get("/delivery/proof/theirs.jpg")
+    assert resp.status_code == 200

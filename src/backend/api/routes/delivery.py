@@ -106,9 +106,21 @@ async def get_recent_proofs(
 async def get_proof_image(
     filename: str,
     current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
     if not is_safe_filename(filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
+    # Drivers may only see photos from their own recorded deliveries; the
+    # filenames are predictable, so knowing one must not be enough.
+    if current_user.role == UserRole.DRIVER:
+        owned = await db.execute(
+            select(DeliveryProof.id).where(
+                DeliveryProof.photo_key == filename,
+                DeliveryProof.driver_id == current_user.username,
+            )
+        )
+        if owned.first() is None:
+            raise HTTPException(status_code=404, detail="Image not found")
     data = await proof_storage.get_proof(filename)
     if data is None:
         raise HTTPException(status_code=404, detail="Image not found")
