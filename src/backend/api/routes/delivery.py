@@ -26,8 +26,8 @@ from src.backend.api.limiter import limiter
 from src.backend.api.metrics import DELIVERIES_COMPLETED, driver_heartbeats
 from src.backend.core.database import get_db
 from src.backend.core.storage import is_safe_filename, proof_storage
-from src.backend.models.domain import Location, User
-from src.backend.models.sql_models import Package
+from src.backend.models.domain import Location, User, UserRole
+from src.backend.models.sql_models import DeliveryProof, Package
 from src.backend.services import delivery_service
 from src.backend.services.notifications import (
     NotificationEvent,
@@ -42,6 +42,9 @@ router = APIRouter(prefix="/delivery", tags=["delivery"])
 # or exception package keeps its status so a stray rescan cannot undo it.
 LOADABLE_STATUSES = {"pending", "assigned"}
 
+# SVG path data from the in-app signature pad; generous but bounded.
+MAX_SIGNATURE_CHARS = 100_000
+
 
 async def _get_package(db: AsyncSession, package_id: str) -> Optional[Package]:
     result = await db.execute(select(Package).where(Package.id == package_id))
@@ -52,8 +55,27 @@ async def _get_package(db: AsyncSession, package_id: str) -> Optional[Package]:
 async def get_recent_proofs(
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
-    return await proof_storage.list_recent(limit=limit)
+    """Newest accepted proofs. Drivers see only their own."""
+    query = select(DeliveryProof).order_by(DeliveryProof.captured_at.desc())
+    if current_user.role == UserRole.DRIVER:
+        query = query.where(DeliveryProof.driver_id == current_user.username)
+    result = await db.execute(query.limit(limit))
+    return [
+        {
+            "packageId": proof.package_id,
+            "driverId": proof.driver_id,
+            "timestamp": proof.captured_at.isoformat() if proof.captured_at else None,
+            "filename": proof.photo_key,
+            "url": "/delivery/proof/" + proof.photo_key,
+            "lat": proof.lat,
+            "lon": proof.lon,
+            "distanceMeters": proof.distance_m,
+            "signature": proof.signature_svg,
+        }
+        for proof in result.scalars().all()
+    ]
 
 
 @router.get("/proof/{filename}")
@@ -157,6 +179,7 @@ async def confirm_delivery(
     photo: UploadFile = File(...),
     dest_lat: Optional[float] = Form(None),
     dest_lon: Optional[float] = Form(None),
+    signature_path: Optional[str] = Form(None, max_length=MAX_SIGNATURE_CHARS),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
@@ -184,8 +207,9 @@ async def confirm_delivery(
             detail="Invalid Proof of Delivery: {0}".format(reason),
         )
 
-    # 4. Record where the driver was. Logged, not enforced: offline
+    # 4. Record where the driver was. Recorded, not enforced: offline
     #    captures can arrive without a fresh fix.
+    distance = None
     if dest_lat is not None and dest_lon is not None:
         _, distance = geofence_engine.verify_delivery_location(
             (dest_lat, dest_lon), (package.dest_lat, package.dest_lon)
@@ -194,6 +218,17 @@ async def confirm_delivery(
             "Package %s confirmed %.0fm from its destination", package_id, distance
         )
 
+    db.add(
+        DeliveryProof(
+            package_id=package_id,
+            driver_id=driver_id,
+            photo_key=saved_filename,
+            signature_svg=signature_path or None,
+            lat=dest_lat,
+            lon=dest_lon,
+            distance_m=distance,
+        )
+    )
     await delivery_service.update_package_status(
         db, package_id, "delivered", driver_id
     )

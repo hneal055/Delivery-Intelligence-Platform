@@ -12,7 +12,7 @@ from unittest.mock import patch
 from tests.integration.conftest import int_db_seed_driver, int_db_seed_package
 from sqlalchemy import select
 from src.backend.core.storage import proof_storage
-from src.backend.models.sql_models import DispatchJob, Package as PackageSQL
+from src.backend.models.sql_models import DeliveryProof, DispatchJob, Package as PackageSQL
 
 
 @pytest.fixture(autouse=True)
@@ -198,7 +198,7 @@ async def test_rejected_photo_is_still_stored(int_client_driver, _proofs_in_tmp)
 
 @pytest.mark.asyncio
 async def test_recent_proofs_lists_saved_photo(int_client_driver):
-    """A confirmed delivery shows up in recent-proofs with a viewable image."""
+    """A confirmed delivery is recorded with its photo, signature and location."""
     client, db, drv = int_client_driver
     pkg = await int_db_seed_package(db, status="pending")
 
@@ -206,15 +206,55 @@ async def test_recent_proofs_lists_saved_photo(int_client_driver):
                return_value=(True, "mock-ok")):
         await client.post(
             "/delivery/confirm",
-            data={"package_id": pkg.id, "driver_id": drv.id},
+            data={
+                "package_id": pkg.id,
+                "driver_id": drv.username,
+                "dest_lat": "40.7129",
+                "dest_lon": "-74.0061",
+                "signature_path": "M 1 1 L 20 20",
+            },
             files={"photo": ("p.jpg", io.BytesIO(b"jpeg-bytes"), "image/jpeg")},
         )
 
     proofs = (await client.get("/delivery/recent-proofs", params={"limit": 5})).json()
     assert len(proofs) == 1
-    image = await client.get(proofs[0]["url"])
+    proof = proofs[0]
+    assert proof["packageId"] == pkg.id
+    assert proof["driverId"] == drv.username
+    assert proof["signature"] == "M 1 1 L 20 20"
+    assert proof["lat"] == pytest.approx(40.7129)
+    assert proof["distanceMeters"] < 50
+    image = await client.get(proof["url"])
     assert image.status_code == 200
     assert image.content == b"jpeg-bytes"
+
+
+@pytest.mark.asyncio
+async def test_driver_sees_only_own_proofs(int_client_driver):
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, status="pending")
+    db.add(DeliveryProof(package_id=pkg.id, driver_id="someone-else", photo_key="x.jpg"))
+    await db.commit()
+
+    proofs = (await client.get("/delivery/recent-proofs")).json()
+    assert proofs == []
+
+
+@pytest.mark.asyncio
+async def test_rejected_photo_records_no_proof(int_client_driver):
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, status="pending")
+
+    with patch("src.analytics.image_analysis.verifier.image_verifier.verify_proof_of_delivery",
+               return_value=(False, "Image too dark")):
+        await client.post(
+            "/delivery/confirm",
+            data={"package_id": pkg.id, "driver_id": drv.username},
+            files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
+        )
+
+    result = await db.execute(select(DeliveryProof))
+    assert result.scalars().all() == []
 
 
 @pytest.mark.asyncio
