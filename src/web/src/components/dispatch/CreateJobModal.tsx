@@ -51,7 +51,6 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       priority: 'low',
       scheduled_at: now,
       driver_id: '',
-      package_id: '',
       dest_address: '',
       dest_unit: '',
       delivery_instructions: '',
@@ -95,23 +94,24 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         return null;
       },
       dest_address: (value, values) => {
-        if (values.type !== 'delivery') return null;
-        return value.trim().length >= 5 ? null : 'Delivery address is required';
+        if (values.type !== 'delivery' && values.type !== 'pickup') return null;
+        return value.trim().length >= 5 ? null : 'Where the package goes is required';
       },
-      package_id: (value, values) => {
+      pickup_address: (value, values) => {
         if (values.type !== 'pickup') return null;
-        const hasNotes = values.notes.trim().length > 0;
-        const hasPackageId = value.trim().length > 0;
-        return hasNotes || hasPackageId ? null : 'Pickup requires notes or package ID';
+        return value.trim().length >= 5 ? null : 'Pickup address is required';
       },
     },
   });
 
   // Live address check: show what the address matches before saving, so a
   // default-city guess is never saved unseen.
-  const isDelivery = form.values.type === 'delivery';
+  // Delivery and Pickup jobs both move a package from A (optional for a
+  // delivery: it may start in the van) to B.
+  const isPickupJob = form.values.type === 'pickup';
+  const isDelivery = form.values.type === 'delivery' || isPickupJob;
   const { match: addressMatch, status: addressStatus } = useAddressPreview(form.values.dest_address, isDelivery);
-  const hasPickup = isDelivery && form.values.pickup_address.trim().length > 0;
+  const hasPickup = isDelivery && (isPickupJob || form.values.pickup_address.trim().length > 0);
   const { match: pickupMatch, status: pickupStatus } = useAddressPreview(form.values.pickup_address, isDelivery);
 
 
@@ -129,17 +129,11 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         priority: values.priority,
         scheduled_at: values.scheduled_at.toISOString(),
         driver_id: values.driver_id || undefined,
-        package_id: values.package_id.trim() || undefined,
-        dest_address:
-          values.type === 'delivery' ? values.dest_address.trim() || undefined : undefined,
-        dest_unit:
-          values.type === 'delivery' ? values.dest_unit.trim() || undefined : undefined,
-        delivery_instructions:
-          values.type === 'delivery' ? values.delivery_instructions.trim() || undefined : undefined,
-        pickup_address:
-          values.type === 'delivery' ? values.pickup_address.trim() || undefined : undefined,
-        pickup_instructions:
-          values.type === 'delivery' ? values.pickup_instructions.trim() || undefined : undefined,
+        dest_address: isDelivery ? values.dest_address.trim() || undefined : undefined,
+        dest_unit: isDelivery ? values.dest_unit.trim() || undefined : undefined,
+        delivery_instructions: isDelivery ? values.delivery_instructions.trim() || undefined : undefined,
+        pickup_address: isDelivery ? values.pickup_address.trim() || undefined : undefined,
+        pickup_instructions: isDelivery ? values.pickup_instructions.trim() || undefined : undefined,
         ready_for_pickup: values.ready_for_pickup,
       },
       {
@@ -150,8 +144,9 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         onError: (err) => {
           // e.g. 422 "Address not found" from the geocoder
           const detail = (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
+          const pickupProblem = typeof detail === 'string' && detail.startsWith('Pickup');
           form.setFieldError(
-            values.type === 'delivery' ? 'dest_address' : 'title',
+            !isDelivery ? 'title' : pickupProblem ? 'pickup_address' : 'dest_address',
             typeof detail === 'string' ? detail : 'Could not create the job. Try again.'
           );
         },
@@ -207,8 +202,13 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
 
           {isDelivery && (
             <TextInput
-              label="Pickup address (optional)"
-              placeholder="Where the driver collects it; leave blank if it starts in the van"
+              withAsterisk={isPickupJob}
+              label={isPickupJob ? 'Pickup address' : 'Pickup address (optional)'}
+              placeholder={
+                isPickupJob
+                  ? 'Where the driver collects it'
+                  : 'Where the driver collects it; leave blank if it starts in the van'
+              }
               {...form.getInputProps('pickup_address')}
             />
           )}
@@ -230,10 +230,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             />
           )}
 
-          {form.values.type === 'delivery' && (
+          {isDelivery && (
             <TextInput
               withAsterisk
-              label="Delivery address"
+              label={isPickupJob ? 'Deliver to (customer or your depot)' : 'Delivery address'}
               placeholder="Street, city, state (e.g. 222 W Merchandise Mart Plaza, Chicago, IL)"
               description="Street and number is enough for Chicago; add the city for suburbs."
               {...form.getInputProps('dest_address')}
@@ -241,7 +241,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
           )}
           {isDelivery && <MatchLine status={addressStatus} match={addressMatch} />}
 
-          {form.values.type === 'delivery' && (
+          {isDelivery && (
             <Group grow>
               <TextInput
                 label="Suite / floor / dock"
@@ -251,21 +251,13 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             </Group>
           )}
 
-          {form.values.type === 'delivery' && (
+          {isDelivery && (
             <Textarea
               label="Delivery instructions (shown to driver)"
               placeholder="e.g. Leave with concierge; loading dock on Franklin St"
               autosize
               minRows={2}
               {...form.getInputProps('delivery_instructions')}
-            />
-          )}
-
-          {form.values.type === 'pickup' && (
-            <TextInput
-              label="Package ID (optional)"
-              placeholder="Enter package ID"
-              {...form.getInputProps('package_id')}
             />
           )}
 

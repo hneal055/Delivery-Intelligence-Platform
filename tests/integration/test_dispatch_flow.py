@@ -406,3 +406,22 @@ async def test_reopen_after_pickup_returns_to_delivery_stage(int_client_manager)
 
     resp = await client.put(f"/dispatch/packages/{pkg.id}/reopen")
     assert resp.json()["status"] == "loaded"
+
+
+@pytest.mark.asyncio
+async def test_pickup_job_needs_pickup_address(int_client_manager):
+    client, db, mgr = int_client_manager
+    pickup = GeocodeResult(lat=41.9, lon=-87.7, matched_address="2500 W ARMITAGE AVE, CHICAGO, IL, 60647")
+
+    missing = await client.post("/dispatch/jobs", json={
+        "title": "P", "type": "pickup", "dest_address": "222 W Merchandise Mart Plaza",
+    })
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area",
+               AsyncMock(side_effect=[MART, pickup])):
+        ok = await client.post("/dispatch/jobs", json={
+            "title": "P", "type": "pickup", "dest_address": "222 W Merchandise Mart Plaza",
+            "pickup_address": "2500 W Armitage Ave",
+        })
+
+    assert missing.status_code == 422
+    assert ok.status_code == 200 and ok.json()["type"] == "pickup"

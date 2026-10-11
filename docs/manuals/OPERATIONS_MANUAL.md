@@ -67,7 +67,9 @@ packages, proofs), **manager**, **admin**.
 
 ### Create a job (dashboard → **Scheduling** → *Create Job*)
 
-1. **Type: Delivery**, a title, priority and scheduled time.
+1. Choose the **Type**, then a title, priority and scheduled time:
+   - **Delivery**: the pickup address is optional (leave it blank if the package starts in the van).
+   - **Pickup**: you're collecting from a shipper. The pickup address is required, and **Deliver to** is where it goes (the customer, or your depot).
 2. **Pickup address** (optional), if the driver collects the package first:
    - Watch the **Matched:** line. **Orange** means Chicago was assumed; add the city for suburbs.
    - Add **pickup instructions** (who to ask, which door).

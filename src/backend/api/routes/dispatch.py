@@ -314,6 +314,11 @@ async def create_job(
     if job_data.driver_id and await db.get(DriverSQL, job_data.driver_id) is None:
         raise HTTPException(status_code=404, detail="Driver not found")
 
+    job_type = job_data.type.value if hasattr(job_data.type, "value") else job_data.type
+    if (job_type == "pickup" and job_data.dest_address
+            and not (job_data.pickup_address or "").strip()):
+        raise HTTPException(status_code=422, detail="Pickup address is required for a pickup job.")
+
     package = None
     if job_data.package_id:
         package = await db.get(PackageSQL, job_data.package_id)
