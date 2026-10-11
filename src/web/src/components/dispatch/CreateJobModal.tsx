@@ -54,6 +54,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       dest_address: '',
       dest_unit: '',
       delivery_instructions: '',
+      recipient_name: '',
+      recipient_phone: '',
+      pickup_contact_name: '',
+      pickup_contact_phone: '',
       pickup_address: '',
       pickup_instructions: '',
       ready_for_pickup: true,
@@ -134,6 +138,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         delivery_instructions: isDelivery ? values.delivery_instructions.trim() || undefined : undefined,
         pickup_address: isDelivery ? values.pickup_address.trim() || undefined : undefined,
         pickup_instructions: isDelivery ? values.pickup_instructions.trim() || undefined : undefined,
+        recipient_name: isDelivery ? values.recipient_name.trim() || undefined : undefined,
+        recipient_phone: isDelivery ? values.recipient_phone.trim() || undefined : undefined,
+        pickup_contact_name: hasPickup ? values.pickup_contact_name.trim() || undefined : undefined,
+        pickup_contact_phone: hasPickup ? values.pickup_contact_phone.trim() || undefined : undefined,
         ready_for_pickup: values.ready_for_pickup,
       },
       {
@@ -223,6 +231,12 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             />
           )}
           {hasPickup && (
+            <Group grow>
+              <TextInput label="Pickup contact" placeholder="e.g. Luis" {...form.getInputProps('pickup_contact_name')} />
+              <TextInput label="Pickup phone" placeholder="(773) 555-0199" {...form.getInputProps('pickup_contact_phone')} />
+            </Group>
+          )}
+          {hasPickup && (
             <Checkbox
               label="Ready for pickup now"
               description="Untick if the shipper is not ready; mark it ready later from Packages (the driver is alerted)."
@@ -259,6 +273,12 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
               minRows={2}
               {...form.getInputProps('delivery_instructions')}
             />
+          )}
+          {isDelivery && (
+            <Group grow>
+              <TextInput label="Recipient name" placeholder="Who receives it" {...form.getInputProps('recipient_name')} />
+              <TextInput label="Recipient phone" placeholder="(312) 555-0142" {...form.getInputProps('recipient_phone')} />
+            </Group>
           )}
 
           <Textarea

@@ -31,6 +31,7 @@ function toProofRow(p) {
     dest_lon: p.lon,
     distance_m: p.distanceMeters,
     signature_path: p.signature,
+    received_by: p.receivedBy,
     photo_url: p.url,
   };
 }
@@ -273,6 +274,11 @@ export default function DeliveryHistoryScreen({ navigation }) {
                   ? Number(item.dest_lon).toFixed(5)
                   : 'N/A'}
               </Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Received by:</Text>
+              <Text style={styles.metaValue}>{item.received_by || 'Not recorded'}</Text>
             </View>
 
             <View style={styles.metaRow}>

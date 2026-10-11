@@ -75,7 +75,7 @@ packages, proofs), **manager**, **admin**.
    - Add **pickup instructions** (who to ask, which door).
    - Untick **Ready for pickup now** if the shipper isn't ready yet.
 3. **Delivery address** (required): check its **Matched:** line too. Street and number is enough in Chicago.
-4. **Suite / floor / dock** and **Delivery instructions**. **These are what the driver sees.** "Internal notes" are **not** shown to the driver.
+4. **Suite / floor / dock**, **Delivery instructions** and **Recipient name / phone**, plus **Pickup contact / phone** for a pickup. **These are what the driver sees**; the driver can tap to call. "Internal notes" are **not** shown to the driver.
 5. **Assign Driver**, now or later. The driver's phone gets an alert as soon as the job is assigned.
 
 Each package gets a tracking code like **CCC-7K3QX9M2**. It's on the
@@ -87,7 +87,7 @@ Packages page; the driver can scan it as a barcode or QR code.
 - **Problem reported** → a **red alert** pops up on the dashboard with the driver's reason. Call the driver or customer, then either:
   - **Reopen**: it goes back on the driver's list. If it was already picked up, it stays "in the van"; or
   - create a new job (for example to return it to the shipper).
-- **Proof Gallery** → photo, signature, time and GPS distance for every delivery. Use it when a customer asks for proof.
+- **Proof Gallery** → photo, signature, **who received it**, time and GPS distance for every delivery. Use it when a customer asks for proof.
 
 ### Package statuses
 
@@ -175,4 +175,3 @@ Then restart `npm run go` for the phones and reload the app (shake the phone →
 - **Tracking** shows positions only when drivers confirm or check location, not continuous live tracking.
 - Route optimisation isn't connected to the driver's list; stops are listed pickups first.
 - No printed labels yet. Copy the CCC- tracking code from Packages if you need one.
-- Recipient name and phone fields are not added yet. Put them in *Delivery instructions* for now.

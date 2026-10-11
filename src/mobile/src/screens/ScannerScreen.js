@@ -10,6 +10,7 @@ import {
   ScrollView,
   Platform,
   PanResponder,
+  TextInput,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -23,6 +24,7 @@ export default function ScannerScreen({ route, navigation }) {
   const { packageId: initialPackageId } = route.params || {};
   const driverId = useAuthStore((s) => s.driverId);
   const [problemOpen, setProblemOpen] = useState(false);
+  const [receivedBy, setReceivedBy] = useState('');
 
   const [scannedPackageId, setScannedPackageId] = useState(initialPackageId || null);
   const [isScanning, setIsScanning] = useState(!initialPackageId);
@@ -60,6 +62,11 @@ export default function ScannerScreen({ route, navigation }) {
 
     loadPendingStops();
   }, [initialPackageId]);
+
+  // Pre-fill "Received by" with the expected recipient; the driver can change it
+  useEffect(() => {
+    setReceivedBy(packagesById[scannedPackageId]?.recipient_name || '');
+  }, [scannedPackageId, packagesById]);
 
   // Opening from the manifest's "Deliver" button selects that package
   useEffect(() => {
@@ -151,6 +158,7 @@ export default function ScannerScreen({ route, navigation }) {
     setPhotoUri(null);
     clearSignature();
     setScannedPackageId(null);
+    setReceivedBy('');
     setIsScanning(true);
     navigation.navigate('Home');
   };
@@ -183,6 +191,7 @@ export default function ScannerScreen({ route, navigation }) {
       dest_lat: coords ? coords.latitude : null,
       dest_lon: coords ? coords.longitude : null,
       signature_path: signatureData,
+      received_by: receivedBy.trim(),
     };
 
     try {
@@ -347,6 +356,14 @@ export default function ScannerScreen({ route, navigation }) {
 
       {/* Signature Canvas */}
       <View style={styles.signatureCard}>
+        <Text style={styles.signatureTitle}>Received by</Text>
+        <TextInput
+          style={styles.receivedByInput}
+          placeholder="Name of the person who took it"
+          placeholderTextColor="#64748b"
+          value={receivedBy}
+          onChangeText={setReceivedBy}
+        />
         <View style={styles.signatureHeader}>
           <Text style={styles.signatureTitle}>Customer Signature (Optional)</Text>
           {paths.length > 0 && (
@@ -585,6 +602,16 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 13,
     fontWeight: '600',
+  },
+  receivedByInput: {
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 8,
+    color: '#f8fafc',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 6,
+    marginBottom: 12,
   },
   signatureCard: {
     backgroundColor: '#1e293b',
