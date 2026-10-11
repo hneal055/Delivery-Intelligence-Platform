@@ -38,19 +38,19 @@ After each phase, fill in its **Changes made** log and its **Checkpoint** line. 
 ### Planned changes
 Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 ≈ 0.8%.
 
-- [ ] **Rotate the Expo account password** *(owner action)*. It was committed in plain text in `RUNBOOK.md` and has been in git history since at least commit `f68d80f1`. ✅ Removed from the file. 2026-10-09: two-factor authentication turned on and access tokens revoked. *Still to do:* change the password itself.
-- [ ] **Revoke the leaked TomTom API key** *(owner action, added after scan)*. A real key was committed to `.env.example` in `70fab920` and `bc97e9e5`. It is no longer in `.env` but is still in `.env.bak-20260803` and in git history.
+- [x] **Rotate the Expo account password** *(owner action)*. It was committed in plain text in `RUNBOOK.md` and has been in git history since at least commit `f68d80f1`. ✅ Removed from the file. 2026-10-09: two-factor authentication turned on and access tokens revoked. 2026-10-11: password changed; the recovery-keys file was removed from the project folder.
+- [x] **Revoke the leaked TomTom API key** *(owner action, added after scan)*. A real key was committed to `.env.example` in `70fab920` and `bc97e9e5`. It is no longer in `.env` but is still in `.env.bak-20260803` and in git history. 2026-10-11: the key (`BFcL…7Cfh`, matched by fingerprint against `70fab920`) was deleted in the TomTom dashboard, so the copies left in history are dead. Nothing needs a replacement: traffic data is optional and geocoding uses the US Census service. *Owner to delete `.env.bak-20260803`.*
 - [x] **Remove the hardcoded device key default.** `DIAD_API_KEY` now comes from `settings` with no default. If no key is set, every device request is rejected, and production refuses to start with no key or with the old `dev-secret-key-123`.
 - [x] **Use a constant-time comparison** for the device token (`hmac.compare_digest`).
 - [x] **Delete `generate_temp_token`** from `services/auth.py`.
 - [x] **Keep `.env` out of the Docker image.** Added env files, virtualenvs, caches, uploads, backups and dumps to `.dockerignore`. *(`*.txt` was not added, because it would exclude `requirements.txt`.)*
 - [x] **Scan the full git history with gitleaks.** Also **fixed `.gitleaks.toml`**: it defined no rules and didn't extend the defaults, so every scan reported "no leaks found". It also allowlisted `.env.example`, which is where the TomTom key leaked.
-- [ ] **Consider rotating `SECRET_KEY`** *(owner action, added after scan)*. Five admin/manager JWTs were committed (in `src/mobile/App.js`, `test_ws.py`, and a file named `$token = eyJ….md`). All of them expired between 2026-02-06 and 2026-09-22, so none can be replayed. If any was signed with the real production key, rotating it is a cheap precaution.
+- [ ] **Consider rotating `SECRET_KEY`** *(owner action, added after scan)*. Five admin/manager JWTs were committed (in `src/mobile/App.js`, `test_ws.py`, and a file named `$token = eyJ….md`). All of them expired between 2026-02-06 and 2026-09-22, so none can be replayed. If any was signed with the real production key, rotating it is a cheap precaution. *2026-10-11 finding:* no production key has existed yet (production refuses the placeholder and anything under 32 characters), so there is nothing to rotate there. But the local Docker stack runs on the placeholder committed in `config.py`, because `docker-compose.yml` passes no `SECRET_KEY`, so anyone with the code could sign tokens for it. Fix: set a random local `SECRET_KEY` in `.env` and pass it through compose.
 - [ ] **Decide on rewriting history** *(owner decision)*. Removing secrets and large binaries from history (`git filter-repo`) means everyone must re-clone. Record the decision here.
 
 ### Verify
 - [x] gitleaks (default rules) finds nothing in the working tree: `src/`, `tests/`, `tools/`, `deploy/`, `.github/`, `docs/` and the root docs.
-- [ ] `docker run --rm delivery_backend:latest ls -a /app | grep .env` prints nothing. *Not run yet: Docker Desktop was stopped.*
+- [x] `docker run --rm delivery_backend:latest ls -a /app | grep .env` prints nothing. *(Checked 2026-10-11: no `.env` files in `/app`.)*
 - [x] The backend refuses to start with `ENVIRONMENT=production` and no `DIAD_API_KEY`, or with the old default (`tests/unit/test_device_auth.py`).
 
 ### Changes made (2026-10-08, committed in `4f9df4c9`)
@@ -72,7 +72,7 @@ Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 �
 
 **Test result:** 183 passed, 35 failed. Before: 173 passed, 35 failed. All 35 failures existed before this phase; see Phase 3. The 11 new tests all pass.
 
-**Checkpoint:** ☐ Phase 0 in progress: 5 of 9 tasks done → readiness **46%** (49% when the owner actions are done)
+**Checkpoint:** ☐ Phase 0 in progress: 7 of 9 tasks done → readiness **~62% overall** (Phase 0 contributes 1.6 more than at the last checkpoint). Left: the `SECRET_KEY` item (local key fix above) and the history-rewrite decision.
 
 ---
 
