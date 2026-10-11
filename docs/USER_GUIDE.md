@@ -1,3 +1,7 @@
+> **Outdated (2026-10-11).** This guide describes an older version of the dashboard and driver app.
+> Use the [Operations Manual](manuals/OPERATIONS_MANUAL.md) (owner and dispatcher) and the
+> [Driver Guide](manuals/DRIVER_GUIDE.md) instead. Kept for reference only.
+
 # Delivery Intelligence Platform - User Guide
 
 This guide covers the two main applications: the **Dispatcher Web UI** (for managers and dispatchers) and the **Mobile Driver App** (for delivery drivers).

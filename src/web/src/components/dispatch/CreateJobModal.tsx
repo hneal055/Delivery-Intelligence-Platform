@@ -1,13 +1,26 @@
-import { useEffect, useState } from 'react';
-import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text } from '@mantine/core';
+import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text, Checkbox } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
 import { JOB_TYPES } from '../../constants/dispatch';
 import type { JobType } from '../../constants/dispatch';
-import { previewAddress } from '../../api/dispatch';
+import { useAddressPreview } from '../../hooks/useAddressPreview';
 import type { AddressMatch } from '../../types';
+import type { AddressStatus } from '../../hooks/useAddressPreview';
+
+function MatchLine({ status, match }: { status: AddressStatus; match: AddressMatch | null }) {
+  if (status === 'idle') return null;
+  const color = status === 'found' ? (match?.used_default_area ? 'orange' : 'teal') : status === 'missing' ? 'red' : 'dimmed';
+  return (
+    <Text size="sm" c={color}>
+      {status === 'checking' && 'Checking address…'}
+      {status === 'missing' && 'No match yet. Add the city and state, or a ZIP code.'}
+      {status === 'found' && match &&
+        `Matched: ${match.matched_address}${match.used_default_area ? ' (Chicago assumed; add the city if this is a suburb)' : ''}`}
+    </Text>
+  );
+}
 
 interface CreateJobModalProps {
   opened: boolean;
@@ -38,10 +51,12 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       priority: 'low',
       scheduled_at: now,
       driver_id: '',
-      package_id: '',
       dest_address: '',
       dest_unit: '',
       delivery_instructions: '',
+      pickup_address: '',
+      pickup_instructions: '',
+      ready_for_pickup: true,
       status: 'pending',
     },
     validate: {
@@ -79,50 +94,26 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         return null;
       },
       dest_address: (value, values) => {
-        if (values.type !== 'delivery') return null;
-        return value.trim().length >= 5 ? null : 'Delivery address is required';
+        if (values.type !== 'delivery' && values.type !== 'pickup') return null;
+        return value.trim().length >= 5 ? null : 'Where the package goes is required';
       },
-      package_id: (value, values) => {
+      pickup_address: (value, values) => {
         if (values.type !== 'pickup') return null;
-        const hasNotes = values.notes.trim().length > 0;
-        const hasPackageId = value.trim().length > 0;
-        return hasNotes || hasPackageId ? null : 'Pickup requires notes or package ID';
+        return value.trim().length >= 5 ? null : 'Pickup address is required';
       },
     },
   });
 
   // Live address check: show what the address matches before saving, so a
   // default-city guess is never saved unseen.
-  const [addressMatch, setAddressMatch] = useState<AddressMatch | null>(null);
-  const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'found' | 'missing'>('idle');
-  const addressInput = form.values.dest_address.trim();
+  // Delivery and Pickup jobs both move a package from A (optional for a
+  // delivery: it may start in the van) to B.
+  const isPickupJob = form.values.type === 'pickup';
+  const isDelivery = form.values.type === 'delivery' || isPickupJob;
+  const { match: addressMatch, status: addressStatus } = useAddressPreview(form.values.dest_address, isDelivery);
+  const hasPickup = isDelivery && (isPickupJob || form.values.pickup_address.trim().length > 0);
+  const { match: pickupMatch, status: pickupStatus } = useAddressPreview(form.values.pickup_address, isDelivery);
 
-  useEffect(() => {
-    if (form.values.type !== 'delivery' || addressInput.length < 5) {
-      setAddressMatch(null);
-      setAddressStatus('idle');
-      return;
-    }
-    setAddressStatus('checking');
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      previewAddress(addressInput)
-        .then((match) => {
-          if (cancelled) return;
-          setAddressMatch(match);
-          setAddressStatus('found');
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setAddressMatch(null);
-          setAddressStatus('missing');
-        });
-    }, 600);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [addressInput, form.values.type]);
 
   const driverOptions = (drivers ?? []).map((driver) => ({
     value: driver.id,
@@ -138,13 +129,12 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         priority: values.priority,
         scheduled_at: values.scheduled_at.toISOString(),
         driver_id: values.driver_id || undefined,
-        package_id: values.package_id.trim() || undefined,
-        dest_address:
-          values.type === 'delivery' ? values.dest_address.trim() || undefined : undefined,
-        dest_unit:
-          values.type === 'delivery' ? values.dest_unit.trim() || undefined : undefined,
-        delivery_instructions:
-          values.type === 'delivery' ? values.delivery_instructions.trim() || undefined : undefined,
+        dest_address: isDelivery ? values.dest_address.trim() || undefined : undefined,
+        dest_unit: isDelivery ? values.dest_unit.trim() || undefined : undefined,
+        delivery_instructions: isDelivery ? values.delivery_instructions.trim() || undefined : undefined,
+        pickup_address: isDelivery ? values.pickup_address.trim() || undefined : undefined,
+        pickup_instructions: isDelivery ? values.pickup_instructions.trim() || undefined : undefined,
+        ready_for_pickup: values.ready_for_pickup,
       },
       {
         onSuccess: () => {
@@ -154,8 +144,9 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         onError: (err) => {
           // e.g. 422 "Address not found" from the geocoder
           const detail = (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
+          const pickupProblem = typeof detail === 'string' && detail.startsWith('Pickup');
           form.setFieldError(
-            values.type === 'delivery' ? 'dest_address' : 'title',
+            !isDelivery ? 'title' : pickupProblem ? 'pickup_address' : 'dest_address',
             typeof detail === 'string' ? detail : 'Could not create the job. Try again.'
           );
         },
@@ -209,25 +200,48 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             {...form.getInputProps('driver_id')}
           />
 
-          {form.values.type === 'delivery' && (
+          {isDelivery && (
+            <TextInput
+              withAsterisk={isPickupJob}
+              label={isPickupJob ? 'Pickup address' : 'Pickup address (optional)'}
+              placeholder={
+                isPickupJob
+                  ? 'Where the driver collects it'
+                  : 'Where the driver collects it; leave blank if it starts in the van'
+              }
+              {...form.getInputProps('pickup_address')}
+            />
+          )}
+          {isDelivery && <MatchLine status={pickupStatus} match={pickupMatch} />}
+          {hasPickup && (
+            <Textarea
+              label="Pickup instructions (shown to driver)"
+              placeholder="e.g. Ask for Luis at the parts counter"
+              autosize
+              minRows={1}
+              {...form.getInputProps('pickup_instructions')}
+            />
+          )}
+          {hasPickup && (
+            <Checkbox
+              label="Ready for pickup now"
+              description="Untick if the shipper is not ready; mark it ready later from Packages (the driver is alerted)."
+              {...form.getInputProps('ready_for_pickup', { type: 'checkbox' })}
+            />
+          )}
+
+          {isDelivery && (
             <TextInput
               withAsterisk
-              label="Delivery address"
+              label={isPickupJob ? 'Deliver to (customer or your depot)' : 'Delivery address'}
               placeholder="Street, city, state (e.g. 222 W Merchandise Mart Plaza, Chicago, IL)"
               description="Street and number is enough for Chicago; add the city for suburbs."
               {...form.getInputProps('dest_address')}
             />
           )}
-          {form.values.type === 'delivery' && addressStatus !== 'idle' && (
-            <Text size="sm" c={addressStatus === 'found' ? (addressMatch?.used_default_area ? 'orange' : 'teal') : addressStatus === 'missing' ? 'red' : 'dimmed'}>
-              {addressStatus === 'checking' && 'Checking address…'}
-              {addressStatus === 'missing' && 'No match yet. Add the city and state, or a ZIP code.'}
-              {addressStatus === 'found' && addressMatch &&
-                `Matched: ${addressMatch.matched_address}${addressMatch.used_default_area ? ' (Chicago assumed; add the city if this is a suburb)' : ''}`}
-            </Text>
-          )}
+          {isDelivery && <MatchLine status={addressStatus} match={addressMatch} />}
 
-          {form.values.type === 'delivery' && (
+          {isDelivery && (
             <Group grow>
               <TextInput
                 label="Suite / floor / dock"
@@ -237,21 +251,13 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             </Group>
           )}
 
-          {form.values.type === 'delivery' && (
+          {isDelivery && (
             <Textarea
               label="Delivery instructions (shown to driver)"
               placeholder="e.g. Leave with concierge; loading dock on Franklin St"
               autosize
               minRows={2}
               {...form.getInputProps('delivery_instructions')}
-            />
-          )}
-
-          {form.values.type === 'pickup' && (
-            <TextInput
-              label="Package ID (optional)"
-              placeholder="Enter package ID"
-              {...form.getInputProps('package_id')}
             />
           )}
 

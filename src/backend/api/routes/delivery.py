@@ -29,6 +29,7 @@ from src.backend.core.storage import is_safe_filename, proof_storage
 from src.backend.models.domain import Location, User, UserRole
 from src.backend.models.sql_models import DeliveryProof, Package
 from src.backend.services import delivery_service
+from src.backend.services.redis_manager import manager as ws_manager
 from src.backend.services.notifications import (
     NotificationEvent,
     notification_service,
@@ -294,10 +295,13 @@ async def confirm_delivery(
 async def report_exception(
     package_id: str = Form(...),
     driver_id: str = Form(...),
-    reason: str = Form(...),
+    reason: str = Form(..., min_length=2, max_length=500),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Driver could not complete the stop (closed, refused, wrong address,
+    not ready at pickup, ...). The reason is kept on the package for
+    dispatch, who can reopen it."""
     driver_id = _acting_driver(current_user, driver_id)
     driver_heartbeats[driver_id] = time.time()
     package = await _get_package(db, package_id)
@@ -305,10 +309,22 @@ async def report_exception(
         raise HTTPException(status_code=404, detail="Package not found")
     _check_can_close(current_user, package)
 
+    package.exception_reason = reason.strip()
     await delivery_service.update_package_status(
         db, package_id, "exception", driver_id
     )
     logger.info("Exception on package %s: %s", package_id, reason)
+    # Live alert on the dispatch dashboard
+    try:
+        await ws_manager.broadcast_to_dispatchers({
+            "type": "problem_reported",
+            "package_id": package_id,
+            "driver_id": driver_id,
+            "reason": package.exception_reason,
+            "address": package.dest_address,
+        })
+    except Exception as exc:  # the report itself is already saved
+        logger.warning("Could not broadcast problem report: %s", exc)
     return {
         "status": "exception_reported",
         "package_id": package_id,

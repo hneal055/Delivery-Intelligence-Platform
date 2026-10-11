@@ -315,3 +315,113 @@ async def test_geocode_preview(int_client_manager):
     assert ok.json()["matched_address"].startswith("111 W WACKER")
     assert ok.json()["used_default_area"] is True
     assert miss.status_code == 404
+
+
+async def _seed_driver_account(db, username):
+    """A driver login account plus its driver profile (id = username)."""
+    from tests.integration.conftest import int_db_seed_user
+    from src.backend.models.domain import UserRole as _Role
+    from src.backend.models.sql_models import Driver as _Driver
+    user = await int_db_seed_user(db, username, "Password1!", _Role.DRIVER)
+    db.add(_Driver(id=username, name=username, status="active"))
+    await db.commit()
+    return user
+
+
+@pytest.mark.asyncio
+async def test_pickup_job_not_ready_then_marked_ready_alerts_driver(int_client_manager):
+    """Pickup -> delivery job: pickup geocoded, 'not ready' until dispatch marks
+    it ready; the driver's phone is pushed on assignment and on ready."""
+    from src.backend.models.sql_models import DeviceToken
+    client, db, mgr = int_client_manager
+    user = await _seed_driver_account(db, "van1")
+    db.add(DeviceToken(user_id=user.id, token="ExponentPushToken[van1]", platform="ios"))
+    await db.commit()
+
+    pickup = GeocodeResult(lat=41.9, lon=-87.7, matched_address="2500 W ARMITAGE AVE, CHICAGO, IL, 60647")
+    sent = AsyncMock(return_value={"status": "ok"})
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area",
+               AsyncMock(side_effect=[MART, pickup])), \
+         patch("src.backend.services.driver_alerts.send_push_notification", sent):
+        job = (await client.post("/dispatch/jobs", json={
+            "title": "Parts run", "driver_id": "van1",
+            "dest_address": "222 W Merchandise Mart Plaza",
+            "pickup_address": "2500 W Armitage Ave",
+            "pickup_instructions": "Ask for Luis at the parts counter",
+            "ready_for_pickup": False,
+        })).json()
+
+        pkg = next(p for p in (await client.get("/dispatch/packages")).json() if p["id"] == job["package_id"])
+        assert pkg["pickup_address"].startswith("2500 W ARMITAGE")
+        assert pkg["pickup_instructions"] == "Ask for Luis at the parts counter"
+        assert pkg["ready_at"] is None
+        assert pkg["tracking_code"].startswith("CCC-")
+
+        ready = await client.put(f"/dispatch/packages/{job['package_id']}/ready")
+        assert ready.status_code == 200
+
+    kinds = [c.args[3]["kind"] for c in sent.call_args_list]
+    assert kinds == ["assigned", "ready"]
+    assert all(c.args[0] == "ExponentPushToken[van1]" for c in sent.call_args_list)
+    assert sent.call_args_list[0].args[1] == "New pickup & delivery"
+
+
+@pytest.mark.asyncio
+async def test_unknown_pickup_address_is_rejected(int_client_manager):
+    client, db, mgr = int_client_manager
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area",
+               AsyncMock(side_effect=[MART, None])):
+        resp = await client.post("/dispatch/jobs", json={
+            "title": "X", "dest_address": "222 W Merchandise Mart Plaza", "pickup_address": "nowhere",
+        })
+    assert resp.status_code == 422
+    assert "Pickup address not found" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_reopen_only_packages_with_a_problem(int_client_manager):
+    client, db, mgr = int_client_manager
+    bad = await int_db_seed_package(db, driver_id=None, status="exception")
+    bad.exception_reason = "Business closed"
+    ok = await int_db_seed_package(db, status="assigned")
+    await db.commit()
+
+    resp = await client.put(f"/dispatch/packages/{bad.id}/reopen")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending"
+    await db.refresh(bad)
+    assert bad.exception_reason is None
+    assert (await client.put(f"/dispatch/packages/{ok.id}/reopen")).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_reopen_after_pickup_returns_to_delivery_stage(int_client_manager):
+    """A problem reported after pickup (package in the van) reopens as loaded,
+    not back at the pickup stage."""
+    from datetime import datetime, timezone
+    client, db, mgr = int_client_manager
+    pkg = await int_db_seed_package(db, driver_id="van1", status="exception")
+    pkg.loaded_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    resp = await client.put(f"/dispatch/packages/{pkg.id}/reopen")
+    assert resp.json()["status"] == "loaded"
+
+
+@pytest.mark.asyncio
+async def test_pickup_job_needs_pickup_address(int_client_manager):
+    client, db, mgr = int_client_manager
+    pickup = GeocodeResult(lat=41.9, lon=-87.7, matched_address="2500 W ARMITAGE AVE, CHICAGO, IL, 60647")
+
+    missing = await client.post("/dispatch/jobs", json={
+        "title": "P", "type": "pickup", "dest_address": "222 W Merchandise Mart Plaza",
+    })
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area",
+               AsyncMock(side_effect=[MART, pickup])):
+        ok = await client.post("/dispatch/jobs", json={
+            "title": "P", "type": "pickup", "dest_address": "222 W Merchandise Mart Plaza",
+            "pickup_address": "2500 W Armitage Ave",
+        })
+
+    assert missing.status_code == 422
+    assert ok.status_code == 200 and ok.json()["type"] == "pickup"

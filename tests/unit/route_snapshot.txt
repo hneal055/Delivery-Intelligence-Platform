@@ -56,6 +56,8 @@ POST /routing/reverse-geocode
 POST /tracking/{driver_id}/location
 PUT /dispatch/jobs/{job_id}/assign
 PUT /dispatch/jobs/{job_id}/status
+PUT /dispatch/packages/{package_id}/ready
+PUT /dispatch/packages/{package_id}/reopen
 PUT /users/{user_id}/disable
 PUT /users/{user_id}/enable
 PUT /users/{user_id}/role

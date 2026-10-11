@@ -4,12 +4,15 @@
 
 .DESCRIPTION
     Starts the Docker stack (Postgres/PostGIS, Redis, backend, telemetry worker,
-    dashboard), waits for the database, applies migrations, seeds development
-    accounts, and checks backend health. Data is kept between runs unless you
-    pass -Reset.
+    dashboard), waits for the database, applies migrations, and checks backend
+    health. Data is kept between runs unless you pass -Reset.
 
-    First-time setup: run .\scripts\dev\setup_secrets.ps1 to create .env.backend
-    with the development account passwords.
+    Real accounts are created with src/scripts/create_user.py. Fake development
+    accounts (admin, dispatcher1, drivers D001..D050) are only seeded with -Seed.
+
+.PARAMETER Seed
+    Seed development accounts from .env.backend (see setup_secrets.ps1).
+    Do not use on a database with real drivers: it adds the fake D001.. drivers.
 
 .PARAMETER Reset
     Delete all containers AND volumes (database, Redis, uploads) before starting.
@@ -34,11 +37,12 @@
 
 .EXAMPLE
     .\scripts\dev\start.ps1
-    .\scripts\dev\start.ps1 -Simulate -Drivers 10
+    .\scripts\dev\start.ps1 -Seed -Simulate -Drivers 10
     .\scripts\dev\start.ps1 -Reset
 #>
 param(
     [switch]$Reset,
+    [switch]$Seed,
     [switch]$Simulate,
     [int]$Drivers = 50,
     [switch]$Monitoring,
@@ -120,7 +124,7 @@ if ($LASTEXITCODE -ne 0) { Fail "Migrations failed. Check: docker compose logs b
 # asyncpg caches prepared statements; restart so it sees schema changes.
 docker compose restart backend | Out-Null
 
-if ($env:INITIAL_ADMIN_PASSWORD -and $env:INITIAL_DRIVER_PASSWORD) {
+if ($Seed -and $env:INITIAL_ADMIN_PASSWORD -and $env:INITIAL_DRIVER_PASSWORD) {
     Step "Seeding development accounts and $Drivers drivers"
     $seedEnv = @(
         "-e", "INITIAL_ADMIN_PASSWORD=$env:INITIAL_ADMIN_PASSWORD",
