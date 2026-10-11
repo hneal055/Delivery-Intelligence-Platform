@@ -3,6 +3,7 @@
 **Created:** 2026-10-07
 **Branch at assessment:** `rehab-investigation-20261001` (35 commits ahead of `main`)
 **Baseline readiness:** **42%**
+**Current readiness (2026-10-11):** **~67%**: Phases 0, 2 complete; Phase 1 tasks done (2 checks open); Phase 3 2/8; Phase 5 2/7; Phase 6 4/10. DIP is live at https://dip.chicagocargocourier.com (office PC + Cloudflare Tunnel).
 **Target:** 100% = safe to run real deliveries for real customers
 
 ---
@@ -286,10 +287,10 @@ _(fill in)_
 ## Phase 6 — Build & deployment pipeline  (87% when done)
 
 ### Planned changes
-- [ ] **Pick one production target.** The Dockerfile mentions Railway; CI deploys to Kubernetes with Helm. Choose one and remove the other path.
-- [ ] **Set `ENVIRONMENT=production` in the deployment** (Helm values or Railway variables). No Helm values file sets it, so pods run in development mode and the production startup checks in `core/config.py` (secret key, CORS, device key) never run there.
-- [ ] **Add the Celery `telemetry_worker`** to the chosen deployment. It runs in `docker-compose.yml` but has no Helm template.
-- [ ] **Stop exposing Postgres and Redis ports** in any production compose file or values file; they are published in `docker-compose.yml`.
+- [ ] **Pick one production target.** The Dockerfile mentions Railway; CI deploys to Kubernetes with Helm. Choose one and remove the other path. *(2026-10-11: **decided**: the office PC runs the Docker Compose stack, published through a Cloudflare Tunnel at https://dip.chicagocargocourier.com (PR #30). Still to do: remove or archive the unused Railway and Helm/Kubernetes paths.)*
+- [x] **Set `ENVIRONMENT=production` in the deployment** (Helm values or Railway variables). No Helm values file sets it, so pods run in development mode and the production startup checks in `core/config.py` (secret key, CORS, device key) never run there. *(2026-10-11: set in `.env` by `scripts/ops/configure-public-access.ps1`; production refuses weak `SECRET_KEY`/`DIAD_API_KEY` (now 32+ chars). The office stack runs in production mode.)*
+- [x] **Add the Celery `telemetry_worker`** to the chosen deployment. It runs in `docker-compose.yml` but has no Helm template. *(The chosen deployment is docker-compose, which runs it.)*
+- [x] **Stop exposing Postgres and Redis ports** in any production compose file or values file; they are published in `docker-compose.yml`. *(2026-10-11: bound to 127.0.0.1; only the dashboard is published, through the tunnel.)*
 - [ ] **Add a container `HEALTHCHECK`** and Kubernetes liveness/readiness probes (these depend on Phase 7's `/ready`).
 - [ ] **Manage secrets** with external-secrets or sealed-secrets (the comment in `deploy/helm/.../secret.yaml` already calls for this), not values passed with `--set`.
 - [ ] **Add deploy gates:** staging deploy, then smoke tests, then manual approval, then production. Write down a tested rollback (`helm rollback`).
@@ -304,7 +305,7 @@ _(fill in)_
 ### Changes made
 _(fill in)_
 
-**Checkpoint:** ☐ Phase 6 complete → readiness **87%**
+**Checkpoint:** ☐ Phase 6: 4 of 10 tasks (CI install, production mode, worker, ports). Going live also added: Cloudflare Tunnel (`cloudflared` compose profile), API docs/metrics blocked from the internet, placeholder device keys rejected. → readiness **87%** when complete.
 
 ---
 
@@ -345,6 +346,8 @@ _(fill in)_
 
 ### Changes made
 _(fill in)_
+
+*Progress 2026-10-11 (PRs #25–#29):* pickup → delivery stages, assignment alerts (push + 30 s in-app check), Report problem, recipient/pickup contacts with Call, "Received by" on proofs, address preview with Chicago-first lookup, driver filters, Proof Gallery photos fixed. Open: installable app (iOS/Android decision deferred by owner), Expo push project ID (`eas-cli init`), Analytics/Equipment pages still hidden.
 
 **Checkpoint:** ☐ Phase 8 complete → readiness **96%**
 
