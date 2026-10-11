@@ -65,10 +65,13 @@ if (-not $Hostname -or $Hostname -notmatch "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-
     exit 2
 }
 
-$secure = Read-Host "Paste the Cloudflare tunnel token (it will not be shown)" -AsSecureString
+$secure = Read-Host "Paste the Cloudflare tunnel token, or the whole 'docker run ...' command (it will not be shown)" -AsSecureString
 $token = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-if ($token.Length -lt 50) {
+# Cloudflare's copy button copies the full docker command; keep only the token
+if ($token -match "--token\s+(\S+)") { $token = $Matches[1] }
+$token = $token.Trim().Trim('"', "'")
+if ($token.Length -lt 50 -or $token -match "\s") {
     Write-Host "That does not look like a tunnel token (they are long). Nothing was changed." -ForegroundColor Red
     exit 1
 }
@@ -106,6 +109,13 @@ if ($ok) {
     Write-Host "Restart 'npm run go' in src\mobile so the app uses the new address."
     exit 0
 }
-Write-Host "https://$Hostname/api/health did not answer yet." -ForegroundColor Yellow
-Write-Host "Check: docker compose logs cloudflared --tail 30, and that the tunnel's public hostname points to http://frontend:80."
+$tunnelUp = (docker inspect -f "{{.State.Running}}" delivery_tunnel 2>$null) -eq "true"
+if ($tunnelUp) {
+    Write-Host "The tunnel connector is running, but https://$Hostname/api/health did not answer yet." -ForegroundColor Yellow
+    Write-Host "If Cloudflare is still waiting: click Continue there and add the public hostname"
+    Write-Host "($Hostname -> HTTP frontend:80). If the domain is still Pending, wait until it is Active."
+    Write-Host "Then just open https://$Hostname. No need to rerun this script."
+} else {
+    Write-Host "The tunnel connector is not running. Check: docker compose logs cloudflared --tail 30" -ForegroundColor Red
+}
 exit 1
