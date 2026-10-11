@@ -7,7 +7,8 @@ import type {
   DispatchJob,
   DispatchJobCreate,
   DriverAvailability,
-  DriverAvailabilityCreate
+  DriverAvailabilityCreate,
+  AddressMatch
 } from "../types";
 
 export async function listDrivers(status?: string): Promise<Driver[]> {
@@ -97,6 +98,12 @@ export async function getAvailability(
 
 export async function setAvailability(availability: DriverAvailabilityCreate): Promise<DriverAvailability> {
   const response = await apiClient.post<DriverAvailability>("/dispatch/availability", availability);
+  return response.data;
+}
+
+/** Preview what an address geocodes to before creating a job. */
+export async function previewAddress(address: string): Promise<AddressMatch> {
+  const response = await apiClient.get<AddressMatch>("/dispatch/geocode", { params: { address } });
   return response.data;
 }
 

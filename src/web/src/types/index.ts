@@ -24,6 +24,8 @@ export interface Package {
   dest_lat: number;
   dest_lon: number;
   dest_address: string | null;
+  dest_unit: string | null;
+  delivery_instructions: string | null;
   status: string;
   section: string | null;
   distance_km: number | null;
@@ -107,6 +109,15 @@ export interface DispatchJobCreate {
   scheduled_at?: string;
   package_id?: string;
   dest_address?: string;
+  dest_unit?: string;
+  delivery_instructions?: string;
+}
+
+export interface AddressMatch {
+  matched_address: string;
+  lat: number;
+  lon: number;
+  used_default_area: boolean;
 }
 
 export interface DriverAvailability {

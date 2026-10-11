@@ -1,10 +1,13 @@
-import { Modal, TextInput, Button, Group, Textarea, Select, Stack } from '@mantine/core';
+import { useEffect, useState } from 'react';
+import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
 import { JOB_TYPES } from '../../constants/dispatch';
 import type { JobType } from '../../constants/dispatch';
+import { previewAddress } from '../../api/dispatch';
+import type { AddressMatch } from '../../types';
 
 interface CreateJobModalProps {
   opened: boolean;
@@ -37,6 +40,8 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       driver_id: '',
       package_id: '',
       dest_address: '',
+      dest_unit: '',
+      delivery_instructions: '',
       status: 'pending',
     },
     validate: {
@@ -86,6 +91,39 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
     },
   });
 
+  // Live address check: show what the address matches before saving, so a
+  // default-city guess is never saved unseen.
+  const [addressMatch, setAddressMatch] = useState<AddressMatch | null>(null);
+  const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'found' | 'missing'>('idle');
+  const addressInput = form.values.dest_address.trim();
+
+  useEffect(() => {
+    if (form.values.type !== 'delivery' || addressInput.length < 5) {
+      setAddressMatch(null);
+      setAddressStatus('idle');
+      return;
+    }
+    setAddressStatus('checking');
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      previewAddress(addressInput)
+        .then((match) => {
+          if (cancelled) return;
+          setAddressMatch(match);
+          setAddressStatus('found');
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setAddressMatch(null);
+          setAddressStatus('missing');
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [addressInput, form.values.type]);
+
   const driverOptions = (drivers ?? []).map((driver) => ({
     value: driver.id,
     label: `${driver.name} — ${driver.package_count} pkgs (${driver.is_online ? 'Online' : 'Offline'})`,
@@ -103,6 +141,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         package_id: values.package_id.trim() || undefined,
         dest_address:
           values.type === 'delivery' ? values.dest_address.trim() || undefined : undefined,
+        dest_unit:
+          values.type === 'delivery' ? values.dest_unit.trim() || undefined : undefined,
+        delivery_instructions:
+          values.type === 'delivery' ? values.delivery_instructions.trim() || undefined : undefined,
       },
       {
         onSuccess: () => {
@@ -172,8 +214,36 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
               withAsterisk
               label="Delivery address"
               placeholder="Street, city, state (e.g. 222 W Merchandise Mart Plaza, Chicago, IL)"
-              description="Looked up on save; the matched address is used for the driver's map and GPS check."
+              description="Street and number is enough for Chicago; add the city for suburbs."
               {...form.getInputProps('dest_address')}
+            />
+          )}
+          {form.values.type === 'delivery' && addressStatus !== 'idle' && (
+            <Text size="sm" c={addressStatus === 'found' ? (addressMatch?.used_default_area ? 'orange' : 'teal') : addressStatus === 'missing' ? 'red' : 'dimmed'}>
+              {addressStatus === 'checking' && 'Checking address…'}
+              {addressStatus === 'missing' && 'No match yet. Add the city and state, or a ZIP code.'}
+              {addressStatus === 'found' && addressMatch &&
+                `Matched: ${addressMatch.matched_address}${addressMatch.used_default_area ? ' (Chicago assumed; add the city if this is a suburb)' : ''}`}
+            </Text>
+          )}
+
+          {form.values.type === 'delivery' && (
+            <Group grow>
+              <TextInput
+                label="Suite / floor / dock"
+                placeholder="e.g. Suite 2000, 20th floor"
+                {...form.getInputProps('dest_unit')}
+              />
+            </Group>
+          )}
+
+          {form.values.type === 'delivery' && (
+            <Textarea
+              label="Delivery instructions (shown to driver)"
+              placeholder="e.g. Leave with concierge; loading dock on Franklin St"
+              autosize
+              minRows={2}
+              {...form.getInputProps('delivery_instructions')}
             />
           )}
 
@@ -186,8 +256,8 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
           )}
 
           <Textarea
-            label="Notes"
-            placeholder="Optional details..."
+            label="Internal notes (not shown to driver)"
+            placeholder="Optional details for dispatch..."
             {...form.getInputProps('notes')}
           />
 

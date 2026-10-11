@@ -27,6 +27,8 @@ export default function ScannerScreen({ route, navigation }) {
 
   // The driver's undelivered packages, for quick selection without scanning
   const [pendingPackages, setPendingPackages] = useState([]);
+  // Full package details by ID, to show address, unit and instructions
+  const [packagesById, setPackagesById] = useState({});
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState(null);
@@ -44,6 +46,7 @@ export default function ScannerScreen({ route, navigation }) {
     async function loadPendingStops() {
       try {
         const packages = await getMyPackages();
+        setPackagesById(Object.fromEntries(packages.map((p) => [p.id, p])));
         const pending = packages
           .filter((p) => p.status !== 'delivered' && p.status !== 'exception')
           .map((p) => p.id);
@@ -254,6 +257,19 @@ export default function ScannerScreen({ route, navigation }) {
             {scannedPackageId ? scannedPackageId : 'Select Stop Below'}
           </Text>
         </View>
+        {packagesById[scannedPackageId] ? (
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ color: '#e2e8f0', fontSize: 13 }}>
+              {packagesById[scannedPackageId].dest_address}
+              {packagesById[scannedPackageId].dest_unit ? ` — ${packagesById[scannedPackageId].dest_unit}` : ''}
+            </Text>
+            {packagesById[scannedPackageId].delivery_instructions ? (
+              <Text style={{ color: '#fbbf24', fontSize: 13, marginTop: 2 }}>
+                ⚠ {packagesById[scannedPackageId].delivery_instructions}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Quick package selection chips if driver opens scanner directly */}
         <View style={styles.chipRow}>

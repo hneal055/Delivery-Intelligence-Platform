@@ -19,7 +19,7 @@ from src.backend.models.sql_models import (
     DriverAvailability,
 )
 from src.backend.services.heartbeat import heartbeat_service
-from src.backend.services.geocoding import geocode_address
+from src.backend.services.geocoding import geocode_in_service_area
 from src.backend.core.permissions import Permission
 
 
@@ -46,6 +46,8 @@ class PackageResponse(BaseModel):
     dest_lat: float
     dest_lon: float
     dest_address: Optional[str] = None
+    dest_unit: Optional[str] = None
+    delivery_instructions: Optional[str] = None
     status: str
     section: Optional[str] = None
     distance_km: Optional[float] = None
@@ -123,6 +125,8 @@ async def get_driver_packages(
             dest_lat=p.dest_lat,
             dest_lon=p.dest_lon,
             dest_address=p.dest_address,
+            dest_unit=p.dest_unit,
+            delivery_instructions=p.delivery_instructions,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -146,6 +150,8 @@ async def list_deliveries(
     # A driver's ID is their login username (see drivers table).
     if current_user.role == UserRole.DRIVER:
         driver_id = current_user.username
+        # The app refreshes this list while open, so it doubles as "online".
+        await heartbeat_service.update(driver_id)
     query = select(PackageSQL)
     if status:
         query = query.where(PackageSQL.status == status)
@@ -164,6 +170,8 @@ async def list_deliveries(
             dest_lat=p.dest_lat,
             dest_lon=p.dest_lon,
             dest_address=p.dest_address,
+            dest_unit=p.dest_unit,
+            delivery_instructions=p.delivery_instructions,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -202,6 +210,8 @@ async def list_packages(
             dest_lat=p.dest_lat,
             dest_lon=p.dest_lon,
             dest_address=p.dest_address,
+            dest_unit=p.dest_unit,
+            delivery_instructions=p.delivery_instructions,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -280,7 +290,7 @@ async def create_job(
         if package is None:
             raise HTTPException(status_code=404, detail="Package not found")
     elif job_data.dest_address and job_data.dest_address.strip():
-        location = await geocode_address(job_data.dest_address.strip())
+        location = await geocode_in_service_area(job_data.dest_address.strip())
         if location is None:
             raise HTTPException(
                 status_code=422,
@@ -291,6 +301,8 @@ async def create_job(
             dest_lat=location.lat,
             dest_lon=location.lon,
             dest_address=location.matched_address,
+            dest_unit=(job_data.dest_unit or "").strip() or None,
+            delivery_instructions=(job_data.delivery_instructions or "").strip() or None,
             status="pending",
             priority=job_data.priority,
             tracking_code=_new_tracking_code(),
@@ -519,3 +531,24 @@ async def delete_job(
 
     await db.delete(job)
     await db.commit()
+
+
+@router.get("/geocode")
+async def preview_address(
+    address: str = Query(..., min_length=3, max_length=300),
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+):
+    """Look up an address before creating a job, so the dispatcher can see
+    exactly what it matched. Requires manager or admin role."""
+    location = await geocode_in_service_area(address.strip())
+    if location is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Address not found. Check the street, city and state.",
+        )
+    return {
+        "matched_address": location.matched_address,
+        "lat": location.lat,
+        "lon": location.lon,
+        "used_default_area": location.used_default_area,
+    }

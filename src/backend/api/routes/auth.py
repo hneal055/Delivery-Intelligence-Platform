@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
-from src.backend.models.domain import Token, User
+from src.backend.models.domain import Token, User, UserRole
 from src.backend.utils.security import verify_password, create_access_token
 from src.backend.services.user_service import get_user_by_username
 from src.backend.api.deps import get_current_active_user
@@ -14,6 +14,8 @@ from src.backend.api.limiter import limiter
 from src.backend.core.config import settings
 from src.backend.core.database import get_db
 from src.backend.models.sql_models import DeviceToken
+from src.backend.services.driver_profile import ensure_driver_profile
+from src.backend.services.heartbeat import heartbeat_service
 
 router = APIRouter()
 
@@ -34,6 +36,12 @@ async def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # A driver who can log in must also be assignable: make sure their
+    # driver profile exists, and mark them online.
+    if user_sql.role == UserRole.DRIVER.value:
+        await ensure_driver_profile(db, user_sql.username)
+        await heartbeat_service.update(user_sql.username)
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
