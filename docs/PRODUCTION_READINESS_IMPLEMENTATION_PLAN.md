@@ -144,7 +144,7 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 - [x] **Remove the direct SQLite connection** from `main.py` (lines 4 and 50-52). Every request should go through the SQLAlchemy/Postgres session.
 - [x] **Keep one delivery router.** Delete `delivery_backup.py` and `delivery.py.corrupt.backup`; the old versions remain in git history. *(Both gone; `delivery_backup.py` deleted with the owner's approval.)*
 - [x] **Make the mobile app build and log in** *(added 2026-10-10)*. *Done: bundles for Android and iOS, expo-doctor 21/21. Login on a real phone still to be confirmed (see Verify).* `App.js` imports `./screens/*`, but the screens live in `./src/screens/`. `src/api/client.js` has no default export, yet `authStore`, `HomeScreen`, `offlineQueueService` and `notificationService` import one, so login crashes. `package.json` is missing packages the code imports (`axios`, `expo-location`, `@react-navigation/*`, `expo-secure-store`, `expo-notifications`, AsyncStorage, `expo-sqlite`). No request sends the login token, and every `/delivery/*` endpoint now requires one. `offlineQueueService` marks any 4xx as FAILED, so a 401 would strand a proof; it must retry after login instead. Other calls with no backend route: `GET /routing/sample-route/{id}`, `POST /notifications/register-token` and `POST /debug/reset-db` (mobile), and `POST /dispatch/assign` (web; the API has `PUT /dispatch/jobs/{id}/assign`).
-- [ ] **Commit the rehab work in small, reviewable commits**, then merge `rehab-investigation-20261001` into `main` through a PR so CI runs.
+- [x] **Commit the rehab work in small, reviewable commits**, then merge `rehab-investigation-20261001` into `main` through a PR so CI runs. *(PR #23, merged 2026-10-11 with a merge commit to keep the history. CI was green: lint, unit and integration tests, and Helm lint.)*
 
 ### Verify
 - The route snapshot test passes and the snapshot has been reviewed.
@@ -190,12 +190,24 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 **Still to do for Phase 2:**
 
 - ~~On a phone: log in as a driver, see the assigned package, deliver it with photo and signature, and see it in the history.~~ **Done 2026-10-10** on an iPhone via Expo Go as `driver2`: `PHONE-TEST-001` and `PHONE-TEST-002` delivered; the second proof has photo, signature and real GPS. The first had no GPS, which was a bug: the last-known position was discarded when the fresh fix failed (fixed in `c0adf5ba`). Also fixed on the way: a stray `src/mobile/node.exe` (v20.18.0) shadowed the installed Node 24 (renamed), and `src/scripts/set_user_password.py` was added for password resets (`c46dfc1a`).
-- ~~Web dashboard~~ **Fixed 2026-10-10** (`5693d619`, `f560195b`, `2e255858`, `897d295e`). Docker was building `src-ui`, a 7-file stub; it now builds the real dispatcher app `src/web`, served at http://localhost:5173 with `/api` proxied to the backend. Added the missing job status, job delete and availability-list endpoints; fixed nginx swallowing proof-photo URLs; let the dispatcher role open the live WebSocket; restored the job management page. Analytics and Equipment are hidden: no backend, and they showed invented figures. Every dashboard call verified through the proxy. *Still to do: log in as `dispatcher1` in a browser and create and assign a job end to end.* `src-ui/` is now unused and can be deleted.
-- Merge to `main` through a PR so CI runs.
+- ~~Web dashboard~~ **Fixed 2026-10-10** (`5693d619`, `f560195b`, `2e255858`, `897d295e`). Docker was building `src-ui`, a 7-file stub; it now builds the real dispatcher app `src/web`, served at http://localhost:5173 with `/api` proxied to the backend. Added the missing job status, job delete and availability-list endpoints; fixed nginx swallowing proof-photo URLs; let the dispatcher role open the live WebSocket; restored the job management page. Analytics and Equipment are hidden: no backend, and they showed invented figures. Every dashboard call verified through the proxy, and the owner logged in as `dispatcher1` in a browser and opened job creation, which exposed the next gap below. `src-ui/` is now unused and can be deleted.
+- ~~Merge to `main` through a PR so CI runs.~~ **Done:** PR #23.
 
-**Known gaps, not blocking:** driver route optimisation (`/routing/optimize` takes the device key, not a driver login, so the manifest is unoptimised); `/notifications/register-token` does not exist; drivers can download any proof photo if they know its filename; `src/uploads/proofs` holds ~91k old simulator photos.
+**2026-10-10 / 11 (review and merge):** geocoded job creation, a code review of the whole branch, and making CI actually run. Suite: **306 passed, 0 failed**.
 
-**Checkpoint:** ☐ Phase 2 complete → readiness **62%**
+| Commit | Change |
+|---|---|
+| `fcc6a17b`, `b8cfb6d4` | The dashboard could create jobs but not packages, so nothing reached a phone. A delivery job with an address is now geocoded with the US Census geocoder (free, no key) into a package with a `CCC-XXXXXXXX` tracking code and assigned to the driver |
+| `3d3b4f35` | Review: drivers can only close their own assigned packages, are recorded as themselves, and only once (409 also stops duplicate uploads) |
+| `bb977c73` | Review: `main.py` regains the rate-limit handler, OIDC session middleware, Redis pub/sub, `/metrics`, tracing and `/health/ready`. CORS reads `BACKEND_CORS_ORIGINS`. Hardcoded seed passwords not restored |
+| `5d70204e`, `7f576677` | Review: drivers see only their own proof photos; photo names are unique and never overwritten |
+| `9ae50f57` | Review: removed the fake `/api/dispatches*` endpoints and the `/ws/telemetry` echo socket |
+| `1297be6c`, `d9f361ed`, `c02533be` | CI: workflow YAML fixed (every run had failed in 0 s since at least 2026-09-27); undefined `DRIVERS` bug and broken stray files fixed for lint; `requirements.txt` hashed with identical versions |
+| `b3a163bc` | Deploy jobs need `DEPLOY_ENABLED=true` and e2e needs `E2E_ENABLED=true` (repository variables) until a deploy target exists and the e2e fixtures are fixed |
+
+**Known gaps, not blocking:** driver route optimisation (`/routing/optimize` takes the device key, not a driver login, so the manifest is unoptimised); `/notifications/register-token` does not exist; the phone sends no "online" heartbeat, so drivers show Offline; `src/uploads/proofs` holds ~91k old simulator photos.
+
+**Checkpoint:** ☑ Phase 2 complete (2026-10-11). Phase 2 adds its 5 points; with Phase 3 (2 of 8 tasks) and Phase 6 (1 of 10 tasks) partly done, overall readiness is **~60%**. The 62% shown for Phase 2 assumes Phases 0 and 1 are finished; they are at 46% and 53% until the owner tasks are done (change the Expo password, revoke the TomTom key, clean up branches).
 
 ---
 
@@ -205,12 +217,13 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 
 ### Planned changes
 - [ ] **Swap live Redis for `fakeredis`** in a shared fixture in `tests/conftest.py`. This fixes the 23 `redis.exceptions.ConnectionError` failures.
-- [ ] **Look into the 8 status-code failures** (403 or 404 returned where 200 or 400 was expected) in `test_api_health.py`, `test_auth_routes.py` and `test_routing_api.py`. Fix the code or the test, and record which one was wrong.
-- [ ] **Fix the stale API tests.** `test_api_basics.py` and `test_api_health.py` call `/secure-ping`, which the backend no longer has (404). They also expect `/health` to return `{"status": "online"}`, but it now returns `"ok"` plus a timestamp. Either restore the endpoints or update the tests, and record which was correct.
+- [x] **Look into the 8 status-code failures** (403 or 404 returned where 200 or 400 was expected) in `test_api_health.py`, `test_auth_routes.py` and `test_routing_api.py`. Fix the code or the test, and record which one was wrong. *(2026-10-10: caused by the double router prefixes and the outdated `/secure-ping` tests; all pass after Phase 2.)*
+- [x] **Fix the stale API tests.** `test_api_basics.py` and `test_api_health.py` call `/secure-ping`, which the backend no longer has (404). They also expect `/health` to return `{"status": "online"}`, but it now returns `"ok"` plus a timestamp. Either restore the endpoints or update the tests, and record which was correct. *(The API was right; tests updated in `63be15ae`. Device-key auth is now tested through `POST /routing/optimize`.)*
+- [ ] **Fix the e2e fixtures** *(added 2026-10-11)*. `tests/e2e/conftest.py` shares a session-scoped async engine across pytest-asyncio's per-test event loops ("attached to a different loop", "another operation is in progress"). Use function-scoped engines or a session-scoped event loop, then set the `E2E_ENABLED=true` repository variable so CI runs them.
 - [ ] **Separate the smoke tests.** Mark `tests/smoke/` with `@pytest.mark.smoke` and leave them out of the default run; they need a running server. Run them only after a deploy.
 - [ ] **Replace the coverage-padding files.** Fold `test_coverage_boost.py` and `test_final_coverage.py` into tests named after the behaviour they check.
 - [ ] **Bring the warning count down.** It is about 17,000; start with the `httpx`/`starlette` TestClient deprecation and any `datetime.utcnow` use.
-- [ ] **Run integration tests against real services.** In CI, add `postgis/postgis` and `redis` service containers and run `tests/integration` and `tests/e2e` against them, not SQLite in memory.
+- [ ] **Run integration tests against real services.** In CI, add `postgis/postgis` and `redis` service containers and run `tests/integration` and `tests/e2e` against them, not SQLite in memory. *(Shown to matter on 2026-10-10: SQLite does not enforce foreign keys, and a job-before-package insert bug passed every test but failed on Postgres.)*
 - [ ] **Raise the coverage gate in steps.** It is 35% today (`.github/workflows/ci.yml`); move to 50%, then 70%.
 
 ### Verify
@@ -280,7 +293,7 @@ _(fill in)_
 - [ ] **Add a container `HEALTHCHECK`** and Kubernetes liveness/readiness probes (these depend on Phase 7's `/ready`).
 - [ ] **Manage secrets** with external-secrets or sealed-secrets (the comment in `deploy/helm/.../secret.yaml` already calls for this), not values passed with `--set`.
 - [ ] **Add deploy gates:** staging deploy, then smoke tests, then manual approval, then production. Write down a tested rollback (`helm rollback`).
-- [ ] **Fix the CI dependency install.** CI runs `pip install --require-hashes -r requirements.txt`, but `requirements.txt` has no hashes, so that step fails. Regenerate it with `pip-compile --generate-hashes requirements.in`.
+- [x] **Fix the CI dependency install.** CI runs `pip install --require-hashes -r requirements.txt`, but `requirements.txt` has no hashes, so that step fails. Regenerate it with `pip-compile --generate-hashes requirements.in`. *(Done in `c02533be` with `uv pip compile` for Linux / Python 3.12, all versions unchanged. Also `1297be6c`: `ci.yml` was invalid YAML, so CI had not run at all since at least 2026-09-27.)*
 - [ ] **Split runtime and dev dependencies.** `requirements.txt` (which the Docker image installs) includes pytest, black, flake8 and coverage. It also conflicts with `requirements-dev.txt` (`pytest==7.4.3` against `pytest>=8.0.0`), so the two files can't be installed together. Keep test and lint tools only in the dev file.
 - [ ] **Require CI to pass before merging** into `main`, using branch protection.
 
