@@ -5,14 +5,19 @@ import { getToken, handleUnauthorized } from "./tokenProvider";
 
 /**
  * Backend base URL, in order of preference:
- * 1. EXPO_PUBLIC_API_HOST / EXPO_PUBLIC_API_PORT (set in eas.json or .env)
- * 2. In development, the LAN IP of the machine running Metro, so a physical
+ * 1. EXPO_PUBLIC_API_URL, a full URL such as https://dip.example.com/api
+ *    (the public address through the Cloudflare Tunnel; works anywhere)
+ * 2. EXPO_PUBLIC_API_HOST / EXPO_PUBLIC_API_PORT (office Wi-Fi, http)
+ * 3. In development, the LAN IP of the machine running Metro, so a physical
  *    phone reaches the backend on the same Wi-Fi
- * 3. Emulator / simulator loopback defaults
+ * 4. Emulator / simulator loopback defaults
  */
 const API_PORT = process.env.EXPO_PUBLIC_API_PORT || "8000";
 
 const resolveBaseUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, "");
+  }
   if (process.env.EXPO_PUBLIC_API_HOST) {
     return `http://${process.env.EXPO_PUBLIC_API_HOST}:${API_PORT}`;
   }

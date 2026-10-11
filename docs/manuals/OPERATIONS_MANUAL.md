@@ -18,9 +18,8 @@ something fails. Drivers get the one-page [Driver Guide](DRIVER_GUIDE.md).
 | **Driver app** | Each driver's phone (Expo Go for now) | connects to the office PC over Wi-Fi |
 | Proof photos | Office PC disk (`src/uploads/proofs`), backed up nightly | Cloudflare R2 in production |
 
-The phones reach the office PC over the **same Wi-Fi network** for now. A
-production app and server that work anywhere are planned (readiness plan,
-Phases 6 and 8).
+The phones reach the office PC over the **same Wi-Fi network**, or from
+anywhere once public access is switched on (section 10).
 
 ## 2. Start and stop
 
@@ -171,7 +170,48 @@ Then restart `npm run go` for the phones and reload the app (shake the phone →
 ## 9. Known limits (being worked on)
 
 - Drivers use **Expo Go** in development mode; a store-installed app comes later (Phase 8).
-- Works on the **office Wi-Fi** only until the platform is deployed online (Phase 6).
+- Off the office Wi-Fi only after public access is set up (section 10), and only while the office PC is on.
 - **Tracking** shows positions only when drivers confirm or check location, not continuous live tracking.
 - Route optimisation isn't connected to the driver's list; stops are listed pickups first.
 - No printed labels yet. Copy the CCC- tracking code from Packages if you need one.
+
+## 10. Going online (Cloudflare Tunnel)
+
+DIP stays on the office PC, but a **Cloudflare Tunnel** makes it reachable
+from anywhere at `https://dip.<yourdomain>`: the dashboard from any browser,
+and the driver app on mobile data. No router ports are opened. The PC
+connects *out* to Cloudflare, which adds HTTPS. API docs and metrics stay
+blocked from the internet.
+
+### One-time setup in Cloudflare (owner)
+
+1. **Create a free Cloudflare account** at https://dash.cloudflare.com/sign-up.
+2. **Add your domain** (*Add a site*, Free plan). Cloudflare copies your existing DNS records. **Check that your email (MX) records and website records are in the list** before going on, or email can stop working.
+3. **At your registrar** (where you bought the domain), replace the nameservers with the two Cloudflare shows you. Wait until Cloudflare says the domain is **Active**. That's usually under an hour, but can take up to a day.
+4. In **Zero Trust** (https://one.dash.cloudflare.com): **Networks → Tunnels → Create a tunnel → Cloudflared**, name it `dip-office`, choose **Docker**, and **copy the token**: the long text after `--token` in the command shown. Treat it like a password.
+5. On the same screen add a **Public hostname**: subdomain `dip`, your domain, service type **HTTP**, URL **`frontend:80`**. Save.
+
+### Switch it on (office PC)
+
+```powershell
+.\scripts\ops\configure-public-access.ps1 -Hostname dip.<yourdomain>
+```
+
+Paste the token when asked; it isn't shown or printed. The script switches
+DIP to **production mode** (stricter security checks), starts the tunnel,
+points the phone app at `https://dip.<yourdomain>/api`, and checks the public
+address answers. Then restart `npm run go` and reload the app on each phone.
+
+To take DIP offline again: `.\scripts\ops\configure-public-access.ps1 -Disable`.
+
+### Keep it reachable
+
+- The PC must stay **on and awake**: Settings → System → Power → *Sleep: Never* (when plugged in).
+- Docker Desktop: *Settings → General → Start Docker Desktop when you sign in*. Keep the PC signed in.
+- If DIP is unreachable from outside: `docker compose ps` (is `delivery_tunnel` up?) and `docker compose logs cloudflared --tail 30`.
+
+### Security once it's public
+
+- The login pages are on the internet, so **every account needs a strong, unique password** (`set_user_password`). Remove accounts nobody uses.
+- Logins are rate-limited, and the session key (`SECRET_KEY`) and device key (`DIAD_API_KEY`) live only in `.env`. Never share that file.
+- Optional extra layer: Cloudflare **Access** can require an email code before anyone even sees the dashboard login. Ask before enabling it: the phone app's `/api` path must stay open.
