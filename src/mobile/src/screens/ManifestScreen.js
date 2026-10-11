@@ -75,6 +75,8 @@ export default function ManifestScreen({ navigation }) {
           lon: p.dest_lon,
           address: p.dest_address || `${p.dest_lat.toFixed(5)}, ${p.dest_lon.toFixed(5)}`,
           status: p.status,
+          unit: p.dest_unit,
+          instructions: p.delivery_instructions,
         }))
       );
       setIsOptimized(false);
@@ -287,6 +289,10 @@ export default function ManifestScreen({ navigation }) {
         </View>
 
         <Text style={styles.addressText}>{item.address}</Text>
+        {item.unit ? <Text style={styles.unitText}>{item.unit}</Text> : null}
+        {item.instructions ? (
+          <Text style={styles.instructionsText}>⚠ {item.instructions}</Text>
+        ) : null}
 
         <View style={styles.cardFooter}>
           <View style={styles.distanceContainer}>
@@ -727,6 +733,18 @@ const styles = StyleSheet.create({
   },
   addressText: {
     color: '#cbd5e1',
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  unitText: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  instructionsText: {
+    color: '#fbbf24',
     fontSize: 13,
     marginBottom: 8,
   },

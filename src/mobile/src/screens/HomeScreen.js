@@ -40,6 +40,8 @@ export default function HomeScreen({ navigation }) {
               packageId: next.id,
               address: next.dest_address || `${next.dest_lat.toFixed(5)}, ${next.dest_lon.toFixed(5)}`,
               tier: next.status === "loaded" ? "Loaded" : "Assigned",
+              unit: next.dest_unit,
+              instructions: next.delivery_instructions,
             }
           : null
       );
@@ -171,6 +173,10 @@ export default function HomeScreen({ navigation }) {
 
                 <View style={styles.stopDetails}>
                   <Text style={styles.stopAddress}>{nextStop.address}</Text>
+                  {nextStop.unit ? <Text style={styles.stopMeta}>{nextStop.unit}</Text> : null}
+                  {nextStop.instructions ? (
+                    <Text style={[styles.stopMeta, { color: "#fbbf24" }]}>⚠ {nextStop.instructions}</Text>
+                  ) : null}
                   <Text style={styles.stopMeta}>
                     Package: {nextStop.packageId} ({nextStop.tier})
                   </Text>
