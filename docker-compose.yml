@@ -50,6 +50,9 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@delivery_db:5432/delivery
+      # Signs login tokens. Required: set a random value in .env (never the
+      # placeholder in config.py, which is public in git).
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
       REDIS_URL: redis://delivery_redis:6379
       CELERY_BROKER_URL: redis://delivery_redis:6379/0
       CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0
@@ -72,6 +75,9 @@ services:
     command: python -m celery -A src.backend.worker.celery_app.celery_app worker --loglevel=info
     environment:
       DATABASE_URL: postgresql://postgres:postgres@delivery_db:5432/delivery
+      # Signs login tokens. Required: set a random value in .env (never the
+      # placeholder in config.py, which is public in git).
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
       REDIS_URL: redis://delivery_redis:6379
       CELERY_BROKER_URL: redis://delivery_redis:6379/0
       CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0

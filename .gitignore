@@ -96,3 +96,8 @@ htmlcov/
 auth_inventory.txt
 dispatch_full.txt
 *.diff
+
+# Account recovery / backup codes: never commit (keep them in a password manager)
+*[Rr][Ee][Cc][Oo][Vv][Ee][Rr][Yy]*[Cc][Oo][Dd][Ee]*
+*[Rr][Ee][Cc][Oo][Vv][Ee][Rr][Yy]*[Kk][Ee][Yy]*
+*[Bb][Aa][Cc][Kk][Uu][Pp]*[Cc][Oo][Dd][Ee][Ss]*
