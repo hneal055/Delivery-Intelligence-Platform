@@ -16,7 +16,7 @@ something fails. Drivers get the one-page [Driver Guide](DRIVER_GUIDE.md).
 | Backend + database + Redis | Docker on the office PC | API `http://localhost:8000` |
 | **Dispatch dashboard** | Docker on the office PC | **http://localhost:5173** |
 | **Driver app** | Each driver's phone (Expo Go for now) | connects to the office PC over Wi-Fi |
-| Proof photos | Office PC disk (`src/uploads/proofs`) | Cloudflare R2 in production |
+| Proof photos | Office PC disk (`src/uploads/proofs`), backed up nightly | Cloudflare R2 in production |
 
 The phones reach the office PC over the **same Wi-Fi network** for now. A
 production app and server that work anywhere are planned (readiness plan,
@@ -117,35 +117,47 @@ Packages page; the driver can scan it as a barcode or QR code.
 
 To look deeper: `docker compose logs backend --tail 100`.
 
-## 7. Backups. **Do these; nothing is automatic yet.**
+## 7. Backups (automatic)
 
-The database and proof photos live **only on the office PC** until automated
-off-machine backups are set up (readiness plan, Phase 5). At least weekly:
+Every night at **23:00** (or as soon as the PC is back on), the **DIP Nightly
+Backup** task runs `scripts\ops\backup.ps1`. It:
 
-```powershell
-# 1. Database (jobs, packages, proofs, accounts)
+1. Dumps the database (jobs, packages, proofs, accounts) and checks that the dump can be read back.
+2. Keeps **7 daily and 4 weekly** dumps in `C:\DIP-Backups\db`.
+3. Copies new proof photos to `C:\DIP-Backups\proofs`. Photos are never deleted from the backup.
+4. Copies everything **off this PC** to `OneDrive\DIP-Backups`, which syncs to Microsoft's cloud. Use your **business** OneDrive account: the backups contain customer photos and addresses.
 
-New-Item -ItemType Directory -Force C:\DIP-Backups | Out-Null
-$stamp = Get-Date -Format yyyyMMdd
-docker exec delivery_db pg_dump -U postgres -Fc -f /tmp/dip.dump delivery
-docker cp delivery_db:/tmp/dip.dump "C:\DIP-Backups\dip-db-$stamp.dump"
+The **DIP Backup Check** task runs at logon and at 09:00 and **pops up a
+warning** if the last good backup is more than 26 hours old.
 
-# 2. Proof photos (the first copy is slow: ~90,000 old simulator photos)
+| Task | Command (PowerShell in the project folder) |
+|---|---|
+| Install or change the schedule (**as administrator**) | `.\scripts\ops\install-backup-tasks.ps1 -OffsiteDir "$env:OneDrive\DIP-Backups"` |
+| Back up now | `.\scripts\ops\backup.ps1 -OffsiteDir "$env:OneDrive\DIP-Backups"` |
+| Is the last backup recent? | `.\scripts\ops\check-backup.ps1` |
+| What happened? | open `C:\DIP-Backups\backup.log` |
+| **Prove a backup restores** (monthly) | `.\scripts\ops\test-restore.ps1` |
 
-robocopy src\uploads\proofs C:\DIP-Backups\proofs /E /XO
-```
+`test-restore.ps1` restores the newest dump into a separate scratch database,
+compares row counts with the live data, prints the time taken and deletes the
+scratch database. It never touches live data. **Last test: 2026-10-11, 1.0 s,
+all tables matched.**
 
-Then copy `C:\DIP-Backups` to an external drive or cloud storage. A backup
-that only lives on the same PC doesn't survive a disk failure.
+Docker Desktop must be running for the nightly backup. If the PC was off,
+the task runs when it next starts, and the 09:00 check tells you if it was missed.
 
-**Restore** (stops the app, replaces the current database):
+**Restore for real** (replaces the current database; stop work first):
 
 ```powershell
 docker compose stop backend telemetry_worker
-docker cp C:\DIP-Backups\dip-db-YYYYMMDD.dump delivery_db:/tmp/restore.dump
+docker cp C:\DIP-Backups\db\daily\dip-db-YYYYMMDD-HHMMSS.dump delivery_db:/tmp/restore.dump
 docker exec delivery_db pg_restore -U postgres -d delivery --clean --if-exists /tmp/restore.dump
 .\scripts\dev\start.ps1
 ```
+
+If this PC is lost, install DIP on a new PC, copy `OneDrive\DIP-Backups` to
+`C:\DIP-Backups`, start it once, run the restore above, and copy the
+`proofs` folder back to `src\uploads\proofs`.
 
 ## 8. Updating the software
 
