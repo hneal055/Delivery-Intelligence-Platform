@@ -239,7 +239,7 @@ async def test_create_delivery_job_from_address(int_client_manager):
     client, db, mgr = int_client_manager
     driver = await int_db_seed_driver(db, "Van")
 
-    with patch("src.backend.api.routes.dispatch.geocode_address", AsyncMock(return_value=MART)):
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area", AsyncMock(return_value=MART)):
         resp = await client.post("/dispatch/jobs", json={
             "title": "Emergency construction parts",
             "type": "delivery",
@@ -262,7 +262,7 @@ async def test_create_delivery_job_from_address(int_client_manager):
 async def test_create_job_unknown_address_is_rejected(int_client_manager):
     client, db, mgr = int_client_manager
 
-    with patch("src.backend.api.routes.dispatch.geocode_address", AsyncMock(return_value=None)):
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area", AsyncMock(return_value=None)):
         resp = await client.post("/dispatch/jobs", json={"title": "X", "dest_address": "nowhere at all"})
 
     assert resp.status_code == 422
@@ -276,3 +276,42 @@ async def test_create_job_rejects_unknown_driver_or_package(int_client_manager):
 
     assert (await client.post("/dispatch/jobs", json={"title": "X", "driver_id": "ghost"})).status_code == 404
     assert (await client.post("/dispatch/jobs", json={"title": "X", "package_id": "ghost"})).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unit_and_instructions_reach_the_driver(int_client_manager):
+    """Suite/floor and delivery instructions are stored on the package and
+    returned with it (the driver's phone reads /dispatch/deliveries)."""
+    client, db, mgr = int_client_manager
+    driver = await int_db_seed_driver(db, "Van")
+
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area", AsyncMock(return_value=MART)):
+        job = (await client.post("/dispatch/jobs", json={
+            "title": "Concierge drop",
+            "driver_id": driver.id,
+            "dest_address": "111 west wacker",
+            "dest_unit": "Suite 2000, 20th floor",
+            "delivery_instructions": "Leave with concierge",
+        })).json()
+
+    pkgs = (await client.get("/dispatch/packages")).json()
+    pkg = next(p for p in pkgs if p["id"] == job["package_id"])
+    assert pkg["dest_unit"] == "Suite 2000, 20th floor"
+    assert pkg["delivery_instructions"] == "Leave with concierge"
+
+
+@pytest.mark.asyncio
+async def test_geocode_preview(int_client_manager):
+    client, db, mgr = int_client_manager
+    hit = GeocodeResult(lat=41.886, lon=-87.634, matched_address="111 W WACKER DR, CHICAGO, IL, 60601",
+                        used_default_area=True)
+
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area", AsyncMock(return_value=hit)):
+        ok = await client.get("/dispatch/geocode", params={"address": "111 west wacker"})
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area", AsyncMock(return_value=None)):
+        miss = await client.get("/dispatch/geocode", params={"address": "nowhere"})
+
+    assert ok.status_code == 200
+    assert ok.json()["matched_address"].startswith("111 W WACKER")
+    assert ok.json()["used_default_area"] is True
+    assert miss.status_code == 404

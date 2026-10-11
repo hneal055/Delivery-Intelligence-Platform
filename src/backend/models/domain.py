@@ -97,6 +97,8 @@ class DispatchJobCreate(BaseModel):
     # Delivery address for a new package; geocoded on create. Ignored when
     # package_id points at an existing package.
     dest_address: Optional[str] = None
+    dest_unit: Optional[str] = Field(None, max_length=100)
+    delivery_instructions: Optional[str] = Field(None, max_length=1000)
 
 class DispatchJob(DispatchJobCreate):
     model_config = ConfigDict(from_attributes=True)

@@ -14,6 +14,7 @@ GET /dispatch/dashboard/summary
 GET /dispatch/deliveries
 GET /dispatch/drivers
 GET /dispatch/drivers/{driver_id}/packages
+GET /dispatch/geocode
 GET /dispatch/jobs
 GET /dispatch/jobs/{job_id}
 GET /dispatch/packages

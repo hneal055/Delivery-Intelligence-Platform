@@ -36,3 +36,47 @@ async def test_service_error_returns_none(monkeypatch):
     monkeypatch.setattr(geocoding.httpx, "AsyncClient",
                         _client_returning(lambda req: httpx.Response(503)))
     assert await geocoding.geocode_address("anything") is None
+
+
+@pytest.mark.asyncio
+async def test_service_area_retry_when_city_missing(monkeypatch):
+    calls = []
+
+    async def fake(address):
+        calls.append(address)
+        if address.endswith("Chicago, IL"):
+            return geocoding.GeocodeResult(lat=1.0, lon=2.0, matched_address="111 W WACKER DR, CHICAGO, IL, 60601")
+        return None
+
+    monkeypatch.setattr(geocoding, "geocode_address", fake)
+    monkeypatch.setattr(geocoding.settings, "SERVICE_AREA_DEFAULT", "Chicago, IL")
+
+    result = await geocoding.geocode_in_service_area("111 west wacker")
+
+    assert calls == ["111 west wacker", "111 west wacker, Chicago, IL"]
+    assert result.used_default_area is True
+
+
+@pytest.mark.asyncio
+async def test_no_retry_when_area_already_given(monkeypatch):
+    calls = []
+
+    async def fake(address):
+        calls.append(address)
+        return None
+
+    monkeypatch.setattr(geocoding, "geocode_address", fake)
+    monkeypatch.setattr(geocoding.settings, "SERVICE_AREA_DEFAULT", "Chicago, IL")
+
+    assert await geocoding.geocode_in_service_area("1 Nowhere St, Chicago, IL") is None
+    assert calls == ["1 Nowhere St, Chicago, IL"]
+
+
+@pytest.mark.asyncio
+async def test_direct_match_is_not_marked_default(monkeypatch):
+    async def fake(address):
+        return geocoding.GeocodeResult(lat=1.0, lon=2.0, matched_address="X")
+
+    monkeypatch.setattr(geocoding, "geocode_address", fake)
+    result = await geocoding.geocode_in_service_area("100 Main St, Naperville, IL")
+    assert result.used_default_area is False

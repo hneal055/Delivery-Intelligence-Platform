@@ -72,6 +72,8 @@ class Package(Base):
     dest_lat = Column(Float, nullable=False)
     dest_lon = Column(Float, nullable=False)
     dest_address = Column(String, nullable=True)
+    dest_unit = Column(String, nullable=True)  # suite / floor / dock
+    delivery_instructions = Column(Text, nullable=True)  # shown to the driver
     destination_location = Column(Geometry('POINT', srid=4326), nullable=True)
     
     status = Column(String, default="pending")

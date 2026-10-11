@@ -76,6 +76,10 @@ class Settings:
     # unset or if the API call fails, so this is never a hard dependency.
     TOMTOM_API_KEY: str = os.getenv("TOMTOM_API_KEY", "")
 
+    # Appended to an address that does not match on its own (e.g. "111 west
+    # wacker" with no city), so dispatchers can type addresses the local way.
+    SERVICE_AREA_DEFAULT: str = os.getenv("SERVICE_AREA_DEFAULT", "Chicago, IL")
+
     # OIDC (Optional)
     OIDC_ENABLED: bool = os.getenv("OIDC_ENABLED", "false").lower() == "true"
     OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "")
