@@ -1,13 +1,26 @@
-import { useEffect, useState } from 'react';
-import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text } from '@mantine/core';
+import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text, Checkbox } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
 import { JOB_TYPES } from '../../constants/dispatch';
 import type { JobType } from '../../constants/dispatch';
-import { previewAddress } from '../../api/dispatch';
+import { useAddressPreview } from '../../hooks/useAddressPreview';
 import type { AddressMatch } from '../../types';
+import type { AddressStatus } from '../../hooks/useAddressPreview';
+
+function MatchLine({ status, match }: { status: AddressStatus; match: AddressMatch | null }) {
+  if (status === 'idle') return null;
+  const color = status === 'found' ? (match?.used_default_area ? 'orange' : 'teal') : status === 'missing' ? 'red' : 'dimmed';
+  return (
+    <Text size="sm" c={color}>
+      {status === 'checking' && 'Checking address…'}
+      {status === 'missing' && 'No match yet. Add the city and state, or a ZIP code.'}
+      {status === 'found' && match &&
+        `Matched: ${match.matched_address}${match.used_default_area ? ' (Chicago assumed; add the city if this is a suburb)' : ''}`}
+    </Text>
+  );
+}
 
 interface CreateJobModalProps {
   opened: boolean;
@@ -42,6 +55,9 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       dest_address: '',
       dest_unit: '',
       delivery_instructions: '',
+      pickup_address: '',
+      pickup_instructions: '',
+      ready_for_pickup: true,
       status: 'pending',
     },
     validate: {
@@ -93,36 +109,11 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
 
   // Live address check: show what the address matches before saving, so a
   // default-city guess is never saved unseen.
-  const [addressMatch, setAddressMatch] = useState<AddressMatch | null>(null);
-  const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'found' | 'missing'>('idle');
-  const addressInput = form.values.dest_address.trim();
+  const isDelivery = form.values.type === 'delivery';
+  const { match: addressMatch, status: addressStatus } = useAddressPreview(form.values.dest_address, isDelivery);
+  const hasPickup = isDelivery && form.values.pickup_address.trim().length > 0;
+  const { match: pickupMatch, status: pickupStatus } = useAddressPreview(form.values.pickup_address, isDelivery);
 
-  useEffect(() => {
-    if (form.values.type !== 'delivery' || addressInput.length < 5) {
-      setAddressMatch(null);
-      setAddressStatus('idle');
-      return;
-    }
-    setAddressStatus('checking');
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      previewAddress(addressInput)
-        .then((match) => {
-          if (cancelled) return;
-          setAddressMatch(match);
-          setAddressStatus('found');
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setAddressMatch(null);
-          setAddressStatus('missing');
-        });
-    }, 600);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [addressInput, form.values.type]);
 
   const driverOptions = (drivers ?? []).map((driver) => ({
     value: driver.id,
@@ -145,6 +136,11 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
           values.type === 'delivery' ? values.dest_unit.trim() || undefined : undefined,
         delivery_instructions:
           values.type === 'delivery' ? values.delivery_instructions.trim() || undefined : undefined,
+        pickup_address:
+          values.type === 'delivery' ? values.pickup_address.trim() || undefined : undefined,
+        pickup_instructions:
+          values.type === 'delivery' ? values.pickup_instructions.trim() || undefined : undefined,
+        ready_for_pickup: values.ready_for_pickup,
       },
       {
         onSuccess: () => {
@@ -209,6 +205,31 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             {...form.getInputProps('driver_id')}
           />
 
+          {isDelivery && (
+            <TextInput
+              label="Pickup address (optional)"
+              placeholder="Where the driver collects it; leave blank if it starts in the van"
+              {...form.getInputProps('pickup_address')}
+            />
+          )}
+          {isDelivery && <MatchLine status={pickupStatus} match={pickupMatch} />}
+          {hasPickup && (
+            <Textarea
+              label="Pickup instructions (shown to driver)"
+              placeholder="e.g. Ask for Luis at the parts counter"
+              autosize
+              minRows={1}
+              {...form.getInputProps('pickup_instructions')}
+            />
+          )}
+          {hasPickup && (
+            <Checkbox
+              label="Ready for pickup now"
+              description="Untick if the shipper is not ready; mark it ready later from Packages (the driver is alerted)."
+              {...form.getInputProps('ready_for_pickup', { type: 'checkbox' })}
+            />
+          )}
+
           {form.values.type === 'delivery' && (
             <TextInput
               withAsterisk
@@ -218,14 +239,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
               {...form.getInputProps('dest_address')}
             />
           )}
-          {form.values.type === 'delivery' && addressStatus !== 'idle' && (
-            <Text size="sm" c={addressStatus === 'found' ? (addressMatch?.used_default_area ? 'orange' : 'teal') : addressStatus === 'missing' ? 'red' : 'dimmed'}>
-              {addressStatus === 'checking' && 'Checking address…'}
-              {addressStatus === 'missing' && 'No match yet. Add the city and state, or a ZIP code.'}
-              {addressStatus === 'found' && addressMatch &&
-                `Matched: ${addressMatch.matched_address}${addressMatch.used_default_area ? ' (Chicago assumed; add the city if this is a suburb)' : ''}`}
-            </Text>
-          )}
+          {isDelivery && <MatchLine status={addressStatus} match={addressMatch} />}
 
           {form.values.type === 'delivery' && (
             <Group grow>

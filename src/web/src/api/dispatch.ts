@@ -101,6 +101,16 @@ export async function setAvailability(availability: DriverAvailabilityCreate): P
   return response.data;
 }
 
+/** Shipper says the package can be collected; alerts the driver. */
+export async function markPackageReady(packageId: string): Promise<void> {
+  await apiClient.put(`/dispatch/packages/${packageId}/ready`);
+}
+
+/** Send a package the driver reported a problem with back out. */
+export async function reopenPackage(packageId: string): Promise<void> {
+  await apiClient.put(`/dispatch/packages/${packageId}/reopen`);
+}
+
 /** Preview what an address geocodes to before creating a job. */
 export async function previewAddress(address: string): Promise<AddressMatch> {
   const response = await apiClient.get<AddressMatch>("/dispatch/geocode", { params: { address } });

@@ -26,6 +26,13 @@ export interface Package {
   dest_address: string | null;
   dest_unit: string | null;
   delivery_instructions: string | null;
+  pickup_address: string | null;
+  pickup_lat: number | null;
+  pickup_lon: number | null;
+  pickup_instructions: string | null;
+  ready_at: string | null;
+  exception_reason: string | null;
+  tracking_code: string | null;
   status: string;
   section: string | null;
   distance_km: number | null;
@@ -111,6 +118,9 @@ export interface DispatchJobCreate {
   dest_address?: string;
   dest_unit?: string;
   delivery_instructions?: string;
+  pickup_address?: string;
+  pickup_instructions?: string;
+  ready_for_pickup?: boolean;
 }
 
 export interface AddressMatch {
