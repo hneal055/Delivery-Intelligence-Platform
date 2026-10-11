@@ -104,6 +104,10 @@ class DispatchJobCreate(BaseModel):
     pickup_address: Optional[str] = None
     pickup_instructions: Optional[str] = Field(None, max_length=1000)
     ready_for_pickup: bool = True
+    recipient_name: Optional[str] = Field(None, max_length=100)
+    recipient_phone: Optional[str] = Field(None, max_length=30)
+    pickup_contact_name: Optional[str] = Field(None, max_length=100)
+    pickup_contact_phone: Optional[str] = Field(None, max_length=30)
 
 class DispatchJob(DispatchJobCreate):
     model_config = ConfigDict(from_attributes=True)

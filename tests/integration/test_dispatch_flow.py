@@ -425,3 +425,21 @@ async def test_pickup_job_needs_pickup_address(int_client_manager):
 
     assert missing.status_code == 422
     assert ok.status_code == 200 and ok.json()["type"] == "pickup"
+
+
+@pytest.mark.asyncio
+async def test_recipient_and_pickup_contact_reach_the_driver(int_client_manager):
+    client, db, mgr = int_client_manager
+    pickup = GeocodeResult(lat=41.9, lon=-87.7, matched_address="2500 W ARMITAGE AVE, CHICAGO, IL, 60647")
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area",
+               AsyncMock(side_effect=[MART, pickup])):
+        job = (await client.post("/dispatch/jobs", json={
+            "title": "Contacts", "dest_address": "222 W Merchandise Mart Plaza",
+            "recipient_name": "Maria Lopez", "recipient_phone": "312-555-0142",
+            "pickup_address": "2500 W Armitage Ave",
+            "pickup_contact_name": "Luis", "pickup_contact_phone": "(773) 555-0199",
+        })).json()
+
+    pkg = next(p for p in (await client.get("/dispatch/packages")).json() if p["id"] == job["package_id"])
+    assert (pkg["recipient_name"], pkg["recipient_phone"]) == ("Maria Lopez", "312-555-0142")
+    assert (pkg["pickup_contact_name"], pkg["pickup_contact_phone"]) == ("Luis", "(773) 555-0199")
