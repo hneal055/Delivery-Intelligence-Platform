@@ -45,8 +45,8 @@ Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 �
 - [x] **Delete `generate_temp_token`** from `services/auth.py`.
 - [x] **Keep `.env` out of the Docker image.** Added env files, virtualenvs, caches, uploads, backups and dumps to `.dockerignore`. *(`*.txt` was not added, because it would exclude `requirements.txt`.)*
 - [x] **Scan the full git history with gitleaks.** Also **fixed `.gitleaks.toml`**: it defined no rules and didn't extend the defaults, so every scan reported "no leaks found". It also allowlisted `.env.example`, which is where the TomTom key leaked.
-- [ ] **Consider rotating `SECRET_KEY`** *(owner action, added after scan)*. Five admin/manager JWTs were committed (in `src/mobile/App.js`, `test_ws.py`, and a file named `$token = eyJ….md`). All of them expired between 2026-02-06 and 2026-09-22, so none can be replayed. If any was signed with the real production key, rotating it is a cheap precaution. *2026-10-11 finding:* no production key has existed yet (production refuses the placeholder and anything under 32 characters), so there is nothing to rotate there. But the local Docker stack runs on the placeholder committed in `config.py`, because `docker-compose.yml` passes no `SECRET_KEY`, so anyone with the code could sign tokens for it. Fix: set a random local `SECRET_KEY` in `.env` and pass it through compose.
-- [ ] **Decide on rewriting history** *(owner decision)*. Removing secrets and large binaries from history (`git filter-repo`) means everyone must re-clone. Record the decision here.
+- [x] **Consider rotating `SECRET_KEY`** *(owner action, added after scan)*. Five admin/manager JWTs were committed (in `src/mobile/App.js`, `test_ws.py`, and a file named `$token = eyJ….md`). All of them expired between 2026-02-06 and 2026-09-22, so none can be replayed. If any was signed with the real production key, rotating it is a cheap precaution. *2026-10-11 finding:* no production key has existed yet (production refuses the placeholder and anything under 32 characters), so there is nothing to rotate there. But the local Docker stack runs on the placeholder committed in `config.py`, because `docker-compose.yml` passes no `SECRET_KEY`, so anyone with the code could sign tokens for it. **Done 2026-10-11** (`17907bcc`): compose now requires `SECRET_KEY` from `.env` for backend and telemetry_worker; a random 64-character local key was generated. A token signed with the public placeholder now gets 401.
+- [x] **Decide on rewriting history** *(owner decision)*. Removing secrets and large binaries from history (`git filter-repo`) means everyone must re-clone. Record the decision here. **Decision 2026-10-11: no rewrite.** Every secret left in history is dead (committed JWTs expired, TomTom key deleted, Expo password changed, the local stack no longer uses the placeholder `SECRET_KEY`), and the repo is private. A rewrite would force re-clones for no security gain. Revisit only if the repo is made public.
 
 ### Verify
 - [x] gitleaks (default rules) finds nothing in the working tree: `src/`, `tests/`, `tools/`, `deploy/`, `.github/`, `docs/` and the root docs.
@@ -72,7 +72,7 @@ Phase 0 now has 9 tasks (2 were added after the history scan), each worth 7/9 �
 
 **Test result:** 183 passed, 35 failed. Before: 173 passed, 35 failed. All 35 failures existed before this phase; see Phase 3. The 11 new tests all pass.
 
-**Checkpoint:** ☐ Phase 0 in progress: 7 of 9 tasks done → readiness **~62% overall** (Phase 0 contributes 1.6 more than at the last checkpoint). Left: the `SECRET_KEY` item (local key fix above) and the history-rewrite decision.
+**Checkpoint:** ☑ Phase 0 complete (2026-10-11): 9 of 9 tasks and all Verify checks pass.
 
 ---
 
@@ -99,7 +99,7 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 - [x] **Monitoring mounts: no change needed.** The `./deploy/monitoring/...` paths are correct when the file is combined with the root compose file, as its header says. The root `*.yml` directories are leftovers from an older root compose file, and are listed under the untracked cleanup above.
 - [x] **Use one Python environment.** `venv/` deleted (184 MB, unused). On 2026-10-08 `.venv` was rebuilt on Python 3.12.10 from `requirements.txt` (223 packages, `pip check` clean). The unit suite gives the same result as on 3.14 (183 passed, the 33 known failures), and warnings fell from about 17,400 to 1,513. Original task: recreate `.venv` on Python 3.12 (`py -3.12 -m venv .venv`) to match Docker and CI; it is currently 3.14. Added `.python-version` (3.12).
 - [x] **Move the manuals and reports** into `docs/manuals/` and `docs/reports/` with `git mv`.
-- [ ] **Clean up branches** *(owner decision)*. Merge or delete `stabilization/2026-09` and `feature/advanced-geofencing`, and work through the open Dependabot PRs.
+- [x] **Clean up branches** *(owner decision)*. Merge or delete `stabilization/2026-09` and `feature/advanced-geofencing`, and work through the open Dependabot PRs. *(2026-10-11: deleted `stabilization/2026-09` (all 5 commits already in `main`), `feature/advanced-geofencing`, `feature/entra-id-oidc`, `feature/native-camera-scanner` and the rehab branch (merged), and `fix/gate-seed-and-device-token` (superseded). GitHub now has only `main` plus Dependabot branches. Closed the 6 `src/mobile` Dependabot PRs (superseded by the SDK 57 lockfile) and asked Dependabot to rebase the other 11 (#2, #5, #10, #11, #12, #14, #15, #18, #19, #20, #21); review them one by one as their CI finishes.)*
 
 ### Verify
 - [x] `git ls-files | wc -l` is under 1,500.
@@ -125,7 +125,7 @@ Phase 1 has 8 tasks, each worth 8/8 = 1%.
 
 **Simulator:** restored `main()`, `--drivers` and `BACKEND_URL` in `tools/simulators/fleet_sim.py`. All three were accidentally removed in `e1130f76` (2026-09-27), so the simulator had been doing nothing when run.
 
-**Checkpoint:** ☐ Phase 1 in progress: 7 of 8 tasks done → readiness **53%** (54% when the branches are cleaned up). Root entries: 61, down from about 90.
+**Checkpoint:** ☐ Phase 1: 8 of 8 tasks done, but two Verify checks are open, so the phase is not complete. On 2026-10-11 the root had 58 entries (41 tracked), against a target of 25 or fewer, and the fresh-clone startup check has not been run. **Overall readiness ~64%** (Phases 0 and 2 complete; Phase 1 tasks done; Phase 3 at 2 of 8 tasks; Phase 6 at 1 of 10).
 
 ---
 
