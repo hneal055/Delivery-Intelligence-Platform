@@ -7,6 +7,7 @@ import { AssignmentModal } from '../components/dispatch/AssignmentModal';
 import { JobDetailDrawer } from '../components/dispatch/JobDetailDrawer';
 import { SchedulingBoard } from '../components/dispatch/SchedulingBoard';
 import type { DispatchJob } from '../types';
+import { useDriverFilterOptions, matchesDriver } from '../hooks/useDriverFilterOptions';
 
 export function SchedulingPage() {
   const { useJobs, deleteJob, updateJobStatus } = useDispatch();
@@ -18,11 +19,16 @@ export function SchedulingPage() {
   const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState("table");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [driverFilter, setDriverFilter] = useState<string | null>(null);
+  const driverOptions = useDriverFilterOptions();
 
-  const filteredJobs = useMemo(() => {
-    if (!statusFilter) return jobs;
-    return jobs.filter((j) => j.status === statusFilter);
-  }, [jobs, statusFilter]);
+  const filteredJobs = useMemo(
+    () =>
+      jobs.filter(
+        (j) => (!statusFilter || j.status === statusFilter) && matchesDriver(j.driver_id, driverFilter)
+      ),
+    [jobs, statusFilter, driverFilter]
+  );
 
   const openAssignment = (job: DispatchJob) => {
     setSelectedJob(job);
@@ -55,7 +61,7 @@ export function SchedulingPage() {
       </Table.Td>
       <Table.Td>
         {job.driver_id ? (
-           <Badge color="blue">Assigned</Badge>
+           <Badge color="blue" tt="none">{job.driver_id}</Badge>
         ) : (
            <Badge color="yellow">Unassigned</Badge>
         )}
@@ -120,6 +126,15 @@ export function SchedulingPage() {
 
           {viewMode === "table" && (
             <Group gap="sm">
+              <Select
+                placeholder="Filter by driver"
+                value={driverFilter}
+                onChange={setDriverFilter}
+                data={driverOptions}
+                searchable
+                clearable
+                w={180}
+              />
               <Select
                 placeholder="Filter by status"
                 value={statusFilter}

@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import { usePackages } from "../hooks/usePackages";
 import { markPackageReady, reopenPackage } from "../api/dispatch";
 import type { Package } from "../types";
+import { useDriverFilterOptions, matchesDriver } from "../hooks/useDriverFilterOptions";
 
 function statusColor(status: string): string {
   switch (status) {
@@ -26,6 +27,8 @@ function awaitingReady(pkg: Package): boolean {
 export function PackagesPage() {
   const { data: packages = [], isLoading } = usePackages();
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [driverFilter, setDriverFilter] = useState<string | null>(null);
+  const driverOptions = useDriverFilterOptions();
   const queryClient = useQueryClient();
 
   const onDone = (title: string) => () => {
@@ -39,16 +42,27 @@ export function PackagesPage() {
   const ready = useMutation({ mutationFn: markPackageReady, onSuccess: onDone("Marked ready for pickup"), onError });
   const reopen = useMutation({ mutationFn: reopenPackage, onSuccess: onDone("Package reopened"), onError });
 
-  const filtered = useMemo(() => {
-    if (!statusFilter) return packages;
-    return packages.filter((p) => p.status === statusFilter);
-  }, [packages, statusFilter]);
+  const filtered = useMemo(
+    () =>
+      packages.filter(
+        (p) => (!statusFilter || p.status === statusFilter) && matchesDriver(p.driver_id, driverFilter)
+      ),
+    [packages, statusFilter, driverFilter]
+  );
 
   return (
     <Stack>
       <Title order={3}>Packages</Title>
 
       <Group>
+        <Select
+          placeholder="Filter by driver"
+          searchable
+          clearable
+          value={driverFilter}
+          onChange={setDriverFilter}
+          data={driverOptions}
+        />
         <Select
           placeholder="Filter by status"
           clearable

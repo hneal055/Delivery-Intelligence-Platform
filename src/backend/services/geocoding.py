@@ -7,6 +7,7 @@ callers can ask the dispatcher to correct the address.
 https://geocoding.geo.census.gov/geocoder/
 """
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -49,16 +50,36 @@ async def geocode_address(address: str) -> Optional[GeocodeResult]:
     )
 
 
+_ZIP = re.compile(r"\b\d{5}(-\d{4})?\b")
+
+
+def names_a_place(address: str) -> bool:
+    """True if the address already says where it is: a comma (street, city)
+    or a ZIP code. (A trailing two-letter word is NOT treated as a state:
+    "St", "Dr" and "Av" end most street names.)"""
+    text = address.strip()
+    return "," in text or bool(_ZIP.search(text))
+
+
 async def geocode_in_service_area(address: str) -> Optional[GeocodeResult]:
-    """Geocode as typed; if that fails, retry with the service area appended
-    (e.g. "111 west wacker" -> "111 west wacker, Chicago, IL"). The result
-    says whether the default was used so the dispatcher can confirm it."""
-    result = await geocode_address(address)
-    if result is not None:
-        return result
+    """Geocode an address the way a local dispatcher types it.
+
+    "1 S State St" alone matches 1 S State St in *Atkinson, IL*, not Chicago,
+    so an address that names no city, state or ZIP is tried in the service
+    area FIRST ("1 S State St, Chicago, IL"), and only then as typed. An
+    address that already names its place is used as typed. The result says
+    whether the service area was added, so the dispatcher can confirm it."""
     area = settings.SERVICE_AREA_DEFAULT.strip()
-    if not area or area.lower() in address.lower():
-        return None
+    if area and not names_a_place(address) and area.lower() not in address.lower():
+        result = await geocode_address(f"{address}, {area}")
+        if result is not None:
+            result.used_default_area = True
+            return result
+        return await geocode_address(address)
+
+    result = await geocode_address(address)
+    if result is not None or not area or area.lower() in address.lower():
+        return result
     result = await geocode_address(f"{address}, {area}")
     if result is not None:
         result.used_default_area = True
