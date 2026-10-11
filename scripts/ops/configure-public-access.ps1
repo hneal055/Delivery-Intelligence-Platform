@@ -40,7 +40,9 @@ function Set-EnvValues($path, [hashtable]$values, [string[]]$remove = @()) {
         -not ($keys -contains $name)
     }
     $new = @($kept) + ($values.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
-    Set-Content -Path $path -Value $new -Encoding utf8
+    # No byte-order mark: Windows PowerShell's -Encoding utf8 adds one, which
+    # corrupts the first variable name for tools that read .env
+    [IO.File]::WriteAllLines($path, [string[]]$new, (New-Object Text.UTF8Encoding($false)))
 }
 
 function Get-EnvValue($path, $name) {
@@ -82,7 +84,9 @@ $values = @{
     COMPOSE_PROFILES = "tunnel"
     CLOUDFLARE_TUNNEL_TOKEN = $token
 }
-if (-not (Get-EnvValue $envPath "DIAD_API_KEY")) {
+$existingKey = Get-EnvValue $envPath "DIAD_API_KEY"
+# Replace a missing or short key (e.g. the sample value from .env.example)
+if ($existingKey.Length -lt 32) {
     $bytes = New-Object byte[] 32
     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $values["DIAD_API_KEY"] = -join ($bytes | ForEach-Object { $_.ToString("x2") })

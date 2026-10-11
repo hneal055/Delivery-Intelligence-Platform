@@ -53,7 +53,7 @@ def _start_production_config(diad_api_key: str) -> subprocess.CompletedProcess:
     )
 
 
-@pytest.mark.parametrize("diad_api_key", ["", "dev-secret-key-123"])
+@pytest.mark.parametrize("diad_api_key", ["", "dev-secret-key-123", "short-sample-key-24chars"])
 def test_production_refuses_to_start_without_strong_device_key(diad_api_key):
     result = _start_production_config(diad_api_key)
     assert result.returncode == 1

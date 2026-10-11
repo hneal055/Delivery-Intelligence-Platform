@@ -139,7 +139,7 @@ if settings.IS_PRODUCTION:
         )
 
     # "dev-secret-key-123" was the old hardcoded default and is public.
-    if settings.DIAD_API_KEY in ("", "dev-secret-key-123"):
+    if settings.DIAD_API_KEY in ("", "dev-secret-key-123") or len(settings.DIAD_API_KEY) < 32:
         _problems.append(
             "DIAD_API_KEY must be set to a strong random value "
             "(e.g. openssl rand -hex 32)."
