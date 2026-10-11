@@ -645,7 +645,12 @@ async def reopen_package(
             status_code=409, detail="Only packages with a reported problem can be reopened"
         )
 
-    package.status = "assigned" if package.driver_id else "pending"
+    # Back to where it was: still in the van if it had been picked up,
+    # otherwise waiting for (pickup by) its driver.
+    if package.loaded_at:
+        package.status = "loaded"
+    else:
+        package.status = "assigned" if package.driver_id else "pending"
     package.exception_reason = None
     await db.commit()
     await alert_driver(db, background_tasks, package.driver_id, package, "assigned")

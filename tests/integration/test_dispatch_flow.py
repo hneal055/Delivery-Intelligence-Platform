@@ -392,3 +392,17 @@ async def test_reopen_only_packages_with_a_problem(int_client_manager):
     await db.refresh(bad)
     assert bad.exception_reason is None
     assert (await client.put(f"/dispatch/packages/{ok.id}/reopen")).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_reopen_after_pickup_returns_to_delivery_stage(int_client_manager):
+    """A problem reported after pickup (package in the van) reopens as loaded,
+    not back at the pickup stage."""
+    from datetime import datetime, timezone
+    client, db, mgr = int_client_manager
+    pkg = await int_db_seed_package(db, driver_id="van1", status="exception")
+    pkg.loaded_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    resp = await client.put(f"/dispatch/packages/{pkg.id}/reopen")
+    assert resp.json()["status"] == "loaded"
