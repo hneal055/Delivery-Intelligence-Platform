@@ -1,177 +1,96 @@
 import asyncio
-from contextlib import asynccontextmanager, suppress
 import logging
-from typing import Optional
+import os
+from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
+from pathlib import Path
 
-from arq import create_pool
-from arq.connections import RedisSettings
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
 
 from src.backend.api.limiter import limiter
 from src.backend.api.metrics import ACTIVE_DRIVERS
-from src.backend.api.routes import (
-    advanced_routing,
-    analytics,
-    auth,
-    command_center,
-    delivery,
-    dispatch,
-    oidc,
-    routing,
-    tracking,
-    users,
-    websocket,
-)
 from src.backend.core.config import settings
 from src.backend.core.database import AsyncSessionLocal, engine
-from src.backend.core.logging_config import configure_logging
 from src.backend.core.tracing import setup_tracing
-from src.backend.models.domain import UserCreate, UserRole
-from src.backend.models.sql_models import Driver
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.services.redis_manager import manager as ws_manager
-from src.backend.services.user_service import create_user, get_user_by_username
 
-# Configure Logging
-configure_logging()
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Paths and runtime directories
+# ---------------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DATA_DIR = BASE_DIR / "data"
+UPLOADS_DIR = DATA_DIR / "uploads"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOW_DEGRADED_STARTUP = os.getenv("ALLOW_DEGRADED_STARTUP", "0") == "1"
 
 
 async def update_active_drivers():
     while True:
         try:
-            active_count = await heartbeat_service.get_online_count()
-            ACTIVE_DRIVERS.set(active_count)
+            ACTIVE_DRIVERS.set(await heartbeat_service.get_online_count())
         except Exception as e:
             logger.error(f"Error updating active drivers metric: {e}")
         await asyncio.sleep(5)
 
 
-async def init_data():
-    """Idempotent startup seed: creates admin, dispatcher, and 50 driver
-    user accounts (driver1-driver50) plus their D001-D050 driver profiles."""
-    async with AsyncSessionLocal() as db:
-        try:
-            # --- Auth users ---
-            admin = await get_user_by_username(db, "admin")
-            if not admin:
-                logger.info("Seeding: admin user")
-                await create_user(
-                    db,
-                    UserCreate(
-                        username="admin",
-                        password="adminpassword",
-                        email="admin@diplatform.com",
-                    ),
-                    role=UserRole.ADMIN,
-                )
-
-            dispatcher = await get_user_by_username(db, "dispatcher1")
-            if not dispatcher:
-                logger.info("Seeding: dispatcher1 user")
-                await create_user(
-                    db,
-                    UserCreate(
-                        username="dispatcher1",
-                        password="dispatcherpassword",
-                        email="dispatcher1@diplatform.com",
-                    ),
-                    role=UserRole.MANAGER,
-                )
-
-            # --- 50 driver user accounts + driver profiles (D001-D050) ---
-            created_users = 0
-            created_profiles = 0
-
-            for i in range(1, 51):
-                username = f"driver{i}"
-                driver_id = f"D{i:03d}"
-
-                # User account
-                existing_user = await get_user_by_username(db, username)
-                if not existing_user:
-                    await create_user(
-                        db,
-                        UserCreate(
-                            username=username,
-                            password="driverpassword",
-                            email=f"{username}@diplatform.com",
-                        ),
-                        role=UserRole.DRIVER,
-                    )
-                    created_users += 1
-
-                # Driver profile
-                result = await db.execute(select(Driver).where(Driver.id == driver_id))
-                existing_driver = result.scalars().first()
-                if not existing_driver:
-                    db.add(
-                        Driver(
-                            id=driver_id,
-                            name=f"Driver {i:03d}",
-                            status="active",
-                        )
-                    )
-                    created_profiles += 1
-
-            await db.commit()
-            if created_users or created_profiles:
-                logger.info(
-                    f"Seeding complete: {created_users} users, {created_profiles} driver profiles created"
-                )
-            else:
-                logger.info("Seed data already present, skipping")
-
-        except Exception as e:
-            logger.error(f"Error during init_data: {e}")
-            await db.rollback()
-
-
+# ---------------------------------------------------------------------------
+# Application lifespan
+# ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: replaces deprecated @app.on_event handlers."""
-    logger.info("Starting up...")
+    logger.info("Delivery Intelligence Platform API starting up")
+    # Redis pub/sub so live updates reach dispatchers on every API instance.
+    # No seeding here: accounts are created deliberately (Phase 0 removed the
+    # hardcoded admin/driver passwords the old init_data() created).
     await ws_manager.connect()
-    await init_data()
     driver_metric_task = asyncio.create_task(update_active_drivers())
-    logger.info("Startup complete")
-
-    yield  # application runs here
-
-    logger.info("Shutting down...")
+    yield
+    logger.info("Delivery Intelligence Platform API shutting down")
     driver_metric_task.cancel()
     with suppress(asyncio.CancelledError):
         await driver_metric_task
     await ws_manager.disconnect()
-    logger.info("Shutdown complete")
 
 
-app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+app = FastAPI(
+    title="Delivery Intelligence Platform API",
+    version="1.3.0",
+    description=(
+        "Backend routing, PostGIS spatial telemetry, Redis Pub/Sub WebSockets, "
+        "proof-of-delivery logging, and route optimization."
+    ),
+    lifespan=lifespan,
+)
 
-# --- CORS Configuration ---
+# ---------------------------------------------------------------------------
+# Middleware, rate limiting, observability
+# ---------------------------------------------------------------------------
+# Origins come from BACKEND_CORS_ORIGINS, which config.py requires (and
+# forbids "*") in production.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://.*",
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Session support required by Authlib OIDC
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.SECRET_KEY,
-)
+# Session support required by Authlib OIDC (/oidc/*)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
-# --- OpenTelemetry Tracing ---
 setup_tracing(
     app,
     service_name=settings.OTEL_SERVICE_NAME,
@@ -180,61 +99,78 @@ setup_tracing(
     db_engine=engine,
 )
 
-# Rate Limiter
+# Routes use @limiter.limit; without these, exceeding a limit is a 500, not a 429
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Prometheus Metrics
+# Prometheus metrics at /metrics
 Instrumentator().instrument(app).expose(app)
 
-# --- Include Routers ---
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(oidc.router)
-app.include_router(routing.router, prefix="/routing", tags=["routing"])
-app.include_router(delivery.router)  # delivery.py already defines prefix="/delivery"
-app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
-app.include_router(websocket.router, tags=["websocket"])
-app.include_router(dispatch.router, prefix="/dispatch", tags=["dispatch"])
-app.include_router(tracking.router, prefix="/tracking", tags=["tracking"])
-app.include_router(advanced_routing.router, prefix="/advanced-routing", tags=["advanced-routing"])
-app.include_router(users.router)  # users.py already defines prefix="/users"
+# ---------------------------------------------------------------------------
+# Router registrations
+# ---------------------------------------------------------------------------
+def safe_include(router_import_path: str, prefix: str = "", tags: list[str] = None):
+    """Include a router. A router that fails to load stops startup, because
+    carrying on would silently remove a whole API. ALLOW_DEGRADED_STARTUP=1
+    downgrades the failure to a warning (local debugging only)."""
+    try:
+        module_path, attr_name = router_import_path.rsplit(".", 1)
+        mod = __import__(module_path, fromlist=[attr_name])
+        router = getattr(mod, attr_name)
+        app.include_router(router, prefix=prefix, tags=tags)
+        logger.info(f"Successfully loaded router: {router_import_path}")
+    except Exception as e:
+        if not ALLOW_DEGRADED_STARTUP:
+            raise RuntimeError(f"Could not load router {router_import_path}") from e
+        logger.warning(f"Could not load router {router_import_path}: {e}")
 
-# V4 Operations Command Center
-app.include_router(command_center.router)
+# Include all core project routers
+safe_include("src.backend.api.routes.websocket.router")
+safe_include("src.backend.api.routes.auth.router", prefix="/auth", tags=["Auth"])
+safe_include(
+    "src.backend.api.routes.users.router",
+    tags=["Users"],
+)
+safe_include("src.backend.api.routes.delivery.router", tags=["Delivery"])
+safe_include("src.backend.api.routes.dispatch.router", tags=["Dispatch"])
+safe_include("src.backend.api.routes.routing.router", tags=["Routing"])
+safe_include("src.backend.api.routes.advanced_routing.router", tags=["Advanced Routing"])
+safe_include("src.backend.api.routes.analytics.router", tags=["Analytics"])
+safe_include("src.backend.api.routes.tracking.router", tags=["Tracking"])
+safe_include("src.backend.api.routes.command_center.router", tags=["Command Center"])
+safe_include("src.backend.api.routes.oidc.router", tags=["OIDC"])
+safe_include("src.backend.api.routes.geofence.router", tags=["Geofence"])
 
+# ---------------------------------------------------------------------------
+# Static files
+# ---------------------------------------------------------------------------
+app.mount("/static/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
+
+# ---------------------------------------------------------------------------
+# Routes & Aliases
+# ---------------------------------------------------------------------------
+@app.get("/")
+async def root():
+    return {"status": "online", "service": "Delivery Intelligence Platform Backend"}
 
 @app.get("/health")
-async def health_check():
-    return {"status": "online"}
+def health_check():
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/health/ready")
 async def readiness_check():
+    """Ready only when the database answers (for load balancers / k8s)."""
     try:
         async with AsyncSessionLocal() as db:
             await db.execute(select(1))
         return {"status": "ready"}
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         )
-
-
-_DEV_DEVICE_TOKEN = "dev-secret-key-123"
-
-
-@app.post("/secure-ping")
-async def secure_ping(
-    x_diad_token: Optional[str] = Header(default=None, alias="X-DIAD-Token"),
-):
-    if x_diad_token != _DEV_DEVICE_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid device token"
-        )
-    return {"msg": "Device Authenticated"}
-
-
-@app.get("/", include_in_schema=False)
-async def root():
-    return RedirectResponse(url="/docs")

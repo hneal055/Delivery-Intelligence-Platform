@@ -28,7 +28,9 @@ const set = (partial) => {
   notify();
 };
 
-// Safe storage wrapper without circular native import crashes
+// The session (including the access token) lives in the OS keychain /
+// keystore via SecureStore; localStorage only on web. Required lazily to
+// avoid a native import cycle at startup.
 const storage = {
   async get() {
     try {
@@ -39,8 +41,8 @@ const storage = {
         }
         return null;
       }
-      const NativeStorage = require("@react-native-async-storage/async-storage").default;
-      const item = await NativeStorage.getItem(STORAGE_KEY);
+      const SecureStore = require("expo-secure-store");
+      const item = await SecureStore.getItemAsync(STORAGE_KEY);
       return item ? JSON.parse(item) : null;
     } catch (_) {
       return null;
@@ -55,8 +57,8 @@ const storage = {
         }
         return;
       }
-      const NativeStorage = require("@react-native-async-storage/async-storage").default;
-      await NativeStorage.setItem(STORAGE_KEY, serialized);
+      const SecureStore = require("expo-secure-store");
+      await SecureStore.setItemAsync(STORAGE_KEY, serialized);
     } catch (_) {}
   },
   async remove() {
@@ -67,8 +69,8 @@ const storage = {
         }
         return;
       }
-      const NativeStorage = require("@react-native-async-storage/async-storage").default;
-      await NativeStorage.removeItem(STORAGE_KEY);
+      const SecureStore = require("expo-secure-store");
+      await SecureStore.deleteItemAsync(STORAGE_KEY);
     } catch (_) {}
   },
 };
@@ -98,8 +100,8 @@ const login = async (username, password) => {
       throw new Error("No access token returned by backend");
     }
 
-    const num = parseInt(cleanUser.replace(/\D/g, ""), 10);
-    const driverId = !isNaN(num) ? `D${String(num).padStart(3, "0")}` : cleanUser;
+    // The backend uses the login username as the driver ID.
+    const driverId = cleanUser;
 
     const authData = {
       token,

@@ -1,89 +1,95 @@
-import { Platform } from 'react-native';
+import axios from "axios";
+import { Platform } from "react-native";
+import Constants from "expo-constants";
+import { getToken, handleUnauthorized } from "./tokenProvider";
 
-// Dynamically select the correct host depending on the platform or environment override
-const getDefaultHost = () => {
+/**
+ * Backend base URL, in order of preference:
+ * 1. EXPO_PUBLIC_API_HOST / EXPO_PUBLIC_API_PORT (set in eas.json or .env)
+ * 2. In development, the LAN IP of the machine running Metro, so a physical
+ *    phone reaches the backend on the same Wi-Fi
+ * 3. Emulator / simulator loopback defaults
+ */
+const API_PORT = process.env.EXPO_PUBLIC_API_PORT || "8000";
+
+const resolveBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_HOST) {
-    return process.env.EXPO_PUBLIC_API_HOST;
+    return `http://${process.env.EXPO_PUBLIC_API_HOST}:${API_PORT}`;
   }
-  // Android Emulator requires 10.0.2.2 to reach the host machine's localhost
-  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    Constants.manifest2?.extra?.expoGo?.debuggerHost ||
+    "";
+  const hostIp = hostUri ? hostUri.split(":")[0] : null;
+  const isLoopback = hostIp === "localhost" || hostIp === "127.0.0.1";
+
+  if (__DEV__ && hostIp && !isLoopback) {
+    return `http://${hostIp}:${API_PORT}`;
+  }
+
+  // Android emulators reach the host machine via 10.0.2.2
+  return Platform.OS === "android"
+    ? `http://10.0.2.2:${API_PORT}`
+    : `http://localhost:${API_PORT}`;
 };
 
-const API_HOST = getDefaultHost();
-const API_PORT = process.env.EXPO_PUBLIC_API_PORT || '8000';
+export const BASE_URL = resolveBaseUrl();
+export const API_BASE = BASE_URL;
+console.log(`[API Client] baseURL: ${BASE_URL} (Platform: ${Platform.OS})`);
 
-export const BASE_URL = `http://${API_HOST}:${API_PORT}`;
+/** Authorization header for calls made outside axios (uploads, images). */
+export function authHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-/**
- * Fetch route manifest for driver with optional GPS coordinate optimization.
- * When originLat and originLon are supplied, the backend performs a 
- * nearest-neighbor TSP sort.
- */
-export async function getSampleRoute(driverId = 'D001', originLat = null, originLon = null) {
-  let url = `${BASE_URL}/routing/sample-route/${driverId}`;
-  const queryParams = [];
+const client = axios.create({
+  baseURL: BASE_URL,
+  timeout: 15000,
+});
 
-  if (originLat !== null && originLon !== null) {
-    queryParams.push(`origin_lat=${originLat}`);
-    queryParams.push(`origin_lon=${originLon}`);
-    queryParams.push('optimize=true');
+client.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
+  return config;
+});
 
-  if (queryParams.length > 0) {
-    url += `?${queryParams.join('&')}`;
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // An expired or revoked token logs the driver out; the login request
+    // itself returns 401 for a wrong password, which the login screen shows.
+    const isLogin = error.config?.url?.includes("/auth/token");
+    if (error.response?.status === 401 && !isLogin) {
+      handleUnauthorized();
+    }
+    return Promise.reject(error);
   }
+);
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to fetch route (${response.status}): ${errorText}`);
-  }
+/** Packages assigned to the logged-in driver (server scopes it to them). */
+export async function getMyPackages() {
+  const res = await client.get("/dispatch/deliveries");
+  return res.data;
+}
 
-  return await response.json();
+/** The logged-in driver's recent accepted proofs of delivery. */
+export async function getRecentProofs(limit = 50) {
+  const res = await client.get("/delivery/recent-proofs", { params: { limit } });
+  return res.data;
 }
 
 /**
- * Fetch recently submitted delivery proof records from SQLite.
+ * Resolve a scanned barcode (package ID or tracking code) to a package and
+ * mark it loaded. Returns { package_id, package_status, dest_address }.
  */
-export async function getRecentProofs(limit = 20) {
-  const response = await fetch(`${BASE_URL}/delivery/recent-proofs?limit=${limit}`);
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to fetch proofs (${response.status}): ${errorText}`);
-  }
-
-  return await response.json();
+export async function scanPackage(barcode, scanType) {
+  const res = await client.post("/delivery/scan", { barcode, scan_type: scanType });
+  return res.data;
 }
 
-/**
- * Fallback confirmation method for non-file/FormData uploads.
- */
-export async function confirmDelivery(formData) {
-  const response = await fetch(`${BASE_URL}/delivery/confirm`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Server returned ${response.status}: ${errorText}`);
-  }
-
-  return await response.json();
-}
-
-/**
- * Trigger backend database and media reset.
- */
-export async function resetDatabase() {
-  const response = await fetch(`${BASE_URL}/debug/reset-db`, {
-    method: 'POST',
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to reset database (${response.status}): ${errorText}`);
-  }
-
-  return await response.json();
-}
+export default client;

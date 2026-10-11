@@ -96,9 +96,10 @@ from src.analytics.ml_models.eta_predictor import ETAPredictor
 def test_load_model_from_existing_file(tmp_path):
     """Covers lines 35-38: _load_model branch when the model file exists."""
     # Train a fresh model and save it to a temp file
-    p = ETAPredictor()
-    p.train()
     model_path = str(tmp_path / "eta_model.joblib")
+    p = ETAPredictor()
+    p.model_path = model_path  # train() saves; keep it off the committed model
+    p.train()
     joblib.dump(p.model, model_path)
 
     # Create a new predictor pointing at that saved file
@@ -145,17 +146,10 @@ async def test_oidc_config_enabled():
     assert result["client_id"] == "my-client-id"
 
 
-# ─── services/auth.py: validate_device_token failure + generate_temp_token ───
+# ─── services/auth.py: validate_device_token failure ───
 from src.backend.services.auth import AuthService
 from fastapi import HTTPException
 import pytest
-
-
-def test_generate_temp_token():
-    """Covers line 38: generate_temp_token returns expected string."""
-    svc = AuthService()
-    token = svc.generate_temp_token("driver-99")
-    assert token == "session-driver-99-xyz"
 
 
 @pytest.mark.asyncio

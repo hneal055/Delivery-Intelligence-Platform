@@ -27,6 +27,10 @@ class Settings:
         os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480")
     )
 
+    # Shared key for DIAD device requests (X-DIAD-Token header).
+    # No default: when unset, every device request is rejected.
+    DIAD_API_KEY: str = os.getenv("DIAD_API_KEY", "")
+
     # CORS
     # No wildcard default. In development we allow common local dev ports.
     # In production, BACKEND_CORS_ORIGINS MUST be set explicitly
@@ -128,6 +132,13 @@ if settings.IS_PRODUCTION:
     ):
         _problems.append(
             "SECRET_KEY must be set to a strong random value (32+ characters)."
+        )
+
+    # "dev-secret-key-123" was the old hardcoded default and is public.
+    if settings.DIAD_API_KEY in ("", "dev-secret-key-123"):
+        _problems.append(
+            "DIAD_API_KEY must be set to a strong random value "
+            "(e.g. openssl rand -hex 32)."
         )
 
     if not os.getenv("BACKEND_CORS_ORIGINS"):

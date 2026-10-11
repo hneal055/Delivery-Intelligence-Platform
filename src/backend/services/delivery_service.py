@@ -5,7 +5,11 @@ import random
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from src.backend.models.sql_models import Driver, Package
+from src.backend.models.sql_models import (
+    Driver,
+    Package,
+    DispatchJob,
+)
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.services.traffic_service import traffic_service
 
@@ -175,3 +179,48 @@ async def update_package_status(
     await db.commit()
 
     return package
+
+
+async def complete_dispatch_job(
+    db: AsyncSession,
+    package_id: str,
+):
+    """
+    Complete the dispatch job associated with a package.
+    """
+
+    result = await db.execute(
+        select(DispatchJob).where(
+            DispatchJob.package_id == package_id
+        )
+    )
+
+    dispatch_job = result.scalars().first()
+
+    if not dispatch_job:
+        logger.warning(
+            "No dispatch job found for package %s",
+            package_id,
+        )
+        return None
+
+    if dispatch_job.status == "completed":
+        logger.info(
+            "Dispatch job %s already completed",
+            dispatch_job.id,
+        )
+        return dispatch_job
+
+    dispatch_job.status = "completed"
+    dispatch_job.completed_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(dispatch_job)
+
+    logger.info(
+        "Dispatch job %s completed for package %s",
+        dispatch_job.id,
+        package_id,
+    )
+
+    return dispatch_job

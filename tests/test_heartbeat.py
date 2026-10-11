@@ -27,13 +27,17 @@ async def test_heartbeat_service_online_status():
         del _memory_heartbeats[driver_id]
 
 @pytest.mark.asyncio
-async def test_heartbeat_pre_seeding_and_counts():
-    """Verify pre-seeding and online count calculations."""
-    count = await heartbeat_service.get_online_count()
-    assert count >= 50
+async def test_online_count_reflects_real_heartbeats(monkeypatch):
+    """Only drivers with a fresh heartbeat count as online; none are invented."""
+    monkeypatch.setattr(
+        "src.backend.services.heartbeat._memory_heartbeats", {}
+    )
+    assert await heartbeat_service.get_online_count() == 0
 
-    last_ts = await heartbeat_service.get_last_heartbeat("D001")
-    assert last_ts is not None
+    await heartbeat_service.update("D001")
+    await heartbeat_service.update("D002")
+    assert await heartbeat_service.get_online_count() == 2
+    assert await heartbeat_service.get_last_heartbeat("D001") is not None
 
 @pytest.mark.asyncio
 async def test_driver_location_update_logic():

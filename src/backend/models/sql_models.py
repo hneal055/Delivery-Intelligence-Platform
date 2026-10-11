@@ -122,6 +122,23 @@ class DispatchJob(Base):
 
     driver = relationship("Driver", back_populates="jobs")
 
+
+class DeliveryProof(Base):
+    """Proof of delivery: who, when, where, photo and signature. One row per
+    accepted delivery; the photo itself lives in proof storage."""
+    __tablename__ = "delivery_proofs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    package_id = Column(String, ForeignKey("packages.id"), nullable=False, index=True)
+    driver_id = Column(String, nullable=False, index=True)  # login username
+    photo_key = Column(String, nullable=False)  # proof storage filename
+    signature_svg = Column(Text, nullable=True)  # SVG path data from the app
+    lat = Column(Float, nullable=True)  # where the driver was at confirm
+    lon = Column(Float, nullable=True)
+    distance_m = Column(Float, nullable=True)  # from the package destination
+    captured_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class DriverAvailability(Base):
     __tablename__ = "driver_availability"
     

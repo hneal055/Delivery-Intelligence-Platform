@@ -1,6 +1,8 @@
 import os
 # Disable OTel SDK during tests to prevent background exporter thread noise on teardown
 os.environ.setdefault("OTEL_SDK_DISABLED", "true")
+# Device key used by tests that send X-DIAD-Token; must be set before settings load
+os.environ.setdefault("DIAD_API_KEY", "test-device-key")
 """
 Shared pytest fixtures for the Delivery Intelligence Platform test suite.
 
@@ -32,6 +34,13 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 @pytest.fixture(scope="session")
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _eta_model_in_tmp(tmp_path, monkeypatch):
+    """Training in tests must not overwrite the committed ETA model."""
+    from src.analytics.ml_models.eta_predictor import eta_predictor
+    monkeypatch.setattr(eta_predictor, "model_path", str(tmp_path / "eta_model.joblib"))
 
 
 @pytest_asyncio.fixture(scope="function")

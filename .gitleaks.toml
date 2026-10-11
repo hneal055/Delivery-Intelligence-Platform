@@ -1,0 +1,8 @@
+# Extend gitleaks' built-in rules. Without [extend], a custom config has no
+# rules at all and every scan reports "no leaks found".
+[extend]
+useDefault = true
+
+# No path allowlist: .env.example, docs/ and README.md were previously
+# allowlisted, which hid a real TomTom API key committed to .env.example.
+# Suppress individual false positives by fingerprint in .gitleaksignore.

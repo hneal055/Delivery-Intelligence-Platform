@@ -10,3 +10,31 @@ notebooks
 tests
 dummy_image.jpg
 *.ps1
+
+# Secrets: never bake env files into an image; inject them at runtime
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Local environments, caches and reports
+.venv
+venv
+**/__pycache__
+.pytest_cache
+.coverage
+htmlcov
+
+# Data and uploads (proof photos belong in object storage, not the image)
+src/uploads
+src/backend/uploads
+data/uploads
+storage
+uploads
+backups
+
+# Dumps, logs and other local artifacts
+auth_inventory.txt
+*.log
+*.diff
+*.pdf

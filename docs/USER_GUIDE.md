@@ -70,7 +70,7 @@ A row of metric cards showing real-time fleet statistics:
 - **Left (Map)**: An interactive OpenStreetMap showing all drivers as markers. Click any marker to select that driver and highlight them.
 - **Right (Driver List)**: A scrollable list of driver cards showing each driver's name, status, and online indicator. Click a card to select/deselect a driver on the map. The selected driver card is highlighted.
 
-If no drivers appear, the fleet simulator may not be running. Start it with `.\start_platform.ps1` or `.\run_simulation.ps1 -Drivers 50`.
+If no drivers appear, the fleet simulator may not be running. Start it with `.\scripts\dev\start.ps1 -Simulate -Drivers 50`.
 
 ---
 

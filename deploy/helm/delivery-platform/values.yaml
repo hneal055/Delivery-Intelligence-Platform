@@ -103,6 +103,7 @@ secret:
   # Set these via --set or a values-prod.yaml that is NOT committed to VCS
   DATABASE_URL: ""
   SECRET_KEY: ""
+  DIAD_API_KEY: ""
   REDIS_URL: ""
   SMTP_HOST: ""
   SMTP_USER: ""

@@ -4,6 +4,7 @@ import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
 import { JOB_TYPES } from '../../constants/dispatch';
+import type { JobType } from '../../constants/dispatch';
 
 interface CreateJobModalProps {
   opened: boolean;
@@ -35,6 +36,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       scheduled_at: now,
       driver_id: '',
       package_id: '',
+      dest_address: '',
       status: 'pending',
     },
     validate: {
@@ -71,6 +73,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         }
         return null;
       },
+      dest_address: (value, values) => {
+        if (values.type !== 'delivery') return null;
+        return value.trim().length >= 5 ? null : 'Delivery address is required';
+      },
       package_id: (value, values) => {
         if (values.type !== 'pickup') return null;
         const hasNotes = values.notes.trim().length > 0;
@@ -90,16 +96,26 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       {
         title: values.title.trim(),
         notes: values.notes.trim() || undefined,
-        type: values.type,
+        type: values.type as JobType,
         priority: values.priority,
         scheduled_at: values.scheduled_at.toISOString(),
         driver_id: values.driver_id || undefined,
         package_id: values.package_id.trim() || undefined,
+        dest_address:
+          values.type === 'delivery' ? values.dest_address.trim() || undefined : undefined,
       },
       {
         onSuccess: () => {
           form.reset();
           onClose();
+        },
+        onError: (err) => {
+          // e.g. 422 "Address not found" from the geocoder
+          const detail = (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
+          form.setFieldError(
+            values.type === 'delivery' ? 'dest_address' : 'title',
+            typeof detail === 'string' ? detail : 'Could not create the job. Try again.'
+          );
         },
       }
     );
@@ -150,6 +166,16 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             clearable
             {...form.getInputProps('driver_id')}
           />
+
+          {form.values.type === 'delivery' && (
+            <TextInput
+              withAsterisk
+              label="Delivery address"
+              placeholder="Street, city, state (e.g. 222 W Merchandise Mart Plaza, Chicago, IL)"
+              description="Looked up on save; the matched address is used for the driver's map and GPS check."
+              {...form.getInputProps('dest_address')}
+            />
+          )}
 
           {form.values.type === 'pickup' && (
             <TextInput

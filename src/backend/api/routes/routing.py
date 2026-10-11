@@ -8,7 +8,7 @@ from src.backend.services.auth import get_current_device
 from src.backend.api.limiter import limiter
 from src.backend.api.limiter import limiter
 
-router = APIRouter(prefix="/route", tags=["routing"])
+router = APIRouter(prefix="/routing", tags=["routing"])
 
 
 class RouteOptimizationRequest(BaseModel):

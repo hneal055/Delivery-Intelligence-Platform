@@ -17,7 +17,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { getSampleRoute, getRecentProofs } from '../api/client';
+import { getMyPackages } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 import {
   getEffectiveLocation,
   isDevMockGpsEnabled,
@@ -27,6 +28,7 @@ import {
 
 export default function ManifestScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const driverId = useAuthStore((s) => s.driverId);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,19 +61,24 @@ export default function ManifestScreen({ navigation }) {
 
       setDriverCoords(coords);
 
-      const proofs = await getRecentProofs(50).catch(() => []);
-      const deliveredSet = new Set(proofs.map((p) => p.package_id));
-      setDeliveredIds(deliveredSet);
-
-      const routeData = await getSampleRoute(
-        'D001',
-        coords ? coords.latitude : null,
-        coords ? coords.longitude : null
+      // Stops are the packages assigned to this driver; undelivered first.
+      const packages = await getMyPackages();
+      const ordered = [...packages].sort(
+        (a, b) => (a.status === 'delivered') - (b.status === 'delivered')
       );
-
-      setStops(routeData.ordered_stops || []);
-      setIsOptimized(Boolean(routeData.optimized));
-      setTotalKm(routeData.total_distance_km);
+      setDeliveredIds(new Set(packages.filter((p) => p.status === 'delivered').map((p) => p.id)));
+      setStops(
+        ordered.map((p, idx) => ({
+          id: p.id,
+          sequence: idx + 1,
+          lat: p.dest_lat,
+          lon: p.dest_lon,
+          address: p.dest_address || `${p.dest_lat.toFixed(5)}, ${p.dest_lon.toFixed(5)}`,
+          status: p.status,
+        }))
+      );
+      setIsOptimized(false);
+      setTotalKm(null);
     } catch (err) {
       console.error('Error loading manifest:', err);
     } finally {
@@ -341,7 +348,7 @@ export default function ManifestScreen({ navigation }) {
         <View style={styles.titleRow}>
           <View>
             <Text style={styles.screenTitle}>Route Manifest</Text>
-            <Text style={styles.driverSubtext}>Driver D001 • {pendingCount} stops remaining</Text>
+            <Text style={styles.driverSubtext}>Driver {driverId} • {pendingCount} stops remaining</Text>
           </View>
         </View>
 

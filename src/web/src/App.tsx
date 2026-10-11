@@ -8,9 +8,9 @@ import { PackagesPage } from "./pages/PackagesPage";
 import { SchedulingPage } from "./pages/SchedulingPage";
 import { ProofGalleryPage } from "./pages/ProofGalleryPage";
 import { TrackingPage } from "./pages/TrackingPage";
-import { EquipmentPage } from "./pages/EquipmentPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
 
+// Analytics and Equipment pages are not routed: they have no backend
+// endpoints yet and fell back to invented numbers. Re-add them with real data.
 function App() {
   return (
     <BrowserRouter>
@@ -24,13 +24,11 @@ function App() {
           }
         >
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/drivers" element={<DriversPage />} />
           <Route path="/packages" element={<PackagesPage />} />
           <Route path="/scheduling" element={<SchedulingPage />} />
           <Route path="/proofs" element={<ProofGalleryPage />} />
           <Route path="/tracking" element={<TrackingPage />} />
-          <Route path="/equipment" element={<EquipmentPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

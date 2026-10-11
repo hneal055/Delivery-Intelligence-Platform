@@ -33,7 +33,7 @@ def register_driver_token(
 def get_driver_token(
     driver_id: str,
 ) -> Optional[str]:
-    return DRIVERS.get(driver_id)
+    return DRIVER_PUSH_TOKENS.get(driver_id)
 
 
 async def send_push_notification(

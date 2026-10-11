@@ -94,6 +94,9 @@ class DispatchJobCreate(BaseModel):
     notes: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     package_id: Optional[str] = None
+    # Delivery address for a new package; geocoded on create. Ignored when
+    # package_id points at an existing package.
+    dest_address: Optional[str] = None
 
 class DispatchJob(DispatchJobCreate):
     model_config = ConfigDict(from_attributes=True)

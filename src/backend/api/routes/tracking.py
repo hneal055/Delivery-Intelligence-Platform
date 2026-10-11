@@ -12,7 +12,7 @@ from src.backend.models.sql_models import Driver as DriverSQL, LocationHistory
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.core.permissions import Permission
 from src.backend.api.limiter import limiter
-
+from src.backend.services.delivery_service import update_driver_location
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 
@@ -76,14 +76,13 @@ async def update_location(
     if not has_own_update and not has_all_drivers:
         raise HTTPException(status_code=403, detail="Not authorised to update driver location")
 
-    result = await db.execute(select(DriverSQL).where(DriverSQL.id == driver_id))
-    driver = result.scalars().first()
-    if not driver:
-        raise HTTPException(status_code=404, detail="Driver not found")
-
-    driver.current_lat = data.lat
-    driver.current_lon = data.lon
-    await heartbeat_service.update(driver_id)
+    driver = await update_driver_location(
+    db=db,
+    driver_id=driver_id,
+    lat=data.lat,
+    lon=data.lon,
+    name=current_user.username,
+)
 
     history = LocationHistory(
         driver_id=driver_id,

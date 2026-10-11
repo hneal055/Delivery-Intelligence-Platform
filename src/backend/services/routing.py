@@ -114,3 +114,6 @@ class RoutingService:
 
 
 routing_service = RoutingService()
+
+
+RouteOptimizer = RoutingService

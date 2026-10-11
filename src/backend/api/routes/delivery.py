@@ -1,231 +1,316 @@
+import logging
+import time
+from datetime import datetime, timezone
+from typing import List, Optional
+
 from fastapi import (
     APIRouter,
-    HTTPException,
+    BackgroundTasks,
     Depends,
-    UploadFile,
     File,
     Form,
-    status,
+    HTTPException,
+    Query,
     Request,
+    UploadFile,
 )
+from fastapi.responses import Response
 from pydantic import BaseModel
-from typing import List, Optional, Any
-
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from src.backend.models.domain import Location, User
-from src.backend.models.sql_models import Package
-from src.backend.api.deps import get_current_active_user
-from src.backend.core.database import get_db
-from src.backend.core.storage import proof_storage, is_safe_filename
-from src.analytics.geofencing.core import is_in_delivery_zone
+from src.analytics.geofencing.engine import geofence_engine
 from src.analytics.image_analysis.verifier import image_verifier
-from src.backend.api.metrics import DELIVERIES_COMPLETED
-
-
-router = APIRouter(
-    prefix="/delivery",
-    tags=["delivery"],
+from src.backend.api.deps import get_current_active_user
+from src.backend.api.limiter import limiter
+from src.backend.api.metrics import DELIVERIES_COMPLETED, driver_heartbeats
+from src.backend.core.database import get_db
+from src.backend.core.storage import is_safe_filename, proof_storage
+from src.backend.models.domain import Location, User, UserRole
+from src.backend.models.sql_models import DeliveryProof, Package
+from src.backend.services import delivery_service
+from src.backend.services.notifications import (
+    NotificationEvent,
+    notification_service,
 )
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/delivery", tags=["delivery"])
+
+# A scan moves a package into the van only from these states; a delivered
+# or exception package keeps its status so a stray rescan cannot undo it.
+LOADABLE_STATUSES = {"pending", "assigned"}
+
+# SVG path data from the in-app signature pad; generous but bounded.
+MAX_SIGNATURE_CHARS = 100_000
+
+
+async def _get_package(db: AsyncSession, package_id: str) -> Optional[Package]:
+    result = await db.execute(select(Package).where(Package.id == package_id))
+    return result.scalars().first()
+
+
+# A package in one of these states has been closed out by a driver.
+FINAL_STATUSES = {"delivered", "exception"}
+
+
+def _acting_driver(current_user: User, claimed_driver_id: str) -> str:
+    """Who the delivery is recorded against. A driver is always themselves
+    (their username is their driver ID), whatever the form says; office
+    roles may record on behalf of the named driver."""
+    if current_user.role == UserRole.DRIVER:
+        return current_user.username
+    return claimed_driver_id
+
+
+def _check_can_close(current_user: User, package: Package) -> None:
+    """Drivers may only close out packages assigned to them, and nobody may
+    close a package twice."""
+    if current_user.role == UserRole.DRIVER and package.driver_id != current_user.username:
+        raise HTTPException(status_code=403, detail="Package is not assigned to you")
+    if package.status in FINAL_STATUSES:
+        raise HTTPException(
+            status_code=409, detail=f"Package already {package.status}"
+        )
+
+
+@router.get("/recent-proofs")
+async def get_recent_proofs(
+    limit: int = Query(50, ge=1, le=200),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """Newest accepted proofs. Drivers see only their own."""
+    query = select(DeliveryProof).order_by(DeliveryProof.captured_at.desc())
+    if current_user.role == UserRole.DRIVER:
+        query = query.where(DeliveryProof.driver_id == current_user.username)
+    result = await db.execute(query.limit(limit))
+    return [
+        {
+            "packageId": proof.package_id,
+            "driverId": proof.driver_id,
+            "timestamp": proof.captured_at.isoformat() if proof.captured_at else None,
+            "filename": proof.photo_key,
+            "url": "/delivery/proof/" + proof.photo_key,
+            "lat": proof.lat,
+            "lon": proof.lon,
+            "distanceMeters": proof.distance_m,
+            "signature": proof.signature_svg,
+        }
+        for proof in result.scalars().all()
+    ]
+
+
+@router.get("/proof/{filename}")
+async def get_proof_image(
+    filename: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not is_safe_filename(filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    # Drivers may only see photos from their own recorded deliveries; the
+    # filenames are predictable, so knowing one must not be enough.
+    if current_user.role == UserRole.DRIVER:
+        owned = await db.execute(
+            select(DeliveryProof.id).where(
+                DeliveryProof.photo_key == filename,
+                DeliveryProof.driver_id == current_user.username,
+            )
+        )
+        if owned.first() is None:
+            raise HTTPException(status_code=404, detail="Image not found")
+    data = await proof_storage.get_proof(filename)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    media_type = (
+        "image/png" if filename.lower().endswith(".png") else "image/jpeg"
+    )
+    return Response(content=data, media_type=media_type)
 
 
 class LocationVerifyRequest(BaseModel):
     driver_id: str = "unknown"
     current_location: Location
     target_delivery_location: Location
-    delivery_zone: Optional[List[Location]] = None
-
-
-class ExceptionReportRequest(BaseModel):
-    package_id: str
-    driver_id: str
-    reason: str
-
-
-@router.get("/health")
-async def health():
-    return {"status": "ok"}
 
 
 @router.post("/verify-location")
+@limiter.limit("1000/minute")
 async def verify_location(
+    request: Request,
     payload: LocationVerifyRequest,
     current_user: User = Depends(get_current_active_user),
 ):
-    """
-    Verify if the driver's current location is within the acceptable delivery zone.
-    """
-    if payload.delivery_zone and len(payload.delivery_zone) >= 3:
-        in_zone = is_in_delivery_zone(
-            payload.current_location,
-            payload.delivery_zone,
-        )
-    else:
-        lat_diff = abs(
-            payload.current_location.lat
-            - payload.target_delivery_location.lat
-        )
-        lon_diff = abs(
-            payload.current_location.lon
-            - payload.target_delivery_location.lon
-        )
+    driver_id = (
+        payload.driver_id
+        if payload.driver_id != "unknown"
+        else current_user.username
+    )
+    driver_heartbeats[driver_id] = time.time()
 
-        in_zone = (
-            lat_diff < 0.001
-            and lon_diff < 0.001
+    is_valid, distance = geofence_engine.verify_delivery_location(
+        (payload.current_location.lat, payload.current_location.lon),
+        (
+            payload.target_delivery_location.lat,
+            payload.target_delivery_location.lon,
+        ),
+    )
+
+    if is_valid:
+        return {
+            "message": "Location Verified",
+            "allowed": True,
+            "distance": distance,
+        }
+    return {
+        "message": "Driver is too far ({0:.2f}m) from delivery point".format(
+            distance
+        ),
+        "allowed": False,
+        "distance": distance,
+    }
+
+
+class ScanRequest(BaseModel):
+    barcode: str
+    scan_type: Optional[str] = None
+
+
+@router.post("/scan")
+async def scan_package(
+    payload: ScanRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Load a package into the van by its ID or tracking code."""
+    barcode = payload.barcode.strip()
+    result = await db.execute(
+        select(Package).where(
+            or_(Package.id == barcode, Package.tracking_code == barcode)
         )
+    )
+    package = result.scalars().first()
+    if package is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    if package.status in LOADABLE_STATUSES:
+        package.status = "loaded"
+        package.loaded_at = datetime.now(timezone.utc)
+        await db.commit()
 
     return {
-        "allowed": in_zone,
-        "driver_id": payload.driver_id,
-        "message": (
-            "Location verified successfully"
-            if in_zone
-            else "Driver is outside the delivery zone"
-        ),
+        "status": "success",
+        "package_id": package.id,
+        "package_status": package.status,
+        "dest_address": package.dest_address,
     }
 
 
 @router.post("/confirm")
 async def confirm_delivery(
-    request: Request,
-    package_id: Optional[Any] = Form(default=None),
-    driver_id: Optional[Any] = Form(default=None),
-    image: Optional[UploadFile] = File(default=None),
-    photo: Optional[UploadFile] = File(default=None),
-    db: AsyncSession = Depends(get_db),
+    package_id: str = Form(...),
+    driver_id: str = Form(...),
+    photo: UploadFile = File(...),
+    dest_lat: Optional[float] = Form(None),
+    dest_lon: Optional[float] = Form(None),
+    signature_path: Optional[str] = Form(None, max_length=MAX_SIGNATURE_CHARS),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Confirm package delivery with proof-of-delivery validation.
-    """
-    uploaded_file = image or photo
+    driver_id = _acting_driver(current_user, driver_id)
+    driver_heartbeats[driver_id] = time.time()
+    content = await photo.read()
 
-    def safe_str(value: Any, default: str) -> str:
-        if value is None:
-            return default
-        if isinstance(value, bytes):
-            return value.decode("utf-8", errors="ignore").strip()
-        return str(value).strip()
+    # 1. Only real packages can be delivered; never invent one. The photo of
+    #    an unknown package is still kept as evidence.
+    package = await _get_package(db, package_id)
+    if package is None:
+        await proof_storage.save_proof(package_id, driver_id, content)
+        raise HTTPException(status_code=404, detail="Package not found")
 
-    pkg_str = safe_str(package_id, "pkg-unknown")
-    drv_str = safe_str(driver_id, "driver-unknown")
+    # 2. Not someone else's package, and not already closed (this also makes
+    #    a resent upload a harmless 409 instead of a duplicate proof).
+    _check_can_close(current_user, package)
 
-    if pkg_str == "pkg-unknown" or drv_str == "driver-unknown":
-        try:
-            body = await request.json()
-            if pkg_str == "pkg-unknown":
-                pkg_str = safe_str(body.get("package_id"), "pkg-unknown")
-            if drv_str == "driver-unknown":
-                drv_str = safe_str(body.get("driver_id"), "driver-unknown")
-        except Exception:
-            pass
+    # 3. Persist the proof before the quality check: a rejected photo is
+    #    still evidence and stays in storage.
+    saved_filename = await proof_storage.save_proof(package_id, driver_id, content)
 
-    if pkg_str == "pkg-unknown":
+    # 4. Quality check (blur/darkness). Reject so the driver retakes,
+    #    but the original stays in storage.
+    is_valid_image, reason = image_verifier.verify_proof_of_delivery(content)
+    if not is_valid_image:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Package ID is required",
+            status_code=400,
+            detail="Invalid Proof of Delivery: {0}".format(reason),
         )
 
-    filename = "proof.jpg"
-    if uploaded_file:
-        filename = uploaded_file.filename or "proof.jpg"
-        if uploaded_file.filename and not is_safe_filename(uploaded_file.filename):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid image filename or format",
-            )
-
-    file_bytes = await uploaded_file.read() if uploaded_file else b"mock_image_bytes"
-
-    # Invoke the image verifier service matching test expectations
-    try:
-        is_valid, reason = image_verifier.verify_proof_of_delivery(file_bytes)
-    except Exception:
-        is_valid = len(file_bytes) >= 10 and b"INVALID" not in file_bytes and b"notanimage" not in file_bytes
-        reason = "OK" if is_valid else "Image validation failed"
-
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid Proof: {reason}",
+    # 5. Record where the driver was. Recorded, not enforced: offline
+    #    captures can arrive without a fresh fix.
+    distance = None
+    if dest_lat is not None and dest_lon is not None:
+        _, distance = geofence_engine.verify_delivery_location(
+            (dest_lat, dest_lon), (package.dest_lat, package.dest_lon)
+        )
+        logger.info(
+            "Package %s confirmed %.0fm from its destination", package_id, distance
         )
 
-    file_path = await proof_storage.save_proof(
-        pkg_str,
-        drv_str,
-        file_bytes,
-        filename,
+    db.add(
+        DeliveryProof(
+            package_id=package_id,
+            driver_id=driver_id,
+            photo_key=saved_filename,
+            signature_svg=signature_path or None,
+            lat=dest_lat,
+            lon=dest_lon,
+            distance_m=distance,
+        )
     )
-
-    result = await db.execute(select(Package).where(Package.id == pkg_str))
-    pkg_record = result.scalars().first()
-    if pkg_record:
-        pkg_record.status = "delivered"
-        await db.commit()
-
+    await delivery_service.update_package_status(
+        db, package_id, "delivered", driver_id
+    )
+    await delivery_service.complete_dispatch_job(db, package_id)
     DELIVERIES_COMPLETED.inc()
+
+    background_tasks.add_task(
+        notification_service.send_notification,
+        "customer_placeholder",
+        "email@example.com",
+        NotificationEvent.DELIVERY_COMPLETED,
+    )
 
     return {
         "status": "success",
-        "package_id": pkg_str,
-        "driver_id": drv_str,
-        "proof_path": file_path,
-        "message": "Delivery confirmed and marked delivered",
+        "package_id": package_id,
+        "proof": saved_filename,
     }
 
 
 @router.post("/exception")
 async def report_exception(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
+    package_id: str = Form(...),
+    driver_id: str = Form(...),
+    reason: str = Form(...),
     current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Report a delivery exception or blockade.
-    """
-    pkg_id = "pkg-unknown"
-    drv_id = "driver-unknown"
-    rsn = "unknown"
+    driver_id = _acting_driver(current_user, driver_id)
+    driver_heartbeats[driver_id] = time.time()
+    package = await _get_package(db, package_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+    _check_can_close(current_user, package)
 
-    try:
-        body = await request.json()
-        pkg_id = body.get("package_id", pkg_id)
-        drv_id = body.get("driver_id", drv_id)
-        rsn = body.get("reason", rsn)
-    except Exception:
-        try:
-            form = await request.form()
-            pkg_id = form.get("package_id", pkg_id)
-            drv_id = form.get("driver_id", drv_id)
-            rsn = form.get("reason", rsn)
-        except Exception:
-            pass
-
-    pkg_str = str(pkg_id).strip()
-
-    result = await db.execute(select(Package).where(Package.id == pkg_str))
-    pkg_record = result.scalars().first()
-    if pkg_record:
-        pkg_record.status = "exception"
-        await db.commit()
-        await db.refresh(pkg_record)
-
+    await delivery_service.update_package_status(
+        db, package_id, "exception", driver_id
+    )
+    logger.info("Exception on package %s: %s", package_id, reason)
     return {
         "status": "exception_reported",
-        "package_id": pkg_str,
-        "reason": str(rsn),
-        "message": "Exception successfully reported to dispatch",
+        "package_id": package_id,
+        "reason": reason,
     }
-
-
-@router.get("/recent-proofs")
-async def recent_proofs(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """
-    Retrieve recent proof-of-delivery uploads (Manager/Admin only). Returns a list.
-    """
-    return []

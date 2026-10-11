@@ -1,95 +1,99 @@
-version: '3.8'
+networks:
+  delivery_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_uploads:
+  app_data:
 
 services:
-  # -------------------------------------------------------------
-  # PostgreSQL / PostGIS Database Service
-  # -------------------------------------------------------------
   delivery_db:
     image: postgis/postgis:15-3.3
     container_name: delivery_db
-    restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-delivery_db}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: delivery
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./src/backend/schema_analytics.sql:/docker-entrypoint-initdb.d/01_schema_analytics.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d delivery_db"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d delivery"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
+    restart: unless-stopped
     networks:
       - delivery_net
 
-  # -------------------------------------------------------------
-  # Redis Cache & Pub/Sub Service
-  # -------------------------------------------------------------
-  redis:
-    image: redis:alpine
+  delivery_redis:
+    image: redis:7-alpine
     container_name: delivery_redis
-    restart: always
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
     networks:
       - delivery_net
 
-  # -------------------------------------------------------------
-  # FastAPI Backend Service
-  # -------------------------------------------------------------
   backend:
     build:
       context: .
       dockerfile: src/backend/Dockerfile
+    image: delivery_backend:latest
     container_name: delivery_backend
-    restart: always
-    depends_on:
-      delivery_db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@delivery_db:5432/${POSTGRES_DB:-delivery_db}
-      REDIS_URL: redis://redis:6379
-      API_PORT: 8000
-      LOG_LEVEL: info
     ports:
-      - "8002:8000"
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@delivery_db:5432/delivery
+      REDIS_URL: redis://delivery_redis:6379
+      CELERY_BROKER_URL: redis://delivery_redis:6379/0
+      CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0
     volumes:
-      - upload_data:/app/uploads
+      - .:/app
+      - app_uploads:/app/uploads
+      - app_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - delivery_db
+      - delivery_redis
     networks:
       - delivery_net
 
-  # -------------------------------------------------------------
-  # Web Dispatcher & Operations Center (Nginx)
-  # -------------------------------------------------------------
-  web:
+  telemetry_worker:
+    build:
+      context: .
+      dockerfile: src/backend/Dockerfile
+    image: delivery_backend:latest
+    command: python -m celery -A src.backend.worker.celery_app.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@delivery_db:5432/delivery
+      REDIS_URL: redis://delivery_redis:6379
+      CELERY_BROKER_URL: redis://delivery_redis:6379/0
+      CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    depends_on:
+      - delivery_db
+      - delivery_redis
+    networks:
+      - delivery_net
+
+  frontend:
     build:
       context: ./src/web
       dockerfile: Dockerfile
-    container_name: delivery_web
-    restart: always
+    image: delivery_frontend:latest
+    container_name: delivery_frontend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
     depends_on:
       - backend
-    ports:
-      - "80:80"
     networks:
       - delivery_net
-
-volumes:
-  postgres_data:
-    driver: local
-  upload_data:
-    driver: local
-
-networks:
-  delivery_net:
-    driver: bridge

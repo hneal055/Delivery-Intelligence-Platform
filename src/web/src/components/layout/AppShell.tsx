@@ -36,12 +36,6 @@ export function AppShell() {
             active={location.pathname === "/"}
           />
           <NavLink
-            label="Fleet Analytics"
-            component={RouterNavLink}
-            to="/analytics"
-            active={location.pathname === "/analytics"}
-          />
-          <NavLink
             label="Tracking"
             component={RouterNavLink}
             to="/tracking"
@@ -70,12 +64,6 @@ export function AppShell() {
             component={RouterNavLink}
             to="/proofs"
             active={location.pathname === "/proofs"}
-          />
-          <NavLink
-            label="Equipment"
-            component={RouterNavLink}
-            to="/equipment"
-            active={location.pathname === "/equipment"}
           />
         </Stack>
       </MantineAppShell.Navbar>
