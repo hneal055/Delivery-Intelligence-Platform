@@ -146,6 +146,8 @@ async def list_deliveries(
     # A driver's ID is their login username (see drivers table).
     if current_user.role == UserRole.DRIVER:
         driver_id = current_user.username
+        # The app refreshes this list while open, so it doubles as "online".
+        await heartbeat_service.update(driver_id)
     query = select(PackageSQL)
     if status:
         query = query.where(PackageSQL.status == status)

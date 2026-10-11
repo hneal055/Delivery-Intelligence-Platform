@@ -98,3 +98,21 @@ async def test_register_device_upsert(int_client_driver):
     resp2 = await client.post("/auth/register-device", json=payload)
     assert resp1.status_code == 200
     assert resp2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_driver_login_creates_assignable_driver_profile(int_client_anon):
+    """A driver account that logs in becomes assignable in dispatch."""
+    from sqlalchemy import select as _select
+    from src.backend.models.sql_models import Driver as _Driver
+    from tests.integration.conftest import int_db_seed_user
+    from src.backend.models.domain import UserRole as _Role
+
+    client, db = int_client_anon
+    await int_db_seed_user(db, "newdriver", "Password1!", _Role.DRIVER)
+
+    resp = await client.post("/auth/token", data={"username": "newdriver", "password": "Password1!"})
+
+    assert resp.status_code == 200
+    driver = (await db.execute(_select(_Driver).where(_Driver.id == "newdriver"))).scalar_one()
+    assert driver.status == "active"
