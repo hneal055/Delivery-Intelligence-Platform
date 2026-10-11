@@ -74,6 +74,15 @@ class Package(Base):
     dest_address = Column(String, nullable=True)
     dest_unit = Column(String, nullable=True)  # suite / floor / dock
     delivery_instructions = Column(Text, nullable=True)  # shown to the driver
+
+    # Optional pickup leg: where the driver collects the package first
+    pickup_address = Column(String, nullable=True)
+    pickup_lat = Column(Float, nullable=True)
+    pickup_lon = Column(Float, nullable=True)
+    pickup_instructions = Column(Text, nullable=True)
+    ready_at = Column(DateTime(timezone=True), nullable=True)  # shipper says ready
+
+    exception_reason = Column(Text, nullable=True)  # why the driver could not complete
     destination_location = Column(Geometry('POINT', srid=4326), nullable=True)
     
     status = Column(String, default="pending")

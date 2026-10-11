@@ -99,6 +99,11 @@ class DispatchJobCreate(BaseModel):
     dest_address: Optional[str] = None
     dest_unit: Optional[str] = Field(None, max_length=100)
     delivery_instructions: Optional[str] = Field(None, max_length=1000)
+    # Optional pickup leg (geocoded like dest_address). ready_for_pickup=False
+    # means the shipper is not ready yet; dispatch marks it ready later.
+    pickup_address: Optional[str] = None
+    pickup_instructions: Optional[str] = Field(None, max_length=1000)
+    ready_for_pickup: bool = True
 
 class DispatchJob(DispatchJobCreate):
     model_config = ConfigDict(from_attributes=True)

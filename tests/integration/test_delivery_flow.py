@@ -8,7 +8,7 @@ Integration tests: Delivery flow
 """
 import io
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from tests.integration.conftest import int_db_seed_driver, int_db_seed_package
 from sqlalchemy import select
 from src.backend.core.storage import proof_storage
@@ -263,7 +263,7 @@ async def test_exception_unknown_package_returns_404(int_client_driver):
 
     resp = await client.post(
         "/delivery/exception",
-        data={"package_id": "no-such-package", "driver_id": drv.id, "reason": "x"},
+        data={"package_id": "no-such-package", "driver_id": drv.id, "reason": "Closed"},
     )
     assert resp.status_code == 404
 
@@ -356,7 +356,7 @@ async def test_driver_cannot_confirm_someone_elses_package(int_client_driver, _p
     assert list(_proofs_in_tmp.iterdir()) == []
     exc = await client.post(
         "/delivery/exception",
-        data={"package_id": pkg.id, "driver_id": "other-driver", "reason": "x"},
+        data={"package_id": pkg.id, "driver_id": "other-driver", "reason": "Closed"},
     )
     assert exc.status_code == 403
 
@@ -437,3 +437,21 @@ async def test_office_can_download_any_proof_photo(int_client_manager, _proofs_i
 
     resp = await client.get("/delivery/proof/theirs.jpg")
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_problem_report_keeps_reason_for_dispatch(int_client_driver):
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="loaded")
+
+    with patch("src.backend.api.routes.delivery.ws_manager.broadcast_to_dispatchers", AsyncMock()) as bc:
+        resp = await client.post(
+            "/delivery/exception",
+            data={"package_id": pkg.id, "driver_id": drv.username, "reason": "Recipient refused"},
+        )
+
+    assert resp.status_code == 200
+    await db.refresh(pkg)
+    assert pkg.status == "exception"
+    assert pkg.exception_reason == "Recipient refused"
+    assert bc.await_args.args[0]["type"] == "problem_reported"

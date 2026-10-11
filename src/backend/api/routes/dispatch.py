@@ -1,7 +1,7 @@
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timezone
@@ -20,6 +20,7 @@ from src.backend.models.sql_models import (
 )
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.services.geocoding import geocode_in_service_area
+from src.backend.services.driver_alerts import alert_driver
 from src.backend.core.permissions import Permission
 
 
@@ -48,6 +49,13 @@ class PackageResponse(BaseModel):
     dest_address: Optional[str] = None
     dest_unit: Optional[str] = None
     delivery_instructions: Optional[str] = None
+    pickup_address: Optional[str] = None
+    pickup_lat: Optional[float] = None
+    pickup_lon: Optional[float] = None
+    pickup_instructions: Optional[str] = None
+    ready_at: Optional[str] = None
+    exception_reason: Optional[str] = None
+    tracking_code: Optional[str] = None
     status: str
     section: Optional[str] = None
     distance_km: Optional[float] = None
@@ -127,6 +135,13 @@ async def get_driver_packages(
             dest_address=p.dest_address,
             dest_unit=p.dest_unit,
             delivery_instructions=p.delivery_instructions,
+            pickup_address=p.pickup_address,
+            pickup_lat=p.pickup_lat,
+            pickup_lon=p.pickup_lon,
+            pickup_instructions=p.pickup_instructions,
+            ready_at=p.ready_at.isoformat() if p.ready_at else None,
+            exception_reason=p.exception_reason,
+            tracking_code=p.tracking_code,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -172,6 +187,13 @@ async def list_deliveries(
             dest_address=p.dest_address,
             dest_unit=p.dest_unit,
             delivery_instructions=p.delivery_instructions,
+            pickup_address=p.pickup_address,
+            pickup_lat=p.pickup_lat,
+            pickup_lon=p.pickup_lon,
+            pickup_instructions=p.pickup_instructions,
+            ready_at=p.ready_at.isoformat() if p.ready_at else None,
+            exception_reason=p.exception_reason,
+            tracking_code=p.tracking_code,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -212,6 +234,13 @@ async def list_packages(
             dest_address=p.dest_address,
             dest_unit=p.dest_unit,
             delivery_instructions=p.delivery_instructions,
+            pickup_address=p.pickup_address,
+            pickup_lat=p.pickup_lat,
+            pickup_lon=p.pickup_lon,
+            pickup_instructions=p.pickup_instructions,
+            ready_at=p.ready_at.isoformat() if p.ready_at else None,
+            exception_reason=p.exception_reason,
+            tracking_code=p.tracking_code,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -272,6 +301,7 @@ async def get_dashboard_summary(
 async def create_job(
     request: Request,
     job_data: DispatchJobCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -296,6 +326,14 @@ async def create_job(
                 status_code=422,
                 detail="Address not found. Check the street, city and state.",
             )
+        pickup = None
+        if job_data.pickup_address and job_data.pickup_address.strip():
+            pickup = await geocode_in_service_area(job_data.pickup_address.strip())
+            if pickup is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Pickup address not found. Check the street, city and state.",
+                )
         package = PackageSQL(
             id=str(uuid.uuid4()),
             dest_lat=location.lat,
@@ -303,6 +341,13 @@ async def create_job(
             dest_address=location.matched_address,
             dest_unit=(job_data.dest_unit or "").strip() or None,
             delivery_instructions=(job_data.delivery_instructions or "").strip() or None,
+            pickup_address=pickup.matched_address if pickup else None,
+            pickup_lat=pickup.lat if pickup else None,
+            pickup_lon=pickup.lon if pickup else None,
+            pickup_instructions=(
+                ((job_data.pickup_instructions or "").strip() or None) if pickup else None
+            ),
+            ready_at=datetime.now(timezone.utc) if job_data.ready_for_pickup else None,
             status="pending",
             priority=job_data.priority,
             tracking_code=_new_tracking_code(),
@@ -330,6 +375,9 @@ async def create_job(
     db.add(job)
     await db.commit()
     await db.refresh(job)
+
+    if package and job_data.driver_id:
+        await alert_driver(db, background_tasks, job_data.driver_id, package, "assigned")
 
     return job
 
@@ -364,6 +412,7 @@ async def list_jobs(
 async def assign_job(
     request: Request,
     job_id: str,
+    background_tasks: BackgroundTasks,
     driver_id: str = Query(...),
     current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
     db: AsyncSession = Depends(get_db),
@@ -401,6 +450,7 @@ async def assign_job(
     job.status = "assigned"
 
     # The package goes with the job, so it shows on the driver's manifest.
+    package = None
     if job.package_id:
         package = await db.get(PackageSQL, job.package_id)
         if package:
@@ -410,6 +460,8 @@ async def assign_job(
 
     await db.commit()
     await db.refresh(job)
+    if package:
+        await alert_driver(db, background_tasks, driver_id, package, "assigned")
 
     return job
 
@@ -552,3 +604,49 @@ async def preview_address(
         "lon": location.lon,
         "used_default_area": location.used_default_area,
     }
+
+
+@router.put("/packages/{package_id}/ready")
+async def mark_ready_for_pickup(
+    package_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """The shipper says the package can be collected: stamp ready_at and
+    alert the assigned driver. Requires manager or admin role."""
+    package = await db.get(PackageSQL, package_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+    if package.status in ("loaded", "delivered", "exception"):
+        raise HTTPException(status_code=409, detail=f"Package already {package.status}")
+
+    package.ready_at = datetime.now(timezone.utc)
+    await db.commit()
+    await alert_driver(db, background_tasks, package.driver_id, package, "ready")
+    return {"package_id": package.id, "ready_at": package.ready_at.isoformat()}
+
+
+@router.put("/packages/{package_id}/reopen")
+async def reopen_package(
+    package_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a package the driver reported a problem with back out: clears
+    the problem and returns it to the driver's list (or the unassigned pool).
+    Requires manager or admin role."""
+    package = await db.get(PackageSQL, package_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+    if package.status != "exception":
+        raise HTTPException(
+            status_code=409, detail="Only packages with a reported problem can be reopened"
+        )
+
+    package.status = "assigned" if package.driver_id else "pending"
+    package.exception_reason = None
+    await db.commit()
+    await alert_driver(db, background_tasks, package.driver_id, package, "assigned")
+    return {"package_id": package.id, "status": package.status}
