@@ -33,6 +33,10 @@ export interface Package {
   ready_at: string | null;
   exception_reason: string | null;
   tracking_code: string | null;
+  recipient_name: string | null;
+  recipient_phone: string | null;
+  pickup_contact_name: string | null;
+  pickup_contact_phone: string | null;
   status: string;
   section: string | null;
   distance_km: number | null;
@@ -121,6 +125,10 @@ export interface DispatchJobCreate {
   pickup_address?: string;
   pickup_instructions?: string;
   ready_for_pickup?: boolean;
+  recipient_name?: string;
+  recipient_phone?: string;
+  pickup_contact_name?: string;
+  pickup_contact_phone?: string;
 }
 
 export interface AddressMatch {
@@ -153,6 +161,11 @@ export interface ProofOfDelivery {
   driverId: string;
   timestamp: string;
   url: string;
+  /** API path of the photo (needs the login token; see useAuthedImage) */
+  path: string;
+  receivedBy: string | null;
+  signature: string | null;
+  distanceMeters: number | null;
 }
 
 export interface LocationHistoryPoint {

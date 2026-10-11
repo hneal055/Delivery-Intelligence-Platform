@@ -24,7 +24,7 @@ Each stop shows what to do **next**:
 | **DELIVER** | The package is with you; take it to the delivery address |
 | **DELIVERED** / **PROBLEM** | Finished |
 
-Always read the **amber ⚠ instructions** (e.g. *"Leave with concierge"*, *"Ask for Luis at the parts counter"*) and the **suite / floor / dock**.
+Always read the **amber ⚠ instructions** (e.g. *"Leave with concierge"*, *"Ask for Luis at the parts counter"*) and the **suite / floor / dock**. **Ask for** / **Recipient** shows who to see. Tap **📞 Call** if you can't find them.
 
 ## At the pickup
 
@@ -36,7 +36,7 @@ Always read the **amber ⚠ instructions** (e.g. *"Leave with concierge"*, *"Ask
 
 1. Tap **Directions**, then **Deliver** when you arrive.
 2. **Take a photo** of the package at the door/desk (required, in focus, with light).
-3. Ask the recipient to **sign** on the screen (when possible).
+3. Ask the recipient to **sign** on the screen (when possible), and check **Received by**. It's filled in with the expected recipient; change it to the name of whoever actually took the package (e.g. *"Front desk, J. Kim"*).
 4. Tap **Confirm**. The time, your GPS position, photo and signature are saved as proof.
    - *"Retake Photo"* → the photo was too dark/blurry; take another.
    - *"Saved Offline"* → no signal; it sends by itself when you're back online. Don't redo it.

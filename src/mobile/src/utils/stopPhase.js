@@ -27,6 +27,8 @@ export function nextTarget(pkg) {
       lon: pkg.pickup_lon,
       instructions: pkg.pickup_instructions,
       unit: null,
+      contactName: pkg.pickup_contact_name,
+      contactPhone: pkg.pickup_contact_phone,
     };
   }
   return {
@@ -36,5 +38,7 @@ export function nextTarget(pkg) {
     lon: pkg.dest_lon,
     instructions: pkg.delivery_instructions,
     unit: pkg.dest_unit,
+    contactName: pkg.recipient_name,
+    contactPhone: pkg.recipient_phone,
   };
 }

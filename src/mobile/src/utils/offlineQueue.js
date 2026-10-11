@@ -75,6 +75,9 @@ export function buildConfirmFields(item) {
   if (item.signature_path) {
     fields.signature_path = item.signature_path;
   }
+  if (item.received_by) {
+    fields.received_by = item.received_by;
+  }
   return fields;
 }
 
@@ -122,6 +125,7 @@ export async function enqueueOfflineDelivery(payload) {
       dest_lat: payload.dest_lat ?? null,
       dest_lon: payload.dest_lon ?? null,
       signature_path: payload.signature_path || '',
+      received_by: payload.received_by || '',
       photoUri: permanentPhotoUri,
       retryCount: 0,
       failed: false,

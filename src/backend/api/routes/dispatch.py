@@ -56,6 +56,10 @@ class PackageResponse(BaseModel):
     ready_at: Optional[str] = None
     exception_reason: Optional[str] = None
     tracking_code: Optional[str] = None
+    recipient_name: Optional[str] = None
+    recipient_phone: Optional[str] = None
+    pickup_contact_name: Optional[str] = None
+    pickup_contact_phone: Optional[str] = None
     status: str
     section: Optional[str] = None
     distance_km: Optional[float] = None
@@ -142,6 +146,10 @@ async def get_driver_packages(
             ready_at=p.ready_at.isoformat() if p.ready_at else None,
             exception_reason=p.exception_reason,
             tracking_code=p.tracking_code,
+            recipient_name=p.recipient_name,
+            recipient_phone=p.recipient_phone,
+            pickup_contact_name=p.pickup_contact_name,
+            pickup_contact_phone=p.pickup_contact_phone,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -194,6 +202,10 @@ async def list_deliveries(
             ready_at=p.ready_at.isoformat() if p.ready_at else None,
             exception_reason=p.exception_reason,
             tracking_code=p.tracking_code,
+            recipient_name=p.recipient_name,
+            recipient_phone=p.recipient_phone,
+            pickup_contact_name=p.pickup_contact_name,
+            pickup_contact_phone=p.pickup_contact_phone,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -241,6 +253,10 @@ async def list_packages(
             ready_at=p.ready_at.isoformat() if p.ready_at else None,
             exception_reason=p.exception_reason,
             tracking_code=p.tracking_code,
+            recipient_name=p.recipient_name,
+            recipient_phone=p.recipient_phone,
+            pickup_contact_name=p.pickup_contact_name,
+            pickup_contact_phone=p.pickup_contact_phone,
             status=p.status,
             section=p.section,
             distance_km=p.distance_km,
@@ -353,6 +369,10 @@ async def create_job(
                 ((job_data.pickup_instructions or "").strip() or None) if pickup else None
             ),
             ready_at=datetime.now(timezone.utc) if job_data.ready_for_pickup else None,
+            recipient_name=(job_data.recipient_name or "").strip() or None,
+            recipient_phone=(job_data.recipient_phone or "").strip() or None,
+            pickup_contact_name=(job_data.pickup_contact_name or "").strip() or None if pickup else None,
+            pickup_contact_phone=(job_data.pickup_contact_phone or "").strip() or None if pickup else None,
             status="pending",
             priority=job_data.priority,
             tracking_code=_new_tracking_code(),

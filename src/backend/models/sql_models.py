@@ -83,6 +83,12 @@ class Package(Base):
     ready_at = Column(DateTime(timezone=True), nullable=True)  # shipper says ready
 
     exception_reason = Column(Text, nullable=True)  # why the driver could not complete
+
+    # Who to ask for / call at each end
+    recipient_name = Column(String, nullable=True)
+    recipient_phone = Column(String, nullable=True)
+    pickup_contact_name = Column(String, nullable=True)
+    pickup_contact_phone = Column(String, nullable=True)
     destination_location = Column(Geometry('POINT', srid=4326), nullable=True)
     
     status = Column(String, default="pending")
@@ -147,6 +153,7 @@ class DeliveryProof(Base):
     lat = Column(Float, nullable=True)  # where the driver was at confirm
     lon = Column(Float, nullable=True)
     distance_m = Column(Float, nullable=True)  # from the package destination
+    received_by = Column(String, nullable=True)  # name of the person who took it
     captured_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 

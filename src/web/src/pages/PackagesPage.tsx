@@ -122,6 +122,11 @@ export function PackagesPage() {
                   {pkg.dest_address || `${pkg.dest_lat.toFixed(4)}, ${pkg.dest_lon.toFixed(4)}`}
                   {pkg.dest_unit ? ` — ${pkg.dest_unit}` : ""}
                 </Text>
+                {(pkg.recipient_name || pkg.recipient_phone) && (
+                  <Text size="xs" c="dimmed">
+                    To: {[pkg.recipient_name, pkg.recipient_phone].filter(Boolean).join(" · ")}
+                  </Text>
+                )}
               </Table.Td>
               <Table.Td>
                 {pkg.created_at ? new Date(pkg.created_at).toLocaleString() : "N/A"}

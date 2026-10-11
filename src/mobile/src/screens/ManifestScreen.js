@@ -89,6 +89,8 @@ export default function ManifestScreen({ navigation }) {
             problem: p.exception_reason,
             unit: target.unit,
             instructions: target.instructions,
+            contactName: target.contactName,
+            contactPhone: target.contactPhone,
           };
         })
       );
@@ -333,6 +335,22 @@ export default function ManifestScreen({ navigation }) {
         ) : null}
         {item.instructions ? (
           <Text style={styles.instructionsText}>⚠ {item.instructions}</Text>
+        ) : null}
+        {item.contactName || item.contactPhone ? (
+          <View style={styles.contactRow}>
+            <Text style={styles.unitText}>
+              {item.phase === 'pickup' ? 'Ask for: ' : 'Recipient: '}
+              {item.contactName || 'No name given'}
+            </Text>
+            {item.contactPhone ? (
+              <TouchableOpacity
+                style={styles.callButton}
+                onPress={() => Linking.openURL(`tel:${item.contactPhone.replace(/[^\d+]/g, '')}`)}
+              >
+                <Text style={styles.callButtonText}>📞 Call</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
         {item.phase === 'pickup' && item.deliveryAddress ? (
           <Text style={styles.unitText}>Then deliver to: {item.deliveryAddress}</Text>
@@ -814,6 +832,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: -4,
     marginBottom: 8,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  callButton: {
+    backgroundColor: '#065f46',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  callButtonText: {
+    color: '#d1fae5',
+    fontWeight: '700',
+    fontSize: 13,
   },
   readyText: {
     color: '#34d399',

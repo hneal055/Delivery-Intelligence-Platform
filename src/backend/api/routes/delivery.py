@@ -98,6 +98,7 @@ async def get_recent_proofs(
             "lon": proof.lon,
             "distanceMeters": proof.distance_m,
             "signature": proof.signature_svg,
+            "receivedBy": proof.received_by,
         }
         for proof in result.scalars().all()
     ]
@@ -217,6 +218,7 @@ async def confirm_delivery(
     dest_lat: Optional[float] = Form(None),
     dest_lon: Optional[float] = Form(None),
     signature_path: Optional[str] = Form(None, max_length=MAX_SIGNATURE_CHARS),
+    received_by: Optional[str] = Form(None, max_length=100),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
@@ -266,6 +268,7 @@ async def confirm_delivery(
             driver_id=driver_id,
             photo_key=saved_filename,
             signature_svg=signature_path or None,
+            received_by=(received_by or "").strip() or None,
             lat=dest_lat,
             lon=dest_lon,
             distance_m=distance,

@@ -455,3 +455,20 @@ async def test_problem_report_keeps_reason_for_dispatch(int_client_driver):
     assert pkg.status == "exception"
     assert pkg.exception_reason == "Recipient refused"
     assert bc.await_args.args[0]["type"] == "problem_reported"
+
+
+@pytest.mark.asyncio
+async def test_proof_records_who_received_it(int_client_driver):
+    client, db, drv = int_client_driver
+    pkg = await int_db_seed_package(db, driver_id=drv.username, status="loaded")
+
+    with _ok_photo():
+        resp = await client.post(
+            "/delivery/confirm",
+            data={"package_id": pkg.id, "driver_id": drv.username, "received_by": "  Front desk - J. Kim "},
+            files={"photo": ("p.jpg", io.BytesIO(b"jpeg"), "image/jpeg")},
+        )
+
+    assert resp.status_code == 200
+    proofs = (await client.get("/delivery/recent-proofs")).json()
+    assert proofs[0]["receivedBy"] == "Front desk - J. Kim"

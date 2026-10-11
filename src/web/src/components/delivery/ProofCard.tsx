@@ -1,5 +1,6 @@
 import { Card, Image, Text, Badge, Group, Stack } from "@mantine/core";
 import type { ProofOfDelivery } from "../../types";
+import { useAuthedImage } from "../../hooks/useAuthedImage";
 
 interface ProofCardProps {
   proof: ProofOfDelivery;
@@ -7,11 +8,12 @@ interface ProofCardProps {
 }
 
 export function ProofCard({ proof, onClick }: ProofCardProps) {
+  const src = useAuthedImage(proof.path);
   return (
     <Card shadow="sm" padding="sm" radius="md" withBorder onClick={onClick} style={{ cursor: "pointer" }}>
       <Card.Section>
         <Image
-          src={proof.url}
+          src={src}
           height={180}
           alt={`Proof for ${proof.packageId}`}
           fallbackSrc="https://placehold.co/300x180?text=No+Image"
@@ -27,6 +29,7 @@ export function ProofCard({ proof, onClick }: ProofCardProps) {
             {proof.driverId}
           </Badge>
         </Group>
+        {proof.receivedBy && <Text size="xs">Received by {proof.receivedBy}</Text>}
         <Text size="xs" c="dimmed">
           {new Date(proof.timestamp).toLocaleString()}
         </Text>

@@ -10,6 +10,9 @@ export async function getRecentProofs(): Promise<ProofOfDelivery[]> {
     timestamp: string;
     filename: string;
     url: string;
+    receivedBy?: string | null;
+    signature?: string | null;
+    distanceMeters?: number | null;
   }>).map((p) => ({
     filename: p.filename,
     packageId: p.packageId,
@@ -17,6 +20,10 @@ export async function getRecentProofs(): Promise<ProofOfDelivery[]> {
     timestamp: p.timestamp,
     // S3 presigned URLs are absolute; local URLs are relative paths
     url: p.url.startsWith("http") ? p.url : `${API_URL}${p.url}`,
+    path: p.url,
+    receivedBy: p.receivedBy ?? null,
+    signature: p.signature ?? null,
+    distanceMeters: p.distanceMeters ?? null,
   }));
 }
 
