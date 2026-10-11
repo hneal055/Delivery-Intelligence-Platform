@@ -17,7 +17,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: delivery
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"  # this PC only
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -33,7 +33,7 @@ services:
     image: redis:7-alpine
     container_name: delivery_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # this PC only
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -53,6 +53,12 @@ services:
       # Signs login tokens. Required: set a random value in .env (never the
       # placeholder in config.py, which is public in git).
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      # development | production (production refuses unsafe settings)
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DIAD_API_KEY: ${DIAD_API_KEY:-}
+      # The dashboard calls the API on its own origin (/api), so this only
+      # matters for other browser clients.
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
       REDIS_URL: redis://delivery_redis:6379
       CELERY_BROKER_URL: redis://delivery_redis:6379/0
       CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0
@@ -78,6 +84,12 @@ services:
       # Signs login tokens. Required: set a random value in .env (never the
       # placeholder in config.py, which is public in git).
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      # development | production (production refuses unsafe settings)
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DIAD_API_KEY: ${DIAD_API_KEY:-}
+      # The dashboard calls the API on its own origin (/api), so this only
+      # matters for other browser clients.
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
       REDIS_URL: redis://delivery_redis:6379
       CELERY_BROKER_URL: redis://delivery_redis:6379/0
       CELERY_RESULT_BACKEND: redis://delivery_redis:6379/0
@@ -87,6 +99,24 @@ services:
     depends_on:
       - delivery_db
       - delivery_redis
+    networks:
+      - delivery_net
+
+  # Public access without opening router ports: Cloudflare Tunnel connects
+  # out to Cloudflare and serves https://<your hostname> from the dashboard
+  # container (which proxies /api to the backend). Enabled by
+  # COMPOSE_PROFILES=tunnel + CLOUDFLARE_TUNNEL_TOKEN in .env, written by
+  # scripts/ops/configure-public-access.ps1.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: delivery_tunnel
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    restart: unless-stopped
+    depends_on:
+      - frontend
     networks:
       - delivery_net
 

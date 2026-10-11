@@ -3,6 +3,10 @@ import os
 os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 # Device key used by tests that send X-DIAD-Token; must be set before settings load
 os.environ.setdefault("DIAD_API_KEY", "test-device-key")
+# Tests always run in development mode, even when the local .env (loaded by
+# config.py) says ENVIRONMENT=production for the live office stack.
+os.environ["ENVIRONMENT"] = "development"
+os.environ["BACKEND_CORS_ORIGINS"] = "http://localhost:3000,http://localhost:5173"
 """
 Shared pytest fixtures for the Delivery Intelligence Platform test suite.
 
