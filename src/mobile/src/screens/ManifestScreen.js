@@ -17,7 +17,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { getMyPackages } from '../api/client';
+import { getMyPackages, confirmPickup } from '../api/client';
+import { stopPhase, isReadyForPickup, nextTarget } from '../utils/stopPhase';
+import ProblemSheet from '../components/ProblemSheet';
 import { useAuthStore } from '../stores/authStore';
 import {
   getEffectiveLocation,
@@ -29,6 +31,8 @@ import {
 export default function ManifestScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const driverId = useAuthStore((s) => s.driverId);
+  const [problemPackageId, setProblemPackageId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,21 +67,30 @@ export default function ManifestScreen({ navigation }) {
 
       // Stops are the packages assigned to this driver; undelivered first.
       const packages = await getMyPackages();
-      const ordered = [...packages].sort(
-        (a, b) => (a.status === 'delivered') - (b.status === 'delivered')
-      );
-      setDeliveredIds(new Set(packages.filter((p) => p.status === 'delivered').map((p) => p.id)));
+      const rank = { pickup: 0, deliver: 1, done: 2 };
+      const ordered = [...packages].sort((a, b) => rank[stopPhase(a)] - rank[stopPhase(b)]);
+      setDeliveredIds(new Set(packages.filter((p) => stopPhase(p) === 'done').map((p) => p.id)));
       setStops(
-        ordered.map((p, idx) => ({
-          id: p.id,
-          sequence: idx + 1,
-          lat: p.dest_lat,
-          lon: p.dest_lon,
-          address: p.dest_address || `${p.dest_lat.toFixed(5)}, ${p.dest_lon.toFixed(5)}`,
-          status: p.status,
-          unit: p.dest_unit,
-          instructions: p.delivery_instructions,
-        }))
+        ordered.map((p, idx) => {
+          const target = nextTarget(p);
+          const hasCoords = target.lat != null && target.lon != null;
+          return {
+            id: p.id,
+            trackingCode: p.tracking_code,
+            sequence: idx + 1,
+            phase: stopPhase(p),
+            ready: isReadyForPickup(p),
+            targetLabel: target.label,
+            lat: hasCoords ? target.lat : p.dest_lat,
+            lon: hasCoords ? target.lon : p.dest_lon,
+            address: target.address || `${p.dest_lat.toFixed(5)}, ${p.dest_lon.toFixed(5)}`,
+            deliveryAddress: p.dest_address,
+            status: p.status,
+            problem: p.exception_reason,
+            unit: target.unit,
+            instructions: target.instructions,
+          };
+        })
       );
       setIsOptimized(false);
       setTotalKm(null);
@@ -106,6 +119,29 @@ export default function ManifestScreen({ navigation }) {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     };
   }, []);
+
+  const handlePickedUp = (item) => {
+    const doIt = async () => {
+      setBusyId(item.id);
+      try {
+        await confirmPickup(item.id);
+        await fetchRouteAndProofs();
+      } catch (err) {
+        Alert.alert('Could not confirm pickup', 'Check your connection and try again.');
+      } finally {
+        setBusyId(null);
+      }
+    };
+    if (!item.ready) {
+      Alert.alert(
+        'Not marked ready',
+        'Dispatch has not marked this package ready. Did you collect it anyway?',
+        [{ text: 'Cancel', style: 'cancel' }, { text: 'Yes, picked up', onPress: doIt }]
+      );
+    } else {
+      doIt();
+    }
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -270,7 +306,7 @@ export default function ManifestScreen({ navigation }) {
           <View style={styles.sequenceBadge}>
             <Text style={styles.sequenceText}>#{item.sequence || index + 1}</Text>
           </View>
-          <Text style={styles.packageIdText}>{item.id}</Text>
+          <Text style={styles.packageIdText}>{item.trackingCode || item.id}</Text>
           <View
             style={[
               styles.statusPill,
@@ -283,16 +319,25 @@ export default function ManifestScreen({ navigation }) {
                 isDelivered ? styles.textDelivered : styles.textPending,
               ]}
             >
-              {isDelivered ? 'DELIVERED' : 'PENDING'}
+              {item.status === 'exception' ? 'PROBLEM' : isDelivered ? 'DELIVERED' : item.targetLabel}
             </Text>
           </View>
         </View>
 
         <Text style={styles.addressText}>{item.address}</Text>
         {item.unit ? <Text style={styles.unitText}>{item.unit}</Text> : null}
+        {item.phase === 'pickup' ? (
+          <Text style={item.ready ? styles.readyText : styles.notReadyText}>
+            {item.ready ? '● Ready for pickup' : '○ Not ready yet. You will get an alert.'}
+          </Text>
+        ) : null}
         {item.instructions ? (
           <Text style={styles.instructionsText}>⚠ {item.instructions}</Text>
         ) : null}
+        {item.phase === 'pickup' && item.deliveryAddress ? (
+          <Text style={styles.unitText}>Then deliver to: {item.deliveryAddress}</Text>
+        ) : null}
+        {item.problem ? <Text style={styles.notReadyText}>Problem: {item.problem}</Text> : null}
 
         <View style={styles.cardFooter}>
           <View style={styles.distanceContainer}>
@@ -316,12 +361,28 @@ export default function ManifestScreen({ navigation }) {
               <Text style={styles.navButtonText}>Directions</Text>
             </TouchableOpacity>
 
-            {!isDelivered && (
+            {item.phase === 'pickup' && (
+              <TouchableOpacity
+                style={styles.deliverButton}
+                disabled={busyId === item.id}
+                onPress={() => handlePickedUp(item)}
+              >
+                <Text style={styles.deliverButtonText}>
+                  {busyId === item.id ? '…' : 'Picked up'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {item.phase === 'deliver' && (
               <TouchableOpacity
                 style={styles.deliverButton}
                 onPress={() => navigation.navigate('Scanner', { packageId: item.id })}
               >
                 <Text style={styles.deliverButtonText}>Deliver</Text>
+              </TouchableOpacity>
+            )}
+            {item.phase !== 'done' && (
+              <TouchableOpacity style={styles.navButton} onPress={() => setProblemPackageId(item.id)}>
+                <Text style={[styles.navButtonText, { color: '#f87171' }]}>Problem</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -499,6 +560,17 @@ export default function ManifestScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </Modal>
+
+      <ProblemSheet
+        visible={problemPackageId !== null}
+        packageId={problemPackageId}
+        driverId={driverId}
+        onClose={() => setProblemPackageId(null)}
+        onReported={() => {
+          setProblemPackageId(null);
+          fetchRouteAndProofs();
+        }}
+      />
     </View>
   );
 }
@@ -741,6 +813,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginTop: -4,
+    marginBottom: 8,
+  },
+  readyText: {
+    color: '#34d399',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  notReadyText: {
+    color: '#f87171',
+    fontSize: 13,
     marginBottom: 8,
   },
   instructionsText: {

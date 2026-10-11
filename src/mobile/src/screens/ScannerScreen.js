@@ -17,10 +17,12 @@ import { getMyPackages, scanPackage } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import { getEffectiveLocation } from '../utils/location';
 import { enqueueOfflineDelivery, uploadConfirmation } from '../utils/offlineQueue';
+import ProblemSheet from '../components/ProblemSheet';
 
 export default function ScannerScreen({ route, navigation }) {
   const { packageId: initialPackageId } = route.params || {};
   const driverId = useAuthStore((s) => s.driverId);
+  const [problemOpen, setProblemOpen] = useState(false);
 
   const [scannedPackageId, setScannedPackageId] = useState(initialPackageId || null);
   const [isScanning, setIsScanning] = useState(!initialPackageId);
@@ -407,7 +409,23 @@ export default function ScannerScreen({ route, navigation }) {
             </Text>
           )}
         </TouchableOpacity>
+        {scannedPackageId ? (
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => setProblemOpen(true)}>
+            <Text style={[styles.secondaryButtonText, { color: '#f87171' }]}>Report problem</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
+
+      <ProblemSheet
+        visible={problemOpen}
+        packageId={scannedPackageId}
+        driverId={driverId}
+        onClose={() => setProblemOpen(false)}
+        onReported={() => {
+          setProblemOpen(false);
+          resetAfterDelivery();
+        }}
+      />
     </ScrollView>
   );
 }

@@ -1,7 +1,7 @@
 import React, { Component, useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { NavigationContainer, DarkTheme } from "@react-navigation/native";
+import { NavigationContainer, DarkTheme, createNavigationContainerRef } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -13,6 +13,13 @@ import ScannerScreen from "./src/screens/ScannerScreen";
 import DeliveryHistoryScreen from "./src/screens/DeliveryHistoryScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import { useAuthStore } from "./src/stores/authStore";
+import { useAssignmentWatcher } from "./src/hooks/useAssignmentWatcher";
+import {
+  markAlerted,
+  registerForPushNotificationsAsync,
+} from "./src/services/notificationService";
+
+const navigationRef = createNavigationContainerRef();
 
 const Tab = createBottomTabNavigator();
 
@@ -61,12 +68,13 @@ Notifications.setNotificationHandler({
 function useNotificationListeners() {
   useEffect(() => {
     const subReceived = Notifications.addNotificationReceivedListener((n) => {
-      // TODO: route assignment notifications to the Manifest screen refresh
-      console.log("Notification received:", n.request.content.data);
+      // A server push for this event: the in-app watcher must not repeat it
+      const { kind, package_id: packageId } = n.request.content.data || {};
+      if (kind && packageId) markAlerted(kind, packageId);
     });
-    const subResponse = Notifications.addNotificationResponseReceivedListener((r) => {
-      // TODO: deep-link into the delivery detail from the notification payload
-      console.log("Notification tapped:", r.notification.request.content.data);
+    const subResponse = Notifications.addNotificationResponseReceivedListener(() => {
+      // Assignment / ready alerts open the driver's stop list
+      if (navigationRef.isReady()) navigationRef.navigate("Manifest");
     });
     return () => {
       subReceived.remove();
@@ -161,6 +169,12 @@ function Root() {
   const token = useAuthStore((s) => s.token);
   const hydrated = useAuthStore((s) => s._hasHydrated);
   useNotificationListeners();
+  useAssignmentWatcher(Boolean(token));
+
+  // Register this phone for assignment alerts once per login
+  useEffect(() => {
+    if (token) registerForPushNotificationsAsync();
+  }, [token]);
 
   if (!hydrated) {
     return (
@@ -171,7 +185,7 @@ function Root() {
   }
 
   return (
-    <NavigationContainer theme={DarkTheme} linking={linking}>
+    <NavigationContainer ref={navigationRef} theme={DarkTheme} linking={linking}>
       {token ? <AppTabs /> : <LoginScreen />}
     </NavigationContainer>
   );

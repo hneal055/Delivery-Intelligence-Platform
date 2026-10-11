@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { getMyPackages } from "../api/client";
+import { stopPhase, isReadyForPickup, nextTarget } from "../utils/stopPhase";
 import { useAuthStore } from "../stores/authStore";
 
 export default function HomeScreen({ navigation }) {
@@ -32,16 +33,24 @@ export default function HomeScreen({ navigation }) {
         remaining: open.length,
       });
 
-      const next = open[0];
+      // Pickups first (same order as the Manifest), then deliveries
+      const next = [...open].sort(
+        (a, b) => (stopPhase(a) === "pickup" ? 0 : 1) - (stopPhase(b) === "pickup" ? 0 : 1)
+      )[0];
+      const target = next ? nextTarget(next) : null;
       setNextStop(
         next
           ? {
               stopNumber: done.length + 1,
               packageId: next.id,
-              address: next.dest_address || `${next.dest_lat.toFixed(5)}, ${next.dest_lon.toFixed(5)}`,
-              tier: next.status === "loaded" ? "Loaded" : "Assigned",
-              unit: next.dest_unit,
-              instructions: next.delivery_instructions,
+              phase: stopPhase(next),
+              address: target.address || `${next.dest_lat.toFixed(5)}, ${next.dest_lon.toFixed(5)}`,
+              tier:
+                stopPhase(next) === "pickup"
+                  ? isReadyForPickup(next) ? "Pick up · ready" : "Pick up · not ready yet"
+                  : "Deliver",
+              unit: target.unit,
+              instructions: target.instructions,
             }
           : null
       );
@@ -185,7 +194,9 @@ export default function HomeScreen({ navigation }) {
                 <TouchableOpacity
                   style={styles.deliverButton}
                   onPress={() =>
-                    navigation.navigate("Scanner", { packageId: nextStop.packageId })
+                    nextStop.phase === "pickup"
+                      ? navigation.navigate("Manifest")
+                      : navigation.navigate("Scanner", { packageId: nextStop.packageId })
                   }
                   activeOpacity={0.7}
                 >

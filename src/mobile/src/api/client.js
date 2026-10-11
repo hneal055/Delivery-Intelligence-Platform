@@ -92,4 +92,23 @@ export async function scanPackage(barcode, scanType) {
   return res.data;
 }
 
+/** Mark a package collected at its pickup point (same as scanning it). */
+export async function confirmPickup(packageId) {
+  return scanPackage(packageId, 'manual');
+}
+
+/** Tell dispatch this stop could not be completed, and why. */
+export async function reportProblem(packageId, driverId, reason) {
+  const body = new URLSearchParams({ package_id: packageId, driver_id: driverId, reason });
+  const res = await client.post('/delivery/exception', body.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  return res.data;
+}
+
+/** Register this phone's Expo push token for assignment alerts. */
+export async function registerDevice(token, platform) {
+  await client.post('/auth/register-device', { token, platform });
+}
+
 export default client;
