@@ -7,6 +7,9 @@ os.environ.setdefault("DIAD_API_KEY", "test-device-key")
 # config.py) says ENVIRONMENT=production for the live office stack.
 os.environ["ENVIRONMENT"] = "development"
 os.environ["BACKEND_CORS_ORIGINS"] = "http://localhost:3000,http://localhost:5173"
+# The live Cloudflare Access settings stay out of tests (tests set their own).
+os.environ["CF_ACCESS_TEAM_DOMAIN"] = ""
+os.environ["CF_ACCESS_AUD"] = ""
 """
 Shared pytest fixtures for the Delivery Intelligence Platform test suite.
 

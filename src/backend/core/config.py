@@ -80,6 +80,14 @@ class Settings:
     # wacker" with no city), so dispatchers can type addresses the local way.
     SERVICE_AREA_DEFAULT: str = os.getenv("SERVICE_AREA_DEFAULT", "Chicago, IL")
 
+    # Cloudflare Access (dashboard email code). When both are set, staff
+    # (non-driver) logins arriving through the Cloudflare Tunnel must carry
+    # Cloudflare's proof that the email code was passed. Not secrets.
+    # TEAM_DOMAIN e.g. "round-haze-bce1.cloudflareaccess.com"; AUD is the
+    # dashboard application's audience tag (comma-separate several).
+    CF_ACCESS_TEAM_DOMAIN: str = os.getenv("CF_ACCESS_TEAM_DOMAIN", "")
+    CF_ACCESS_AUD: str = os.getenv("CF_ACCESS_AUD", "")
+
     # OIDC (Optional)
     OIDC_ENABLED: bool = os.getenv("OIDC_ENABLED", "false").lower() == "true"
     OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "")
