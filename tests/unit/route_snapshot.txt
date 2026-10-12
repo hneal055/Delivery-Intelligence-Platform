@@ -34,6 +34,8 @@ GET /tracking/live
 GET /tracking/{driver_id}/history
 GET /users
 GET /users/{user_id}
+HEAD /health
+HEAD /health/ready
 POST /advanced-route/optimize-multi-depot
 POST /advanced-route/optimize-single
 POST /advanced-route/time-windows
