@@ -188,6 +188,7 @@ export function TrackingPage() {
                   <RoutePlayback
                     positions={historyPositions}
                     currentIndex={currentIndex}
+                    showMarker={isPlaying || currentIndex > 0}
                   />
                 )}
               </MapContainer>
