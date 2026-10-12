@@ -680,3 +680,13 @@ async def reopen_package(
     await db.commit()
     await alert_driver(db, background_tasks, package.driver_id, package, "assigned")
     return {"package_id": package.id, "status": package.status}
+
+
+@router.get("/attention")
+async def get_attention(
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Everything dispatch should act on now (see services/attention.py)."""
+    from src.backend.services.attention import load_and_evaluate
+    return await load_and_evaluate(db)

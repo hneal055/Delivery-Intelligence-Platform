@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Grid, Stack, ScrollArea, Title, Text } from "@mantine/core";
 import { DashboardStats } from "../components/dispatch/DashboardStats";
+import { AttentionPanel } from "../components/dispatch/AttentionPanel";
 import { DispatchMap } from "../components/map/DispatchMap";
 import { DriverCard } from "../components/dispatch/DriverCard";
 import { useDrivers } from "../hooks/useDrivers";
@@ -19,6 +20,7 @@ export function DashboardPage() {
 
   return (
     <Stack gap="md" h="calc(100vh - 100px)">
+      <AttentionPanel />
       <DashboardStats summary={summary} isLoading={summaryLoading} />
 
       <Grid gutter="md" style={{ flex: 1 }}>

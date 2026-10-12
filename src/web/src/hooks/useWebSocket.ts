@@ -28,6 +28,7 @@ export function useWebSocket() {
           message: `${msg.reason}${msg.address ? ` — ${msg.address}` : ""}`,
         });
         queryClient.invalidateQueries({ queryKey: ["packages"] });
+        queryClient.invalidateQueries({ queryKey: ["attention"] });
         return;
       }
       if (message.type === "driver_location") {

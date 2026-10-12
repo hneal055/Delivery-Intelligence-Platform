@@ -37,6 +37,7 @@ export function useDispatch() {
     mutationFn: (job: DispatchJobCreate) => createJob(job),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['attention'] });
     },
   });
 
@@ -44,6 +45,7 @@ export function useDispatch() {
     mutationFn: ({ jobId, driverId }: { jobId: string; driverId: string }) => assignJob(jobId, driverId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['attention'] });
     },
   });
 
@@ -51,6 +53,7 @@ export function useDispatch() {
     mutationFn: ({ jobId, status }: { jobId: string; status: string }) => updateJobStatus(jobId, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['attention'] });
     },
   });
   
@@ -58,6 +61,7 @@ export function useDispatch() {
       mutationFn: (jobId: string) => deleteJob(jobId),
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['attention'] });
       }
   });
 

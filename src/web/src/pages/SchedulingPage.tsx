@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Title, Button, Group, Table, Badge, ActionIcon, Menu, Text, Container, SegmentedControl, Select, Stack } from '@mantine/core';
 import { IconList, IconPlus, IconDotsVertical, IconTrash, IconUserPlus, IconLayoutKanban, IconTable } from '@tabler/icons-react';
 import { useDispatch } from '../hooks/useDispatch';
@@ -34,6 +35,24 @@ export function SchedulingPage() {
     setSelectedJob(job);
     setAssignmentModalOpen(true);
   };
+
+  // Opened from "Needs attention": ?assign=<id> or ?job=<id>
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const assignId = searchParams.get('assign');
+    const jobId = assignId ?? searchParams.get('job');
+    if (!jobId || jobs.length === 0) return;
+    const job = jobs.find((j) => j.id === jobId);
+    if (job) {
+      if (assignId) {
+        openAssignment(job);
+      } else {
+        setDrawerJobId(job.id);
+        setSelectedJob(job);
+      }
+    }
+    setSearchParams({}, { replace: true });
+  }, [jobs, searchParams, setSearchParams]);
 
   const handleStatusChange = (jobId: string, status: string) => {
     updateJobStatus.mutate({ jobId, status });
