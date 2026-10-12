@@ -154,7 +154,8 @@ app.mount("/static/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uplo
 async def root():
     return {"status": "online", "service": "Delivery Intelligence Platform Backend"}
 
-@app.get("/health")
+# HEAD too: uptime monitors (UptimeRobot) probe with HEAD before GET.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     return {
         "status": "ok",
@@ -162,7 +163,7 @@ def health_check():
     }
 
 
-@app.get("/health/ready")
+@app.api_route("/health/ready", methods=["GET", "HEAD"])
 async def readiness_check():
     """Ready only when the database answers (for load balancers / k8s)."""
     try:

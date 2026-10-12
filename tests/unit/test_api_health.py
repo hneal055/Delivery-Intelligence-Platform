@@ -19,6 +19,14 @@ async def test_health_check():
 
 
 @pytest.mark.asyncio
+async def test_health_answers_head_for_uptime_monitors():
+    """UptimeRobot probes with HEAD first; a 405 there risks false "down" alerts."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.head("/health")
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_root_reports_online():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/")
