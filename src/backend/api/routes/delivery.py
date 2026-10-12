@@ -30,10 +30,7 @@ from src.backend.models.domain import Location, User, UserRole
 from src.backend.models.sql_models import DeliveryProof, Package
 from src.backend.services import delivery_service
 from src.backend.services.redis_manager import manager as ws_manager
-from src.backend.services.notifications import (
-    NotificationEvent,
-    notification_service,
-)
+from src.backend.services import customer_updates
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +180,7 @@ class ScanRequest(BaseModel):
 @router.post("/scan")
 async def scan_package(
     payload: ScanRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -200,6 +198,8 @@ async def scan_package(
     if package.status in LOADABLE_STATUSES:
         package.status = "loaded"
         package.loaded_at = datetime.now(timezone.utc)
+        # Tell the recipient it's on its way (once; only if texts are set up)
+        customer_updates.queue_out_for_delivery(background_tasks, package)
         await db.commit()
 
     return {
@@ -274,18 +274,14 @@ async def confirm_delivery(
             distance_m=distance,
         )
     )
+    # Tell the recipient it arrived (once; only if texts are set up). Before
+    # the status update, which commits this change with it.
+    customer_updates.queue_delivered(background_tasks, package, datetime.now(timezone.utc))
     await delivery_service.update_package_status(
         db, package_id, "delivered", driver_id
     )
     await delivery_service.complete_dispatch_job(db, package_id)
     DELIVERIES_COMPLETED.inc()
-
-    background_tasks.add_task(
-        notification_service.send_notification,
-        "customer_placeholder",
-        "email@example.com",
-        NotificationEvent.DELIVERY_COMPLETED,
-    )
 
     return {
         "status": "success",
