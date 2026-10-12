@@ -4,6 +4,8 @@ import L from "leaflet";
 interface RoutePlaybackProps {
   positions: [number, number][];
   currentIndex: number;
+  /** Hide the playback dot until a replay starts, so a still map shows only the live dot. */
+  showMarker?: boolean;
 }
 
 const playbackIcon = L.divIcon({
@@ -20,7 +22,7 @@ const playbackIcon = L.divIcon({
   iconAnchor: [11, 11],
 });
 
-export function RoutePlayback({ positions, currentIndex }: RoutePlaybackProps) {
+export function RoutePlayback({ positions, currentIndex, showMarker = true }: RoutePlaybackProps) {
   if (positions.length < 2) return null;
 
   const traveled = positions.slice(0, currentIndex + 1);
@@ -35,7 +37,7 @@ export function RoutePlayback({ positions, currentIndex }: RoutePlaybackProps) {
       {remaining.length >= 2 && (
         <Polyline positions={remaining} color="#868e96" weight={3} opacity={0.4} dashArray="8 6" />
       )}
-      {currentPos && <Marker position={currentPos} icon={playbackIcon} />}
+      {showMarker && currentPos && <Marker position={currentPos} icon={playbackIcon} />}
     </>
   );
 }
