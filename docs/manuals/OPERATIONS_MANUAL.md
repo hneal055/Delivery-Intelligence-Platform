@@ -257,3 +257,39 @@ code) and **Cloudflare** (sign in with a Cloudflare account).
   "Allow + Everyone" still makes everyone log in.
 - The `/api` path stays open on purpose (phones can't do the email code), so
   strong DIP passwords and the login rate limit still matter.
+
+## 11. Customer tracking link and texts
+
+Every package has a tracking code (`CCC-XXXXXXXX`) and a public page:
+`https://dip.chicagocargocourier.com/track/CCC-XXXXXXXX`. No login. It shows
+the status (Scheduled, Picked up / on its way, Delivered with the time), the
+street it's going to and the promised time. It never shows names, phone
+numbers, instructions, photos or where the van is. Search engines are told
+not to list it, and it is rate-limited per visitor.
+
+- **Send the link yourself:** Packages → **Copy tracking link** on the row,
+  then paste it into a text or email to the customer.
+- **Cloudflare:** the page must be outside the dashboard email code. In
+  Access controls → Applications, a self-hosted application for
+  `dip.chicagocargocourier.com` path **`track`** uses the **Phones** policy
+  (Bypass, Everyone), the same as `/api`.
+
+### Automatic texts (off until set up)
+
+When texts are set up, the recipient's phone (the "Recipient phone" on the
+job) gets at most two texts per package:
+
+1. **Out for delivery**, when the driver scans or picks up the package,
+   with the deliver-by time if there is one and the tracking link.
+2. **Delivered**, when the driver confirms delivery, with the time.
+
+Each is sent once, even if the package is scanned again. Packages without a
+valid US phone number are skipped. Texts use **Twilio**; put these in `.env`
+and restart the backend (`docker compose up -d backend`):
+
+`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and either `TWILIO_FROM_NUMBER`
+(e.g. `+13125550100`) or `TWILIO_MESSAGING_SERVICE_SID`. Optional:
+`COMPANY_PHONE` (shown on the tracking page). US carriers require the
+sending number to be registered (toll-free verification, or A2P 10DLC for a
+local number) before texts are delivered reliably; Twilio's console walks
+through it. Customers can reply STOP to opt out; Twilio handles that.

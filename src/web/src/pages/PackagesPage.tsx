@@ -34,6 +34,17 @@ function DeliverBy({ pkg }: { pkg: Package }) {
   );
 }
 
+/** The customer's public tracking page, copied for pasting into a text or email. */
+async function copyTrackingLink(code: string) {
+  const link = `${window.location.origin}/track/${code}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    notifications.show({ color: "teal", title: "Tracking link copied", message: link });
+  } catch {
+    notifications.show({ color: "orange", title: "Copy this link", message: link, autoClose: false });
+  }
+}
+
 // A package waiting at its pickup point that the shipper has not released yet
 function awaitingReady(pkg: Package): boolean {
   return Boolean(pkg.pickup_address) && !pkg.ready_at &&
@@ -200,12 +211,17 @@ export function PackagesPage() {
                     Reopen
                   </Button>
                 )}
+                {pkg.tracking_code && (
+                  <Button size="xs" variant="subtle" onClick={() => copyTrackingLink(pkg.tracking_code!)}>
+                    Copy tracking link
+                  </Button>
+                )}
               </Table.Td>
             </Table.Tr>
           ))}
           {filtered.length === 0 && !isLoading && (
             <Table.Tr>
-              <Table.Td colSpan={6} ta="center" c="dimmed">
+              <Table.Td colSpan={7} ta="center" c="dimmed">
                 No packages found
               </Table.Td>
             </Table.Tr>

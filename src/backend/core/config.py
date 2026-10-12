@@ -98,6 +98,18 @@ class Settings:
     OIDC_TENANT_ID: str = os.getenv("OIDC_TENANT_ID", "")
     OIDC_REDIRECT_URI: str = os.getenv("OIDC_REDIRECT_URI", "")
 
+    # Customer updates: public tracking page and texts to the recipient.
+    # PUBLIC_BASE_URL is where customers open /track/<code>.
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "https://dip.chicagocargocourier.com")
+    COMPANY_NAME: str = os.getenv("COMPANY_NAME", "Chicago Cargo Couriers")
+    COMPANY_PHONE: str = os.getenv("COMPANY_PHONE", "")  # shown on the tracking page, optional
+    # Texts (Twilio). Off until the SID, token and a sender (number or
+    # messaging service) are set; nothing is sent without them.
+    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
+    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
+    TWILIO_FROM_NUMBER: str = os.getenv("TWILIO_FROM_NUMBER", "")
+    TWILIO_MESSAGING_SERVICE_SID: str = os.getenv("TWILIO_MESSAGING_SERVICE_SID", "")
+
     # CLOUDFLARE R2 (proof-of-delivery photo storage)
     # When all four are set, the R2 backend is used automatically.
     R2_ACCOUNT_ID: str = os.getenv("R2_ACCOUNT_ID", "")
