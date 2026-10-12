@@ -9,7 +9,8 @@ import type {
   DispatchJobCreate,
   DriverAvailability,
   DriverAvailabilityCreate,
-  AddressMatch
+  AddressMatch,
+  AttentionItem
 } from "../types";
 
 export async function listDrivers(status?: string): Promise<Driver[]> {
@@ -120,6 +121,12 @@ export async function previewAddress(address: string): Promise<AddressMatch> {
 
 export async function getJob(jobId: string): Promise<DispatchJob> {
   const response = await apiClient.get<DispatchJob>(`/dispatch/jobs/${jobId}`);
+  return response.data;
+}
+
+/** Everything dispatch should act on now, red first. */
+export async function getAttention(): Promise<AttentionItem[]> {
+  const response = await apiClient.get<AttentionItem[]>("/dispatch/attention");
   return response.data;
 }
 

@@ -1,11 +1,14 @@
-import { AppShell as MantineAppShell, NavLink, Group, Title, Button, Text, Stack } from "@mantine/core";
+import { AppShell as MantineAppShell, NavLink, Group, Title, Button, Text, Stack, Badge } from "@mantine/core";
 import { NavLink as RouterNavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
+import { useAttentionAlerts } from "../../hooks/useAttentionAlerts";
 
 export function AppShell() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const location = useLocation();
+  const attention = useAttentionAlerts();
+  const urgent = attention.filter((i) => i.severity === "red").length;
 
   return (
     <MantineAppShell
@@ -33,6 +36,13 @@ export function AppShell() {
             label="Dashboard"
             component={RouterNavLink}
             to="/"
+            rightSection={
+              attention.length > 0 ? (
+                <Badge size="sm" circle color={urgent > 0 ? "red" : "orange"}>
+                  {attention.length}
+                </Badge>
+              ) : undefined
+            }
             active={location.pathname === "/"}
           />
           <NavLink

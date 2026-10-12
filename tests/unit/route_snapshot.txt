@@ -9,6 +9,7 @@ GET /auth/oidc/config
 GET /auth/users/me
 GET /delivery/proof/{filename}
 GET /delivery/recent-proofs
+GET /dispatch/attention
 GET /dispatch/availability
 GET /dispatch/dashboard/summary
 GET /dispatch/deliveries

@@ -58,6 +58,19 @@ export interface Token {
   token_type: JobType;
 }
 
+/** An item on the Dashboard's "Needs attention" panel (GET /dispatch/attention). */
+export interface AttentionItem {
+  key: string;
+  rule: "no_driver" | "overdue" | "problem" | "ready_waiting" | "offline_ready" | "quiet" | "stopped";
+  severity: "red" | "orange";
+  title: string;
+  detail: string;
+  since: string | null;
+  job_id: string | null;
+  package_id: string | null;
+  driver_id: string | null;
+}
+
 export interface DashboardSummary {
   total_drivers: number;
   active_drivers: number;

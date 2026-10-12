@@ -32,6 +32,16 @@ export function PackagesPage() {
   // page filtered, and Back or refresh keeps the filter.
   const [searchParams, setSearchParams] = useSearchParams();
   const driverFilter = searchParams.get("driver");
+  // ?package=<id>: opened from "Needs attention" to show one package
+  const packageFilter = searchParams.get("package");
+  const showAll = () =>
+    setSearchParams(
+      (params) => {
+        params.delete("package");
+        return params;
+      },
+      { replace: true }
+    );
   const setDriverFilter = (value: string | null) =>
     setSearchParams(
       (params) => {
@@ -47,6 +57,7 @@ export function PackagesPage() {
   const onDone = (title: string) => () => {
     notifications.show({ color: "teal", title, message: "The driver has been alerted." });
     queryClient.invalidateQueries({ queryKey: ["packages"] });
+    queryClient.invalidateQueries({ queryKey: ["attention"] });
   };
   const onError = (err: unknown) => {
     const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
@@ -57,10 +68,12 @@ export function PackagesPage() {
 
   const filtered = useMemo(
     () =>
-      packages.filter(
-        (p) => (!statusFilter || p.status === statusFilter) && matchesDriver(p.driver_id, driverFilter)
-      ),
-    [packages, statusFilter, driverFilter]
+      packageFilter
+        ? packages.filter((p) => p.id === packageFilter)
+        : packages.filter(
+            (p) => (!statusFilter || p.status === statusFilter) && matchesDriver(p.driver_id, driverFilter)
+          ),
+    [packages, statusFilter, driverFilter, packageFilter]
   );
 
   return (
@@ -90,6 +103,13 @@ export function PackagesPage() {
           ]}
         />
       </Group>
+
+      {packageFilter && (
+        <Group gap="sm">
+          <Text size="sm" c="dimmed">Showing one package from Needs attention.</Text>
+          <Button size="xs" variant="subtle" onClick={showAll}>Show all packages</Button>
+        </Group>
+      )}
 
       <Table striped highlightOnHover>
         <Table.Thead>

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Title, Container, Grid, Stack, Select, Paper, Text, Badge, Group } from "@mantine/core";
 import { MapContainer, TileLayer } from "react-leaflet";
 import { DriverMarker } from "../components/map/DriverMarker";
@@ -15,7 +16,9 @@ export function TrackingPage() {
   useWebSocket();
   const { data: drivers = [] } = useDrivers();
   const realtimeLocations = useRealtimeStore((s) => s.driverLocations);
-  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  // ?driver=<id> (from "Needs attention") selects that driver
+  const [searchParams] = useSearchParams();
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(searchParams.get("driver"));
   const { data: history = [] } = useLocationHistory(selectedDriverId);
 
   // Playback state
