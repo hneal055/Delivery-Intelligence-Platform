@@ -83,11 +83,15 @@ export function PackagesPage() {
 
   const filtered = useMemo(
     () =>
-      packageFilter
+      (packageFilter
         ? packages.filter((p) => p.id === packageFilter)
         : packages.filter(
             (p) => (!statusFilter || p.status === statusFilter) && matchesDriver(p.driver_id, driverFilter)
-          ),
+          )
+      )
+        // Newest first, so today's jobs are at the top
+        .slice()
+        .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")),
     [packages, statusFilter, driverFilter, packageFilter]
   );
 
