@@ -14,6 +14,7 @@ import DeliveryHistoryScreen from "./src/screens/DeliveryHistoryScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import { useAuthStore } from "./src/stores/authStore";
 import { useAssignmentWatcher } from "./src/hooks/useAssignmentWatcher";
+import { useLocationReporter } from "./src/hooks/useLocationReporter";
 import {
   markAlerted,
   registerForPushNotificationsAsync,
@@ -168,8 +169,10 @@ function Root() {
   // Same store LoginScreen writes to, so a successful login shows the app.
   const token = useAuthStore((s) => s.token);
   const hydrated = useAuthStore((s) => s._hasHydrated);
+  const driverId = useAuthStore((s) => s.driverId);
   useNotificationListeners();
   useAssignmentWatcher(Boolean(token));
+  useLocationReporter(token ? driverId : null);
 
   // Register this phone for assignment alerts once per login
   useEffect(() => {

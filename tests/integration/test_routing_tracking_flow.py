@@ -67,10 +67,9 @@ async def test_route_optimize_empty_stops_returns_400(int_client_driver):
 async def test_update_driver_location(int_client_driver):
     """POST /tracking/{driver_id}/location stores GPS fix and records history."""
     client, db, drv = int_client_driver
-    driver = await int_db_seed_driver(db, "GPS Driver")
-
+    # A driver's ID is their username; they may only update their own location.
     from datetime import datetime, timezone
-    resp = await client.post(f"/tracking/{driver.id}/location", json={
+    resp = await client.post(f"/tracking/{drv.username}/location", json={
         "lat": 40.7128,
         "lon": -74.0060,
         "speed": 30.5,
@@ -80,6 +79,10 @@ async def test_update_driver_location(int_client_driver):
     })
     assert resp.status_code == 200
     assert resp.json()["status"] == "updated"
+
+    other = await int_db_seed_driver(db, "Someone Else")
+    resp = await client.post(f"/tracking/{other.id}/location", json={"lat": 40.0, "lon": -74.0})
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

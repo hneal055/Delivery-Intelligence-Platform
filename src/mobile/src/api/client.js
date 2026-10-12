@@ -111,6 +111,18 @@ export async function reportProblem(packageId, driverId, reason) {
   return res.data;
 }
 
+/** Send the phone's position so dispatch sees the driver on the map. */
+export async function reportLocation(driverId, coords) {
+  const speed = coords.speed != null && coords.speed >= 0 ? coords.speed : undefined;
+  const heading = coords.heading != null && coords.heading >= 0 ? coords.heading : undefined;
+  await client.post(`/tracking/${encodeURIComponent(driverId)}/location`, {
+    lat: coords.latitude,
+    lon: coords.longitude,
+    speed,
+    heading,
+  });
+}
+
 /** Register this phone's Expo push token for assignment alerts. */
 export async function registerDevice(token, platform) {
   await client.post('/auth/register-device', { token, platform });

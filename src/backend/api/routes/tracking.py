@@ -4,6 +4,8 @@ from sqlalchemy import select
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import logging
+import time
 
 from src.backend.core.database import get_db
 from src.backend.api.deps import get_current_active_user, PermissionChecker
@@ -13,6 +15,9 @@ from src.backend.services.heartbeat import heartbeat_service
 from src.backend.core.permissions import Permission
 from src.backend.api.limiter import limiter
 from src.backend.services.delivery_service import update_driver_location
+from src.backend.services.redis_manager import manager
+
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 
@@ -75,14 +80,17 @@ async def update_location(
 
     if not has_own_update and not has_all_drivers:
         raise HTTPException(status_code=403, detail="Not authorised to update driver location")
+    # A driver's ID is their login username; drivers may not move anyone else.
+    if not has_all_drivers and driver_id != current_user.username:
+        raise HTTPException(status_code=403, detail="Drivers may only update their own location")
 
     driver = await update_driver_location(
-    db=db,
-    driver_id=driver_id,
-    lat=data.lat,
-    lon=data.lon,
-    name=current_user.username,
-)
+        db=db,
+        driver_id=driver_id,
+        lat=data.lat,
+        lon=data.lon,
+        name=driver_id,
+    )
 
     history = LocationHistory(
         driver_id=driver_id,
@@ -95,6 +103,20 @@ async def update_location(
     )
     db.add(history)
     await db.commit()
+
+    # Move the dot on open dashboards now instead of at their next refresh.
+    try:
+        await manager.broadcast_to_dispatchers({
+            "type": "driver_location",
+            "driver_id": driver_id,
+            "lat": data.lat,
+            "lon": data.lon,
+            "speed_kmh": data.speed * 3.6 if data.speed is not None else None,
+            "heading": data.heading,
+            "timestamp": time.time(),
+        })
+    except Exception as exc:  # the map still updates on its 30 s refresh
+        logger.warning("Live location broadcast failed: %s", exc)
     return {"status": "updated"}
 
 
