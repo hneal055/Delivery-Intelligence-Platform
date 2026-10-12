@@ -1,11 +1,14 @@
 <#
 .SYNOPSIS
-    Schedule the nightly DIP backup and the morning backup check.
+    Schedule the nightly DIP backup, the hourly photo copy and the morning
+    backup check.
 
 .DESCRIPTION
-    Registers two Windows scheduled tasks for the current user:
+    Registers three Windows scheduled tasks for the current user:
       "DIP Nightly Backup"  daily at -At (default 23:00); runs late if the PC
                             was off or asleep at that time
+      "DIP Photo Backup"    every hour; copies new proof photos so a day's
+                            photos are not waiting for the nightly run
       "DIP Backup Check"    at logon and daily at 09:00; pops up a warning if
                             the last good backup is over 26 hours old
     Tasks run only while you are logged on, because Docker Desktop runs in
@@ -28,9 +31,10 @@ param(
 $ErrorActionPreference = "Stop"
 $backupTask = "DIP Nightly Backup"
 $checkTask = "DIP Backup Check"
+$photoTask = "DIP Photo Backup"
 
 if ($Remove) {
-    foreach ($t in @($backupTask, $checkTask)) {
+    foreach ($t in @($backupTask, $checkTask, $photoTask)) {
         Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
     }
     Write-Host "Removed the DIP backup tasks."
@@ -52,20 +56,27 @@ Register-ScheduledTask -TaskName $backupTask -Force -Principal $principal -Setti
     -Action (New-ScheduledTaskAction -Execute $shell -Argument $backupArgs -WorkingDirectory $opsDir) `
     -Description "Delivery Intelligence Platform: nightly database + proof photo backup" -ErrorAction Stop | Out-Null
 
+$photoArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$opsDir\backup-photos.ps1`" -BackupRoot `"$BackupRoot`""
+if ($OffsiteDir) { $photoArgs += " -OffsiteDir `"$OffsiteDir`"" }
+Register-ScheduledTask -TaskName $photoTask -Force -Principal $principal -Settings $settings `
+    -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 1)) `
+    -Action (New-ScheduledTaskAction -Execute $shell -Argument $photoArgs -WorkingDirectory $opsDir) `
+    -Description "Delivery Intelligence Platform: hourly copy of new proof photos" -ErrorAction Stop | Out-Null
+
 $checkArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$opsDir\check-backup.ps1`" -BackupRoot `"$BackupRoot`" -Quiet"
 Register-ScheduledTask -TaskName $checkTask -Force -Principal $principal -Settings $settings `
     -Trigger @((New-ScheduledTaskTrigger -AtLogOn -User $user), (New-ScheduledTaskTrigger -Daily -At "09:00")) `
     -Action (New-ScheduledTaskAction -Execute $shell -Argument $checkArgs -WorkingDirectory $opsDir) `
     -Description "Delivery Intelligence Platform: warn if the last backup is over 26 hours old" -ErrorAction Stop | Out-Null
 
-# Confirm both tasks really exist before reporting success
-foreach ($t in @($backupTask, $checkTask)) {
+# Confirm all tasks really exist before reporting success
+foreach ($t in @($backupTask, $photoTask, $checkTask)) {
     if (-not (Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue)) {
         Write-Host "Task '$t' was not created. Run this script as administrator." -ForegroundColor Red
         exit 1
     }
 }
-Write-Host "Scheduled '$backupTask' daily at $At and '$checkTask' at logon and 09:00." -ForegroundColor Green
+Write-Host "Scheduled '$backupTask' daily at $At, '$photoTask' every hour, and '$checkTask' at logon and 09:00." -ForegroundColor Green
 if ($OffsiteDir) {
     Write-Host "Off-machine copy: $OffsiteDir"
 } else {
