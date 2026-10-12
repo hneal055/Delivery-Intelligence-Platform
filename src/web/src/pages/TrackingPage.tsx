@@ -98,8 +98,13 @@ export function TrackingPage() {
 
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
   const currentHistoryPoint = history[currentIndex];
-  const currentTime = currentHistoryPoint?.last_updated
-    ? new Date(currentHistoryPoint.last_updated).toLocaleTimeString()
+  // Point times are UTC; the API may send them without a zone.
+  const currentTime = currentHistoryPoint?.timestamp
+    ? new Date(
+        /(Z|[+-]\d{2}:?\d{2})$/.test(currentHistoryPoint.timestamp)
+          ? currentHistoryPoint.timestamp
+          : `${currentHistoryPoint.timestamp}Z`
+      ).toLocaleTimeString()
     : null;
 
   const driverSelectData = drivers.map((d) => ({
@@ -188,7 +193,7 @@ export function TrackingPage() {
                   <RoutePlayback
                     positions={historyPositions}
                     currentIndex={currentIndex}
-                    showMarker={isPlaying || currentIndex > 0}
+                    showMarker={isPlaying || (currentIndex > 0 && currentIndex < historyPositions.length - 1)}
                   />
                 )}
               </MapContainer>

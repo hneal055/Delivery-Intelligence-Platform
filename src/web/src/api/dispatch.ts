@@ -4,6 +4,7 @@ import type {
   Package, 
   DashboardSummary, 
   LiveDriverLocation,
+  LocationHistoryPoint,
   DispatchJob,
   DispatchJobCreate,
   DriverAvailability,
@@ -122,9 +123,10 @@ export async function getJob(jobId: string): Promise<DispatchJob> {
   return response.data;
 }
 
-export async function getLocationHistory(driverId: string, hours: number = 24): Promise<LiveDriverLocation[]> {
-  const response = await apiClient.get<LiveDriverLocation[]>(`/tracking/${driverId}/history`, {
+/** A driver's recent GPS points, oldest first (the API sends newest first). */
+export async function getLocationHistory(driverId: string, hours: number = 24): Promise<LocationHistoryPoint[]> {
+  const response = await apiClient.get<LocationHistoryPoint[]>(`/tracking/${driverId}/history`, {
     params: { hours }
   });
-  return response.data;
+  return [...response.data].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
