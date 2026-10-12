@@ -220,9 +220,40 @@ To take DIP offline again: `.\scripts\ops\configure-public-access.ps1 -Disable`.
 - The PC must stay **on and awake**: Settings → System → Power → *Sleep: Never* (when plugged in).
 - Docker Desktop: *Settings → General → Start Docker Desktop when you sign in*. Keep the PC signed in.
 - If DIP is unreachable from outside: `docker compose ps` (is `delivery_tunnel` up?) and `docker compose logs cloudflared --tail 30`.
+- **UptimeRobot** (account on the owner's email) checks
+  `https://dip.chicagocargocourier.com/api/health/ready` every 5 minutes and
+  emails when it stops answering "ready". That page only says ready when the
+  PC, internet, tunnel, server and database all work.
 
 ### Security once it's public
 
 - The login pages are on the internet, so **every account needs a strong, unique password** (`set_user_password`). Remove accounts nobody uses.
 - Logins are rate-limited, and the session key (`SECRET_KEY`) and device key (`DIAD_API_KEY`) live only in `.env`. Never share that file.
-- Optional extra layer: Cloudflare **Access** can require an email code before anyone even sees the dashboard login. Ask before enabling it: the phone app's `/api` path must stay open.
+
+### Dashboard email code (Cloudflare Access, on since 2026-10-12)
+
+Before the DIP login page appears, Cloudflare asks for an email address and
+sends a **6-digit code** to it. Only listed emails get a code. The code is
+needed once per browser every 24 hours; then log in to DIP as usual.
+
+Set up in Cloudflare One (Zero Trust) → **Access controls**:
+
+| Application | Destination | Policy | What it does |
+|---|---|---|---|
+| `dip` | `dip.chicagocargocourier.com` | **Owner** (Allow, Emails) | Dashboard needs the email code |
+| `dip` | `dip.chicagocargocourier.com/api` | **Phones** (Bypass, Everyone) | Driver app and UptimeRobot get through; DIP's own login still applies |
+
+Login methods (Integrations → Identity providers): **One-time PIN** (email
+code) and **Cloudflare** (sign in with a Cloudflare account).
+
+- **Give a dispatcher access:** Access controls → Policies → **Owner** →
+  Include → Emails → add their email → Save. Also create their DIP account.
+- **Remove access:** delete their email from **Owner** (and disable their DIP account).
+- **Code email doesn't arrive:** check spam; it comes from Cloudflare
+  (`noreply@notify.cloudflare.com`). Codes expire after a few minutes;
+  request a new one.
+- **Phones or UptimeRobot suddenly blocked:** the **Phones** policy must be
+  **Bypass** (not Allow) with **Everyone**, attached to the `/api` application.
+  "Allow + Everyone" still makes everyone log in.
+- The `/api` path stays open on purpose (phones can't do the email code), so
+  strong DIP passwords and the login rate limit still matter.
