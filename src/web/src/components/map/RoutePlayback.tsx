@@ -4,7 +4,7 @@ import L from "leaflet";
 interface RoutePlaybackProps {
   positions: [number, number][];
   currentIndex: number;
-  /** Hide the playback dot until a replay starts, so a still map shows only the live dot. */
+  /** Show the playback dot only during a replay, so a still map shows only the live dot. */
   showMarker?: boolean;
 }
 
@@ -37,7 +37,8 @@ export function RoutePlayback({ positions, currentIndex, showMarker = true }: Ro
       {remaining.length >= 2 && (
         <Polyline positions={remaining} color="#868e96" weight={3} opacity={0.4} dashArray="8 6" />
       )}
-      {showMarker && currentPos && <Marker position={currentPos} icon={playbackIcon} />}
+      {/* Drawn beneath driver dots so the live position is never hidden. */}
+      {showMarker && currentPos && <Marker position={currentPos} icon={playbackIcon} zIndexOffset={-1000} />}
     </>
   );
 }
