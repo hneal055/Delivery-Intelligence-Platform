@@ -28,6 +28,15 @@ import {
   CHICAGO_DEPOT,
 } from '../utils/location';
 
+/** "2:00 PM" today, "Oct 13, 2:00 PM" another day. */
+function formatDue(iso) {
+  const due = new Date(iso);
+  const time = due.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return due.toDateString() === new Date().toDateString()
+    ? time
+    : `${due.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
 export default function ManifestScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const driverId = useAuthStore((s) => s.driverId);
@@ -87,6 +96,7 @@ export default function ManifestScreen({ navigation }) {
             deliveryAddress: p.dest_address,
             status: p.status,
             problem: p.exception_reason,
+            deliverBy: p.deliver_by,
             unit: target.unit,
             instructions: target.instructions,
             contactName: target.contactName,
@@ -328,6 +338,12 @@ export default function ManifestScreen({ navigation }) {
 
         <Text style={styles.addressText}>{item.address}</Text>
         {item.unit ? <Text style={styles.unitText}>{item.unit}</Text> : null}
+        {item.deliverBy && !isDelivered ? (
+          <Text style={new Date(item.deliverBy) < new Date() ? styles.notReadyText : styles.unitText}>
+            {new Date(item.deliverBy) < new Date() ? '⏱ LATE · was due by ' : '⏱ Deliver by '}
+            {formatDue(item.deliverBy)}
+          </Text>
+        ) : null}
         {item.phase === 'pickup' ? (
           <Text style={item.ready ? styles.readyText : styles.notReadyText}>
             {item.ready ? '● Ready for pickup' : '○ Not ready yet. You will get an alert.'}

@@ -158,3 +158,48 @@ def test_naive_times_are_treated_as_utc():
 def test_workday_hours_chicago(hour_utc, expected):
     # 12:00 UTC = 7 AM CDT (start); 00:00 UTC = 7 PM CDT (end, exclusive)
     assert attention.in_workday(datetime(2026, 10, 12, hour_utc, 0, tzinfo=timezone.utc)) is expected
+
+
+# --- deliver-by -----------------------------------------------------------------
+
+def promised(deliver_in_min, **kw):
+    p = pkg(**kw)
+    p.deliver_by = NOW + timedelta(minutes=deliver_in_min)
+    return p
+
+
+def test_late_package_is_red():
+    items = run(packages=[promised(-15)])
+    assert rules(items) == ["late"]
+    assert items[0].severity == "red" and "15 min ago" in items[0].detail
+
+
+def test_due_soon_is_orange():
+    items = run(packages=[promised(20)])
+    assert rules(items) == ["due_soon"]
+    assert "Due in 20 min" in items[0].title
+
+
+def test_deliver_by_later_is_quiet():
+    assert run(packages=[promised(90)]) == []
+
+
+def test_promised_package_skips_scheduled_overdue_rule():
+    items = run(
+        jobs=[job(driver_id="driver1", status="assigned", scheduled_at=NOW - timedelta(hours=1), package_id="p1")],
+        packages=[promised(60)],
+    )
+    assert items == []
+
+
+def test_late_unassigned_reported_once_as_late():
+    items = run(
+        jobs=[job(priority="urgent", package_id="p1")],
+        packages=[promised(-5, driver_id=None, status="pending")],
+    )
+    assert rules(items) == ["late"]
+    assert "no driver" in items[0].detail
+
+
+def test_problem_package_not_also_late():
+    assert rules(run(packages=[promised(-30, status="exception")])) == ["problem"]

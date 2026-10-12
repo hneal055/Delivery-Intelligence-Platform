@@ -24,6 +24,7 @@ LOCAL_TZ = ZoneInfo("America/Chicago")
 # Starting values; change here to tune the alerts.
 UNASSIGNED_WINDOW = timedelta(hours=2)   # job due this soon with no driver
 OVERDUE_AFTER = timedelta(minutes=30)    # past its scheduled time, not finished
+DUE_SOON = timedelta(minutes=30)         # deliver-by time this close, not delivered
 READY_WAIT = timedelta(minutes=45)       # ready for pickup, not collected
 QUIET_AFTER = timedelta(minutes=10)      # driver with work has not reported
 STOPPED_AFTER = timedelta(minutes=20)    # driver with packages on board not moving
@@ -115,6 +116,12 @@ def evaluate(
     names = {d.id: d.name or d.id for d in drivers}
     packages = list(packages)
     problem_packages = {p.id for p in packages if p.status == "exception"}
+    # A promised time replaces the vaguer "past scheduled time" job rule
+    promised = {p.id for p in packages if getattr(p, "deliver_by", None)}
+    late = {
+        p.id for p in packages
+        if p.status != "exception" and getattr(p, "deliver_by", None) and now > as_utc(p.deliver_by)
+    }
 
     def who(driver_id: Optional[str]) -> str:
         return names.get(driver_id, driver_id) if driver_id else "no driver"
@@ -128,7 +135,7 @@ def evaluate(
         if job.status in CLOSED_JOB or job.package_id in problem_packages:
             continue  # a problem package is reported once, below
         scheduled = as_utc(job.scheduled_at)
-        if scheduled and now - scheduled >= OVERDUE_AFTER:
+        if scheduled and now - scheduled >= OVERDUE_AFTER and job.package_id not in promised:
             late = minutes(now - scheduled)
             items.append(AttentionItem(
                 key=f"overdue:{job.id}", rule="overdue", severity="red",
@@ -136,7 +143,7 @@ def evaluate(
                 detail=f"Scheduled {local_time(scheduled)} ({late} min ago), not finished; driver: {who(job.driver_id)}",
                 since=scheduled.isoformat(), job_id=job.id, package_id=job.package_id, driver_id=job.driver_id,
             ))
-        elif not job.driver_id and (
+        elif not job.driver_id and job.package_id not in late and (
             job.priority == "urgent" or (scheduled is not None and scheduled - now <= UNASSIGNED_WINDOW)
         ):
             due = f"due {local_time(scheduled)}" if scheduled else "no time set"
@@ -160,6 +167,21 @@ def evaluate(
                 since=since.isoformat() if since else None, package_id=pkg.id, driver_id=pkg.driver_id,
             ))
             continue
+        deliver_by = as_utc(getattr(pkg, "deliver_by", None))
+        if deliver_by and now > deliver_by:
+            items.append(AttentionItem(
+                key=f"late:{pkg.id}", rule="late", severity="red",
+                title=f"Late: {where}",
+                detail=f"Deliver by {local_time(deliver_by)} ({minutes(now - deliver_by)} min ago); driver: {who(pkg.driver_id)}",
+                since=deliver_by.isoformat(), package_id=pkg.id, driver_id=pkg.driver_id,
+            ))
+        elif deliver_by and deliver_by - now <= DUE_SOON:
+            items.append(AttentionItem(
+                key=f"due_soon:{pkg.id}", rule="due_soon", severity="orange",
+                title=f"Due in {minutes(deliver_by - now)} min: {where}",
+                detail=f"Deliver by {local_time(deliver_by)}; driver: {who(pkg.driver_id)}",
+                since=deliver_by.isoformat(), package_id=pkg.id, driver_id=pkg.driver_id,
+            ))
         ready = as_utc(pkg.ready_at)
         if not (pkg.pickup_address and ready and pkg.status in ("pending", "assigned")):
             continue

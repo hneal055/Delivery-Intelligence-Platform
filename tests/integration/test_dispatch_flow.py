@@ -443,3 +443,62 @@ async def test_recipient_and_pickup_contact_reach_the_driver(int_client_manager)
     pkg = next(p for p in (await client.get("/dispatch/packages")).json() if p["id"] == job["package_id"])
     assert (pkg["recipient_name"], pkg["recipient_phone"]) == ("Maria Lopez", "312-555-0142")
     assert (pkg["pickup_contact_name"], pkg["pickup_contact_phone"]) == ("Luis", "(773) 555-0199")
+
+
+# --- deliver-by -----------------------------------------------------------------
+
+from datetime import datetime, timedelta, timezone
+
+
+@pytest.mark.asyncio
+async def test_create_job_with_deliver_by(int_client_manager):
+    """The promised time is stored on the package and returned with it."""
+    client, db, mgr = int_client_manager
+    promised = (datetime.now(timezone.utc) + timedelta(hours=3)).replace(microsecond=0)
+
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area", AsyncMock(return_value=MART)):
+        resp = await client.post("/dispatch/jobs", json={
+            "title": "Lunch-hour parts", "type": "delivery",
+            "dest_address": "222 W Merchandise Mart Plaza", "deliver_by": promised.isoformat(),
+        })
+    assert resp.status_code == 200
+    pkg = (await db.execute(select(PackageSQL).where(PackageSQL.id == resp.json()["package_id"]))).scalar_one()
+    stored = pkg.deliver_by if pkg.deliver_by.tzinfo else pkg.deliver_by.replace(tzinfo=timezone.utc)
+    assert stored == promised
+
+    listed = (await client.get("/dispatch/packages")).json()
+    mine = next(p for p in listed if p["id"] == pkg.id)
+    assert mine["deliver_by"] is not None
+
+
+@pytest.mark.asyncio
+async def test_create_job_with_past_deliver_by_rejected(int_client_manager):
+    client, db, mgr = int_client_manager
+    past = datetime.now(timezone.utc) - timedelta(hours=1)
+    with patch("src.backend.api.routes.dispatch.geocode_in_service_area", AsyncMock(return_value=MART)):
+        resp = await client.post("/dispatch/jobs", json={
+            "title": "Too late", "type": "delivery",
+            "dest_address": "222 W Merchandise Mart Plaza", "deliver_by": past.isoformat(),
+        })
+    assert resp.status_code == 422
+    assert "past" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_on_time_rate(int_client_manager):
+    """On time = proof captured no later than deliver_by (last 7 days)."""
+    from src.backend.models.sql_models import DeliveryProof
+    client, db, mgr = int_client_manager
+    now = datetime.now(timezone.utc)
+    for i, (promised_offset, delivered_offset) in enumerate([(60, 30), (60, 90), (60, 10)]):
+        p = await int_db_seed_package(db, status="delivered")
+        p.deliver_by = now - timedelta(minutes=200) + timedelta(minutes=promised_offset)
+        db.add(DeliveryProof(
+            package_id=p.id, driver_id="driver1", photo_key=f"ot-{i}.jpg",
+            captured_at=now - timedelta(minutes=200) + timedelta(minutes=delivered_offset),
+        ))
+    await db.commit()
+
+    body = (await client.get("/dispatch/dashboard/summary")).json()
+    assert body["on_time_total"] == 3
+    assert body["on_time_delivered"] == 2
