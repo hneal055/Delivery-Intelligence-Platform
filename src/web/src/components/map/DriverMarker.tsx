@@ -12,7 +12,7 @@ interface DriverMarkerProps {
 
 function createDriverIcon(isOnline: boolean, isSelected: boolean) {
   const color = isSelected ? "#228be6" : isOnline ? "#40c057" : "#868e96";
-  const size = isSelected ? 14 : 10;
+  const size = isSelected ? 18 : 13;
 
   return L.divIcon({
     className: "driver-marker",
