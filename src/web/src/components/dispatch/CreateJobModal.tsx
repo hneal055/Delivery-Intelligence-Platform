@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text, Checkbox, Anchor } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
@@ -69,6 +70,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
   const { data: drivers } = useDrivers();
   const now = new Date();
   const minScheduledAt = new Date(Date.now() - GRACE_MINUTES * 60 * 1000);
+  // The time filled in when the form opens. Left as is, it means "as soon
+  // as possible": it is never rejected as past and is sent as the moment
+  // Create Job is clicked, however long the form took.
+  const defaultTime = useRef(toLocalInputValue(now));
 
   const form = useForm({
     initialValues: {
@@ -114,6 +119,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       scheduled_at: (value) => {
         const scheduledAt = parseLocalInput(value);
         if (!scheduledAt) return 'Pick a date and time';
+        if (value === defaultTime.current) return null;
         return scheduledAt < minScheduledAt ? 'Scheduled time must be in the future' : null;
       },
       notes: (value, values) => {
@@ -153,6 +159,16 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
     label: `${driver.name} — ${driver.package_count} pkgs (${driver.is_online ? 'Online' : 'Offline'})`,
   }));
 
+  useEffect(() => {
+    if (!opened) return;
+    defaultTime.current = toLocalInputValue(new Date());
+    form.setFieldValue('scheduled_at', defaultTime.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened]);
+
+  const notesRequired = form.values.priority === 'urgent' || form.values.type === 'exception';
+  const hasErrors = Object.keys(form.errors).length > 0;
+
   const handleSubmit = (values: typeof form.values) => {
     createJob.mutate(
       {
@@ -160,7 +176,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         notes: values.notes.trim() || undefined,
         type: values.type as JobType,
         priority: values.priority,
-        scheduled_at: parseLocalInput(values.scheduled_at)!.toISOString(),
+        scheduled_at: (values.scheduled_at === defaultTime.current
+          ? new Date()
+          : parseLocalInput(values.scheduled_at)!
+        ).toISOString(),
         driver_id: values.driver_id || undefined,
         dest_address: isDelivery ? values.dest_address.trim() || undefined : undefined,
         dest_unit: isDelivery ? values.dest_unit.trim() || undefined : undefined,
@@ -225,7 +244,6 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             withAsterisk
             label="Scheduled Time"
             description="Type it or click the calendar icon"
-            min={toLocalInputValue(minScheduledAt)}
             {...form.getInputProps('scheduled_at')}
           />
 
@@ -312,8 +330,13 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
           )}
 
           <Textarea
-            label="Internal notes (not shown to driver)"
-            placeholder="Optional details for dispatch..."
+            label={
+              notesRequired
+                ? `Internal notes (required for ${form.values.priority === 'urgent' ? 'Urgent' : 'Exception'} jobs)`
+                : 'Internal notes (not shown to driver)'
+            }
+            withAsterisk={notesRequired}
+            placeholder={notesRequired ? 'Why is it urgent? Not shown to the driver.' : 'Optional details for dispatch...'}
             {...form.getInputProps('notes')}
           />
 
@@ -324,8 +347,13 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
           />
 
           <Group justify="flex-end">
+            {hasErrors && (
+              <Text size="sm" c="red" style={{ marginRight: 'auto' }}>
+                Check the fields marked in red.
+              </Text>
+            )}
             <Button variant="subtle" onClick={onClose}>Cancel</Button>
-            <Button type="submit" loading={createJob.isPending} disabled={!form.isValid()}>
+            <Button type="submit" loading={createJob.isPending}>
               Create Job
             </Button>
           </Group>
