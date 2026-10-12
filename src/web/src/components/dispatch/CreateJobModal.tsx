@@ -1,4 +1,4 @@
-import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text, Checkbox } from '@mantine/core';
+import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text, Checkbox, Anchor } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
@@ -8,15 +8,30 @@ import { useAddressPreview } from '../../hooks/useAddressPreview';
 import type { AddressMatch } from '../../types';
 import type { AddressStatus } from '../../hooks/useAddressPreview';
 
-function MatchLine({ status, match }: { status: AddressStatus; match: AddressMatch | null }) {
+function MatchLine({ status, match, value, onUse }: {
+  status: AddressStatus;
+  match: AddressMatch | null;
+  value: string;
+  onUse: (address: string) => void;
+}) {
   if (status === 'idle') return null;
   const color = status === 'found' ? (match?.used_default_area ? 'orange' : 'teal') : status === 'missing' ? 'red' : 'dimmed';
+  // Offer the matched address as the entry unless it is already what's typed.
+  const canUse = status === 'found' && match && match.matched_address.toLowerCase() !== value.trim().toLowerCase();
   return (
     <Text size="sm" c={color}>
       {status === 'checking' && 'Checking address…'}
       {status === 'missing' && 'No match yet. Add the city and state, or a ZIP code.'}
       {status === 'found' && match &&
         `Matched: ${match.matched_address}${match.used_default_area ? ' (Chicago assumed; add the city if this is a suburb)' : ''}`}
+      {canUse && (
+        <>
+          {' '}
+          <Anchor component="button" type="button" size="sm" fw={600} onClick={() => onUse(match.matched_address)}>
+            Use this
+          </Anchor>
+        </>
+      )}
     </Text>
   );
 }
@@ -235,7 +250,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
               {...form.getInputProps('pickup_address')}
             />
           )}
-          {isDelivery && <MatchLine status={pickupStatus} match={pickupMatch} />}
+          {isDelivery && <MatchLine status={pickupStatus} match={pickupMatch} value={form.values.pickup_address} onUse={(a) => form.setFieldValue('pickup_address', a)} />}
           {hasPickup && (
             <Textarea
               label="Pickup instructions (shown to driver)"
@@ -268,7 +283,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
               {...form.getInputProps('dest_address')}
             />
           )}
-          {isDelivery && <MatchLine status={addressStatus} match={addressMatch} />}
+          {isDelivery && <MatchLine status={addressStatus} match={addressMatch} value={form.values.dest_address} onUse={(a) => form.setFieldValue('dest_address', a)} />}
 
           {isDelivery && (
             <Group grow>
