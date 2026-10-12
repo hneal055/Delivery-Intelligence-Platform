@@ -1,5 +1,4 @@
 import { Modal, TextInput, Button, Group, Textarea, Select, Stack, Text, Checkbox } from '@mantine/core';
-import { DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { useDispatch } from '../../hooks/useDispatch';
 import { useDrivers } from '../../hooks/useDrivers';
@@ -29,6 +28,19 @@ interface CreateJobModalProps {
 
 const GRACE_MINUTES = 5;
 
+// The browser's own date-and-time box (US order, AM/PM, typeable) works with
+// local "YYYY-MM-DDTHH:mm" text; convert to a Date only when checking or saving.
+function toLocalInputValue(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function parseLocalInput(value: string): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function getLocalDayKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -49,7 +61,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       notes: '',
       type: 'delivery',
       priority: 'low',
-      scheduled_at: now,
+      scheduled_at: toLocalInputValue(now),
       driver_id: '',
       dest_address: '',
       dest_unit: '',
@@ -67,9 +79,10 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       title: (value, values) => {
         const trimmed = value.trim();
         if (trimmed.length < 2) return 'Title must be at least 2 characters';
-        if (!values.scheduled_at) return null;
+        const scheduledAt = parseLocalInput(values.scheduled_at);
+        if (!scheduledAt) return null;
 
-        const scheduledDay = getLocalDayKey(values.scheduled_at);
+        const scheduledDay = getLocalDayKey(scheduledAt);
         const targetDriverId = values.driver_id || null;
         const duplicate = jobs.some((job) => {
           if (!job.scheduled_at) return false;
@@ -84,8 +97,9 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       },
       type: (value) => (value ? null : 'Type is required'),
       scheduled_at: (value) => {
-        if (!value) return 'Scheduled time is required';
-        return value < minScheduledAt ? 'Scheduled time must be in the future' : null;
+        const scheduledAt = parseLocalInput(value);
+        if (!scheduledAt) return 'Pick a date and time';
+        return scheduledAt < minScheduledAt ? 'Scheduled time must be in the future' : null;
       },
       notes: (value, values) => {
         const hasNotes = value.trim().length > 0;
@@ -131,7 +145,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         notes: values.notes.trim() || undefined,
         type: values.type as JobType,
         priority: values.priority,
-        scheduled_at: values.scheduled_at.toISOString(),
+        scheduled_at: parseLocalInput(values.scheduled_at)!.toISOString(),
         driver_id: values.driver_id || undefined,
         dest_address: isDelivery ? values.dest_address.trim() || undefined : undefined,
         dest_unit: isDelivery ? values.dest_unit.trim() || undefined : undefined,
@@ -191,11 +205,12 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             />
           </Group>
 
-          <DateTimePicker
+          <TextInput
+            type="datetime-local"
             withAsterisk
             label="Scheduled Time"
-            placeholder="Pick date and time"
-            minDate={now}
+            description="Type it or click the calendar icon"
+            min={toLocalInputValue(minScheduledAt)}
             {...form.getInputProps('scheduled_at')}
           />
 
