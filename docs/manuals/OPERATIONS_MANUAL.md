@@ -16,7 +16,7 @@ something fails. Drivers get the one-page [Driver Guide](DRIVER_GUIDE.md).
 | Backend + database + Redis | Docker on the office PC | API `http://localhost:8000` |
 | **Dispatch dashboard** | Docker on the office PC | **http://localhost:5173** |
 | **Driver app** | Each driver's phone (Expo Go for now) | connects to the office PC over Wi-Fi |
-| Proof photos | Office PC disk (`src/uploads/proofs`), backed up nightly | Cloudflare R2 in production |
+| Proof photos | Office PC disk (`src/uploads/proofs`), backed up every hour | Cloudflare R2 in production |
 
 The phones reach the office PC over the **same Wi-Fi network**, or from
 anywhere once public access is switched on (section 10).
@@ -126,15 +126,26 @@ Backup** task runs `scripts\ops\backup.ps1`. It:
 3. Copies new proof photos to `C:\DIP-Backups\proofs`. Photos are never deleted from the backup.
 4. Copies everything **off this PC** to `OneDrive\DIP-Backups`, which syncs to Microsoft's cloud. Use your **business** OneDrive account: the backups contain customer photos and addresses.
 
+The **DIP Photo Backup** task runs **every hour** and copies new proof photos
+to `C:\DIP-Backups\proofs` and `OneDrive\DIP-Backups\proofs`, so a photo
+taken in the afternoon is not waiting for the nightly run. It takes seconds
+and writes a line to `C:\DIP-Backups\photos.log` only when it copied
+something (or failed).
+
 The **DIP Backup Check** task runs at logon and at 09:00 and **pops up a
 warning** if the last good backup is more than 26 hours old.
+
+Old fleet-simulator test photos (30,932 files) were moved out of DIP on
+2026-10-12 to `C:\DIP-Archive\simulator-proofs-2026-10-12`. They are test
+data, not deliveries, and can be deleted whenever you like.
 
 | Task | Command (PowerShell in the project folder) |
 |---|---|
 | Install or change the schedule (**as administrator**) | `.\scripts\ops\install-backup-tasks.ps1 -OffsiteDir "$env:OneDrive\DIP-Backups"` |
 | Back up now | `.\scripts\ops\backup.ps1 -OffsiteDir "$env:OneDrive\DIP-Backups"` |
 | Is the last backup recent? | `.\scripts\ops\check-backup.ps1` |
-| What happened? | open `C:\DIP-Backups\backup.log` |
+| Copy new photos now | `.\scripts\ops\backup-photos.ps1 -OffsiteDir "$env:OneDrive\DIP-Backups"` |
+| What happened? | open `C:\DIP-Backups\backup.log` (photos: `photos.log`) |
 | **Prove a backup restores** (monthly) | `.\scripts\ops\test-restore.ps1` |
 
 `test-restore.ps1` restores the newest dump into a separate scratch database,
