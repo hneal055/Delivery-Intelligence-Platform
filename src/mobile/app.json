@@ -29,7 +29,8 @@
         "expo-camera",
         {
           "cameraPermission": "Allow Delivery Intelligence to scan delivery barcodes and capture proof-of-delivery photos.",
-          "microphonePermission": false
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
@@ -53,10 +54,11 @@
       ]
     ],
     "extra": {
+      "apiUrl": "https://api.yourdomain.com",
       "eas": {
-        "projectId": "2c2a76b7-bc4e-4091-b6a0-77b45fa62fdf"
-      },
-      "apiUrl": "https://api.yourdomain.com"
-    }
+        "projectId": "1d2de5ee-3c67-4fc2-a534-06e2e3c01b74"
+      }
+    },
+    "owner": "hneal1038"
   }
 }
