@@ -44,10 +44,7 @@ async def update_driver_location(
     driver.current_lon = lon
     driver.last_updated = datetime.utcnow()
 
-    logger.warning(
-        "HEARTBEAT UPDATE FOR DRIVER %s",
-        driver_id,
-    )
+    logger.debug("Location update for driver %s", driver_id)
 
     await heartbeat_service.update(driver_id)
 
