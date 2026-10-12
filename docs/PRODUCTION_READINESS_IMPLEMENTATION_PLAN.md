@@ -347,7 +347,9 @@ _(fill in)_
 ### Changes made
 _(fill in)_
 
-*Progress 2026-10-11 (PRs #25–#29):* pickup → delivery stages, assignment alerts (push + 30 s in-app check), Report problem, recipient/pickup contacts with Call, "Received by" on proofs, address preview with Chicago-first lookup, driver filters, Proof Gallery photos fixed. Open: installable app (iOS/Android decision deferred by owner), Expo push project ID (`eas-cli init`), Analytics/Equipment pages still hidden.
+*Progress 2026-10-11 (PRs #25–#29):* pickup → delivery stages, assignment alerts (push + 30 s in-app check), Report problem, recipient/pickup contacts with Call, "Received by" on proofs, address preview with Chicago-first lookup, driver filters, Proof Gallery photos fixed. Open: installable app (iOS/Android decision deferred by owner), Analytics/Equipment pages still hidden.
+
+*Progress 2026-10-12 (PRs #32–#34):* server push alerts work: the driver app is linked to the owner's Expo project, and an iPhone in Expo Go gets assignment alerts with the app closed (verified live). Android needs the installable app for push. Dashboard: Scheduled Time is a US month/day/year box with AM/PM (also fixes a crash after picking a date); "Use this" copies the matched address into the field.
 
 **Checkpoint:** ☐ Phase 8 complete → readiness **96%**
 
