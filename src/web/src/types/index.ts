@@ -31,6 +31,8 @@ export interface Package {
   pickup_lon: number | null;
   pickup_instructions: string | null;
   ready_at: string | null;
+  /** Time promised to the customer, if any (UTC ISO) */
+  deliver_by: string | null;
   exception_reason: string | null;
   tracking_code: string | null;
   recipient_name: string | null;
@@ -61,7 +63,7 @@ export interface Token {
 /** An item on the Dashboard's "Needs attention" panel (GET /dispatch/attention). */
 export interface AttentionItem {
   key: string;
-  rule: "no_driver" | "overdue" | "problem" | "ready_waiting" | "offline_ready" | "quiet" | "stopped";
+  rule: "no_driver" | "overdue" | "problem" | "late" | "due_soon" | "ready_waiting" | "offline_ready" | "quiet" | "stopped";
   severity: "red" | "orange";
   title: string;
   detail: string;
@@ -79,6 +81,9 @@ export interface DashboardSummary {
   pending_packages: number;
   delivered_packages: number;
   exception_packages: number;
+  /** Last 7 days, packages that had a deliver-by time */
+  on_time_delivered: number;
+  on_time_total: number;
 }
 
 export interface LiveDriverLocation {
@@ -142,6 +147,7 @@ export interface DispatchJobCreate {
   recipient_phone?: string;
   pickup_contact_name?: string;
   pickup_contact_phone?: string;
+  deliver_by?: string;
 }
 
 export interface AddressMatch {

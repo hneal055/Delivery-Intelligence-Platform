@@ -88,6 +88,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
       delivery_instructions: '',
       recipient_name: '',
       recipient_phone: '',
+      deliver_by: '',
       pickup_contact_name: '',
       pickup_contact_phone: '',
       pickup_address: '',
@@ -121,6 +122,15 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         if (!scheduledAt) return 'Pick a date and time';
         if (value === defaultTime.current) return null;
         return scheduledAt < minScheduledAt ? 'Scheduled time must be in the future' : null;
+      },
+      deliver_by: (value, values) => {
+        if (!value) return null;
+        const deliverBy = parseLocalInput(value);
+        if (!deliverBy) return 'Pick a date and time, or leave it empty';
+        if (deliverBy < minScheduledAt) return 'The deliver-by time is in the past';
+        const scheduledAt = values.scheduled_at === defaultTime.current ? new Date() : parseLocalInput(values.scheduled_at);
+        if (scheduledAt && deliverBy < scheduledAt) return 'Deliver-by must be after the scheduled time';
+        return null;
       },
       notes: (value, values) => {
         const hasNotes = value.trim().length > 0;
@@ -188,6 +198,7 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
         pickup_instructions: isDelivery ? values.pickup_instructions.trim() || undefined : undefined,
         recipient_name: isDelivery ? values.recipient_name.trim() || undefined : undefined,
         recipient_phone: isDelivery ? values.recipient_phone.trim() || undefined : undefined,
+        deliver_by: isDelivery && values.deliver_by ? parseLocalInput(values.deliver_by)!.toISOString() : undefined,
         pickup_contact_name: hasPickup ? values.pickup_contact_name.trim() || undefined : undefined,
         pickup_contact_phone: hasPickup ? values.pickup_contact_phone.trim() || undefined : undefined,
         ready_for_pickup: values.ready_for_pickup,
@@ -246,6 +257,15 @@ export function CreateJobModal({ opened, onClose }: CreateJobModalProps) {
             description="Type it or click the calendar icon"
             {...form.getInputProps('scheduled_at')}
           />
+
+          {isDelivery && (
+            <TextInput
+              type="datetime-local"
+              label="Deliver by (optional)"
+              description="The time promised to the customer. Dispatch is alerted when it is close or missed."
+              {...form.getInputProps('deliver_by')}
+            />
+          )}
 
           <Select
             label="Assign Driver (optional)"

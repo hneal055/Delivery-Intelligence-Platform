@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from pydantic import BaseModel
 from src.backend.api.deps import PermissionChecker
@@ -17,6 +17,7 @@ from src.backend.models.sql_models import (
     Package as PackageSQL,
     DispatchJob as DispatchJobSQL,
     DriverAvailability,
+    DeliveryProof as DeliveryProofSQL,
 )
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.services.geocoding import geocode_in_service_area
@@ -27,6 +28,10 @@ from src.backend.core.permissions import Permission
 from src.backend.api.limiter import limiter
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
 class DriverResponse(BaseModel):
@@ -54,6 +59,7 @@ class PackageResponse(BaseModel):
     pickup_lon: Optional[float] = None
     pickup_instructions: Optional[str] = None
     ready_at: Optional[str] = None
+    deliver_by: Optional[str] = None
     exception_reason: Optional[str] = None
     tracking_code: Optional[str] = None
     recipient_name: Optional[str] = None
@@ -76,6 +82,9 @@ class DashboardSummary(BaseModel):
     pending_packages: int
     delivered_packages: int
     exception_packages: int
+    # Last 7 days, packages that had a deliver-by time
+    on_time_delivered: int = 0
+    on_time_total: int = 0
 
 
 @router.get("/drivers", response_model=List[DriverResponse])
@@ -144,6 +153,7 @@ async def get_driver_packages(
             pickup_lon=p.pickup_lon,
             pickup_instructions=p.pickup_instructions,
             ready_at=p.ready_at.isoformat() if p.ready_at else None,
+            deliver_by=p.deliver_by.isoformat() if p.deliver_by else None,
             exception_reason=p.exception_reason,
             tracking_code=p.tracking_code,
             recipient_name=p.recipient_name,
@@ -200,6 +210,7 @@ async def list_deliveries(
             pickup_lon=p.pickup_lon,
             pickup_instructions=p.pickup_instructions,
             ready_at=p.ready_at.isoformat() if p.ready_at else None,
+            deliver_by=p.deliver_by.isoformat() if p.deliver_by else None,
             exception_reason=p.exception_reason,
             tracking_code=p.tracking_code,
             recipient_name=p.recipient_name,
@@ -251,6 +262,7 @@ async def list_packages(
             pickup_lon=p.pickup_lon,
             pickup_instructions=p.pickup_instructions,
             ready_at=p.ready_at.isoformat() if p.ready_at else None,
+            deliver_by=p.deliver_by.isoformat() if p.deliver_by else None,
             exception_reason=p.exception_reason,
             tracking_code=p.tracking_code,
             recipient_name=p.recipient_name,
@@ -301,6 +313,17 @@ async def get_dashboard_summary(
     )
     exception_packages = exception_result.scalar() or 0
 
+    # On time = proof of delivery captured no later than the promised time
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    rows = (await db.execute(
+        select(PackageSQL.deliver_by, func.min(DeliveryProofSQL.captured_at))
+        .join(DeliveryProofSQL, DeliveryProofSQL.package_id == PackageSQL.id)
+        .where(PackageSQL.deliver_by.isnot(None))
+        .group_by(PackageSQL.id, PackageSQL.deliver_by)
+        .having(func.min(DeliveryProofSQL.captured_at) >= since)
+    )).all()
+    on_time = sum(1 for deliver_by, delivered_at in rows if _as_utc(delivered_at) <= _as_utc(deliver_by))
+
     return DashboardSummary(
         total_drivers=total_drivers,
         active_drivers=active_drivers,
@@ -309,6 +332,8 @@ async def get_dashboard_summary(
         pending_packages=pending_packages,
         delivered_packages=delivered_packages,
         exception_packages=exception_packages,
+        on_time_delivered=on_time,
+        on_time_total=len(rows),
     )
 
 
@@ -334,6 +359,8 @@ async def create_job(
     if (job_type == "pickup" and job_data.dest_address
             and not (job_data.pickup_address or "").strip()):
         raise HTTPException(status_code=422, detail="Pickup address is required for a pickup job.")
+    if job_data.deliver_by and _as_utc(job_data.deliver_by) < datetime.now(timezone.utc) - timedelta(minutes=5):
+        raise HTTPException(status_code=422, detail="The deliver-by time is in the past.")
 
     package = None
     if job_data.package_id:
@@ -369,6 +396,7 @@ async def create_job(
                 ((job_data.pickup_instructions or "").strip() or None) if pickup else None
             ),
             ready_at=datetime.now(timezone.utc) if job_data.ready_for_pickup else None,
+            deliver_by=job_data.deliver_by,
             recipient_name=(job_data.recipient_name or "").strip() or None,
             recipient_phone=(job_data.recipient_phone or "").strip() or None,
             pickup_contact_name=(job_data.pickup_contact_name or "").strip() or None if pickup else None,

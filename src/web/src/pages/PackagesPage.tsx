@@ -19,6 +19,21 @@ function statusColor(status: string): string {
   }
 }
 
+// Promised time, and whether an undelivered package is late or due soon
+function DeliverBy({ pkg }: { pkg: Package }) {
+  if (!pkg.deliver_by) return <span style={{ color: "#999" }}>—</span>;
+  const due = new Date(pkg.deliver_by);
+  const open = pkg.status !== "delivered";
+  const minutesLeft = (due.getTime() - Date.now()) / 60000;
+  return (
+    <>
+      <Text size="sm">{due.toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}</Text>
+      {open && minutesLeft < 0 && <Badge color="red" size="xs">Late</Badge>}
+      {open && minutesLeft >= 0 && minutesLeft <= 30 && <Badge color="orange" size="xs">Due soon</Badge>}
+    </>
+  );
+}
+
 // A package waiting at its pickup point that the shipper has not released yet
 function awaitingReady(pkg: Package): boolean {
   return Boolean(pkg.pickup_address) && !pkg.ready_at &&
@@ -118,6 +133,7 @@ export function PackagesPage() {
             <Table.Th>Status</Table.Th>
             <Table.Th>Driver</Table.Th>
             <Table.Th>Pickup → Delivery</Table.Th>
+            <Table.Th>Deliver by</Table.Th>
             <Table.Th>Created</Table.Th>
             <Table.Th>Actions</Table.Th>
           </Table.Tr>
@@ -125,7 +141,7 @@ export function PackagesPage() {
         <Table.Tbody>
           {isLoading && (
             <Table.Tr>
-              <Table.Td colSpan={6}>Loading...</Table.Td>
+              <Table.Td colSpan={7}>Loading...</Table.Td>
             </Table.Tr>
           )}
           {filtered.map((pkg) => (
@@ -160,6 +176,9 @@ export function PackagesPage() {
                     To: {[pkg.recipient_name, pkg.recipient_phone].filter(Boolean).join(" · ")}
                   </Text>
                 )}
+              </Table.Td>
+              <Table.Td>
+                <DeliverBy pkg={pkg} />
               </Table.Td>
               <Table.Td>
                 {pkg.created_at ? new Date(pkg.created_at).toLocaleString() : "N/A"}

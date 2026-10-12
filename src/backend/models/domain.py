@@ -108,6 +108,9 @@ class DispatchJobCreate(BaseModel):
     recipient_phone: Optional[str] = Field(None, max_length=30)
     pickup_contact_name: Optional[str] = Field(None, max_length=100)
     pickup_contact_phone: Optional[str] = Field(None, max_length=30)
+    # Time promised to the customer (optional). Drives the late / due-soon
+    # alerts and the on-time rate.
+    deliver_by: Optional[datetime] = None
 
 class DispatchJob(DispatchJobCreate):
     model_config = ConfigDict(from_attributes=True)

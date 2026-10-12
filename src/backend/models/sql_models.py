@@ -81,6 +81,7 @@ class Package(Base):
     pickup_lon = Column(Float, nullable=True)
     pickup_instructions = Column(Text, nullable=True)
     ready_at = Column(DateTime(timezone=True), nullable=True)  # shipper says ready
+    deliver_by = Column(DateTime(timezone=True), nullable=True)  # time promised to the customer
 
     exception_reason = Column(Text, nullable=True)  # why the driver could not complete
 

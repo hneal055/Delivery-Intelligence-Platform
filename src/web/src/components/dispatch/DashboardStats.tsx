@@ -41,6 +41,21 @@ export function DashboardStats({ summary, isLoading }: DashboardStatsProps) {
       <StatCard label="Total Drivers" value={summary.total_drivers} color="gray" />
       <StatCard label="Total Packages" value={summary.total_packages} color="gray" />
       <StatCard label="Exceptions" value={summary.exception_packages} color="red" />
+      <StatCard
+        label="On time (7 days)"
+        value={
+          summary.on_time_total > 0
+            ? `${Math.round((100 * summary.on_time_delivered) / summary.on_time_total)}% · ${summary.on_time_delivered}/${summary.on_time_total}`
+            : "—"
+        }
+        color={
+          summary.on_time_total === 0
+            ? "gray"
+            : summary.on_time_delivered / summary.on_time_total >= 0.9
+              ? "teal"
+              : "orange"
+        }
+      />
     </SimpleGrid>
   );
 }
