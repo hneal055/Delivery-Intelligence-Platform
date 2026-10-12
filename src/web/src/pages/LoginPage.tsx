@@ -113,7 +113,10 @@ export function LoginPage() {
                   variant="light"
                   title="Login failed"
                 >
-                  Invalid username or password. Please try again.
+                  {(loginMutation.error as { response?: { status?: number; data?: { detail?: string } } } | null)
+                    ?.response?.status === 403
+                    ? (loginMutation.error as { response?: { data?: { detail?: string } } }).response?.data?.detail
+                    : "Invalid username or password. Please try again."}
                 </Alert>
               )}
 

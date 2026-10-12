@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -16,7 +17,9 @@ from src.backend.core.database import get_db
 from src.backend.models.sql_models import DeviceToken
 from src.backend.services.driver_profile import ensure_driver_profile
 from src.backend.services.heartbeat import heartbeat_service
+from src.backend.services import cf_access
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -29,6 +32,22 @@ async def login_for_access_token(
 ):
     """Authenticate and return a JWT access token. Rate-limited to 10 attempts/min per IP."""
     user_sql = await get_user_by_username(db, form_data.username)
+
+    # Staff logins from the internet need the dashboard email code first
+    # (Cloudflare Access). Checked before the password, so this answer never
+    # reveals whether a guessed password was right. Drivers are not affected.
+    if (
+        user_sql
+        and user_sql.role != UserRole.DRIVER.value
+        and cf_access.required(request)
+        and not await cf_access.verified_email(request)
+    ):
+        logger.warning("Staff login for %s from the internet without the email code; refused", user_sql.username)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff sign-in from the internet needs the email code first. "
+                   "Reload the dashboard page, enter the code Cloudflare emails you, then sign in.",
+        )
 
     if not user_sql or not verify_password(form_data.password, user_sql.hashed_password):
         raise HTTPException(
