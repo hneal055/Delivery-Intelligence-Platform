@@ -1,13 +1,15 @@
-import { Paper, Text, Badge, Group, Stack } from "@mantine/core";
+import { Paper, Text, Badge, Group, Stack, Button } from "@mantine/core";
 import type { Driver } from "../../types";
 
 interface DriverCardProps {
   driver: Driver;
   isSelected?: boolean;
   onClick?: () => void;
+  /** Shown on the selected card: open Packages filtered to this driver. */
+  onViewPackages?: () => void;
 }
 
-export function DriverCard({ driver, isSelected, onClick }: DriverCardProps) {
+export function DriverCard({ driver, isSelected, onClick, onViewPackages }: DriverCardProps) {
   return (
     <Paper
       withBorder
@@ -38,6 +40,19 @@ export function DriverCard({ driver, isSelected, onClick }: DriverCardProps) {
           <Text size="xs" c="dimmed" ff="monospace">
             {driver.current_lat.toFixed(4)}, {driver.current_lon.toFixed(4)}
           </Text>
+        )}
+        {isSelected && onViewPackages && (
+          <Button
+            size="xs"
+            variant="light"
+            mt={6}
+            onClick={(e) => {
+              e.stopPropagation(); // keep the card selected
+              onViewPackages();
+            }}
+          >
+            View packages ({driver.package_count}) →
+          </Button>
         )}
       </Stack>
     </Paper>
