@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Grid, Stack, ScrollArea, Title, Text } from "@mantine/core";
 import { DashboardStats } from "../components/dispatch/DashboardStats";
 import { DispatchMap } from "../components/map/DispatchMap";
@@ -11,6 +12,7 @@ export function DashboardPage() {
   const { data: drivers = [], isLoading: driversLoading } = useDrivers();
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   // Connect WebSocket for real-time updates
   useWebSocket();
@@ -47,6 +49,9 @@ export function DashboardPage() {
                       setSelectedDriverId(
                         driver.id === selectedDriverId ? null : driver.id
                       )
+                    }
+                    onViewPackages={() =>
+                      navigate(`/packages?driver=${encodeURIComponent(driver.id)}`)
                     }
                   />
                 ))}

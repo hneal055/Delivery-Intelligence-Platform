@@ -2,6 +2,7 @@ import { Table, Badge, Title, Stack, Select, Group, Button, Text } from "@mantin
 import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { usePackages } from "../hooks/usePackages";
 import { markPackageReady, reopenPackage } from "../api/dispatch";
 import type { Package } from "../types";
@@ -27,7 +28,19 @@ function awaitingReady(pkg: Package): boolean {
 export function PackagesPage() {
   const { data: packages = [], isLoading } = usePackages();
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [driverFilter, setDriverFilter] = useState<string | null>(null);
+  // Kept in the address (?driver=driver1) so the Dashboard can open this
+  // page filtered, and Back or refresh keeps the filter.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const driverFilter = searchParams.get("driver");
+  const setDriverFilter = (value: string | null) =>
+    setSearchParams(
+      (params) => {
+        if (value) params.set("driver", value);
+        else params.delete("driver");
+        return params;
+      },
+      { replace: true }
+    );
   const driverOptions = useDriverFilterOptions();
   const queryClient = useQueryClient();
 
