@@ -42,7 +42,8 @@ export function AttentionPanel() {
       <Stack gap={6} mah={220} style={{ overflowY: "auto" }}>
         {items.map((item) => {
           const action = attentionAction(item);
-          const age = attentionAge(item.since);
+          // Late / due-soon titles already give the time; don't repeat it
+          const age = item.rule === "late" || item.rule === "due_soon" ? null : attentionAge(item.since);
           return (
             <Group key={item.key} justify="space-between" wrap="nowrap" gap="sm">
               <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>

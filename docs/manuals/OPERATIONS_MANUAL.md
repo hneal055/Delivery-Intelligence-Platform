@@ -257,6 +257,17 @@ code) and **Cloudflare** (sign in with a Cloudflare account).
   "Allow + Everyone" still makes everyone log in.
 - The `/api` path stays open on purpose (phones can't do the email code), so
   strong DIP passwords and the login rate limit still matter.
+- **Staff logins need the code too.** A dispatcher, manager or admin login
+  that comes from the internet is refused unless the browser has passed the
+  email code ("Staff sign-in from the internet needs the email code first").
+  Driver logins and logins on the office PC (`http://localhost:5173`) are
+  not affected. Settings: `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` in `.env`.
+- **Emergency off-switch** (e.g. Cloudflare trouble): log in at
+  `http://localhost:5173` on the office PC, or empty the value after
+  `CF_ACCESS_AUD=` in `.env` and run `docker compose restart backend`. Put it
+  back afterwards.
+- **Logins last 8 hours.** Drivers log in again at the start of each shift;
+  the dashboard asks again after 8 hours.
 
 ## 11. Customer tracking link and texts
 
