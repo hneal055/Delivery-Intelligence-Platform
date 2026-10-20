@@ -1,12 +1,13 @@
 import secrets
 import uuid
+import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from src.backend.api.deps import PermissionChecker
 
 from src.backend.core.database import get_db
@@ -22,12 +23,14 @@ from src.backend.models.sql_models import (
 from src.backend.services.heartbeat import heartbeat_service
 from src.backend.services.geocoding import geocode_in_service_area
 from src.backend.services.driver_alerts import alert_driver
+from src.backend.services.redis_manager import manager as ws_manager
 from src.backend.core.permissions import Permission
 
 
 from src.backend.api.limiter import limiter
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
+logger = logging.getLogger(__name__)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -72,6 +75,25 @@ class PackageResponse(BaseModel):
     predicted_eta_seconds: Optional[float] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class PackageWorkspaceUpdate(BaseModel):
+    driver_id: Optional[str] = Field(None, max_length=200)
+    dest_address: Optional[str] = Field(None, max_length=500)
+    dest_unit: Optional[str] = Field(None, max_length=100)
+    delivery_instructions: Optional[str] = Field(None, max_length=1000)
+    pickup_address: Optional[str] = Field(None, max_length=500)
+    pickup_instructions: Optional[str] = Field(None, max_length=1000)
+    recipient_name: Optional[str] = Field(None, max_length=100)
+    recipient_phone: Optional[str] = Field(None, max_length=30)
+    pickup_contact_name: Optional[str] = Field(None, max_length=100)
+    pickup_contact_phone: Optional[str] = Field(None, max_length=30)
+    deliver_by: Optional[datetime] = None
+    scheduled_at: Optional[datetime] = None
+    ready_for_pickup: Optional[bool] = None
+    priority: Optional[str] = Field(None, max_length=20)
+    job_title: Optional[str] = Field(None, max_length=200)
+    job_notes: Optional[str] = Field(None, max_length=2000)
 
 
 class DashboardSummary(BaseModel):
@@ -678,6 +700,192 @@ async def mark_ready_for_pickup(
     await db.commit()
     await alert_driver(db, background_tasks, package.driver_id, package, "ready")
     return {"package_id": package.id, "ready_at": package.ready_at.isoformat()}
+
+
+@router.patch("/packages/{package_id}", response_model=PackageResponse)
+@limiter.limit("60/minute")
+async def update_package_workspace(
+    request: Request,
+    package_id: str,
+    data: PackageWorkspaceUpdate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(PermissionChecker(Permission.MANAGE_JOBS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update package details and its open dispatch jobs from the package workspace."""
+    package = await db.get(PackageSQL, package_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    fields = data.model_fields_set
+    jobs_result = await db.execute(
+        select(DispatchJobSQL).where(
+            DispatchJobSQL.package_id == package_id,
+            DispatchJobSQL.status.notin_(("completed", "cancelled")),
+        )
+    )
+    jobs = jobs_result.scalars().all()
+
+    if "driver_id" in fields:
+        if data.driver_id and await db.get(DriverSQL, data.driver_id) is None:
+            raise HTTPException(status_code=404, detail="Driver not found")
+        if data.driver_id and package.status in ("delivered", "exception"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot assign a package that is {package.status}",
+            )
+        package.driver_id = data.driver_id
+        for job in jobs:
+            job.driver_id = data.driver_id
+            if data.driver_id and job.status == "pending":
+                job.status = "assigned"
+            elif not data.driver_id and job.status == "assigned":
+                job.status = "pending"
+        if data.driver_id and package.status == "pending":
+            package.status = "assigned"
+        elif not data.driver_id and package.status == "assigned":
+            package.status = "pending"
+
+    address_fields = (
+        "dest_address",
+        "dest_unit",
+        "delivery_instructions",
+        "pickup_address",
+        "pickup_instructions",
+    )
+    if any(field in fields for field in address_fields) and package.status in (
+        "delivered",
+        "exception",
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot change delivery details when package is {package.status}",
+        )
+
+    if "dest_address" in fields:
+        address = (data.dest_address or "").strip()
+        if not address:
+            raise HTTPException(status_code=422, detail="Delivery address is required")
+        location = await geocode_in_service_area(address)
+        if location is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Delivery address not found. Check the street, city and state.",
+            )
+        package.dest_address = location.matched_address
+        package.dest_lat = location.lat
+        package.dest_lon = location.lon
+    if "pickup_address" in fields:
+        address = (data.pickup_address or "").strip()
+        if address:
+            location = await geocode_in_service_area(address)
+            if location is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Pickup address not found. Check the street, city and state.",
+                )
+            package.pickup_address = location.matched_address
+            package.pickup_lat = location.lat
+            package.pickup_lon = location.lon
+        else:
+            package.pickup_address = None
+            package.pickup_lat = None
+            package.pickup_lon = None
+
+    for field in (
+        "dest_unit",
+        "delivery_instructions",
+        "pickup_instructions",
+        "recipient_name",
+        "recipient_phone",
+        "pickup_contact_name",
+        "pickup_contact_phone",
+        "deliver_by",
+    ):
+        if field in fields:
+            value = getattr(data, field)
+            setattr(package, field, value.strip() or None if isinstance(value, str) else value)
+
+    if "ready_for_pickup" in fields:
+        if package.status in ("loaded", "delivered", "exception"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot change pickup readiness when package is {package.status}",
+            )
+        package.ready_at = datetime.now(timezone.utc) if data.ready_for_pickup else None
+
+    if "priority" in fields:
+        if data.priority not in {"low", "medium", "high", "urgent"}:
+            raise HTTPException(status_code=422, detail="Invalid priority")
+        package.priority = data.priority
+        for job in jobs:
+            job.priority = data.priority
+
+    if "scheduled_at" in fields or "job_title" in fields or "job_notes" in fields:
+        if not jobs:
+            raise HTTPException(
+                status_code=409,
+                detail="This package has no open dispatch job to update",
+            )
+        for job in jobs:
+            if "scheduled_at" in fields:
+                job.scheduled_at = data.scheduled_at
+            if "job_title" in fields:
+                title = (data.job_title or "").strip()
+                if len(title) < 2:
+                    raise HTTPException(
+                        status_code=422, detail="Job title must be at least 2 characters"
+                    )
+                job.title = title
+            if "job_notes" in fields:
+                job.notes = (data.job_notes or "").strip() or None
+
+    package.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(package)
+
+    if "driver_id" in fields and data.driver_id:
+        await alert_driver(db, background_tasks, data.driver_id, package, "assigned")
+    elif (
+        "ready_for_pickup" in fields
+        and data.ready_for_pickup
+        and package.driver_id
+    ):
+        await alert_driver(db, background_tasks, package.driver_id, package, "ready")
+    try:
+        await ws_manager.broadcast_to_dispatchers(
+            {"type": "package_updated", "package_id": package_id}
+        )
+    except Exception as exc:
+        logger.warning("Could not broadcast package update for %s: %s", package_id, exc)
+    return PackageResponse(
+        id=package.id,
+        driver_id=package.driver_id,
+        vehicle_id=package.vehicle_id,
+        dest_lat=package.dest_lat,
+        dest_lon=package.dest_lon,
+        dest_address=package.dest_address,
+        dest_unit=package.dest_unit,
+        delivery_instructions=package.delivery_instructions,
+        pickup_address=package.pickup_address,
+        pickup_lat=package.pickup_lat,
+        pickup_lon=package.pickup_lon,
+        pickup_instructions=package.pickup_instructions,
+        ready_at=package.ready_at.isoformat() if package.ready_at else None,
+        deliver_by=package.deliver_by.isoformat() if package.deliver_by else None,
+        exception_reason=package.exception_reason,
+        tracking_code=package.tracking_code,
+        recipient_name=package.recipient_name,
+        recipient_phone=package.recipient_phone,
+        pickup_contact_name=package.pickup_contact_name,
+        pickup_contact_phone=package.pickup_contact_phone,
+        status=package.status,
+        section=package.section,
+        distance_km=package.distance_km,
+        predicted_eta_seconds=package.predicted_eta_seconds,
+        created_at=package.created_at.isoformat() if package.created_at else None,
+        updated_at=package.updated_at.isoformat() if package.updated_at else None,
+    )
 
 
 @router.put("/packages/{package_id}/reopen")

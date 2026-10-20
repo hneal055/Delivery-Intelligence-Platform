@@ -12,41 +12,116 @@
 >
 > **Platform Status:** Operational Foundation Established ✅
 >
-> **Last Updated:** September 2026
+> **Last Updated:** October 2026
 
 ---
 
 # Table of Contents
 
-- [Executive Summary
-- #current-operational-status
-- #architecture
-- #core-capabilities
-  - #last-mile-logistics-intelligence
-  - #fleet-operations
-  - #telemetry--real-time-visibility
-  - #dispatch-management
-  - #route-optimization--geospatial-intelligence
-  - #proof-of-delivery-pod-validation
-  - #predictive-analytics--machine-learning
-  - #mobile-driver-experience
-  - #platform-security--compliance
-  - #command-center-operations
-- #technical-stack
-- #roadmap-implementation-plan
-- #deployment-guide
-- #platform-access-points
-- #recovery-checklist
-- #quick-troubleshooting-reference
-- #detailed-troubleshooting-guide
-- #testing-guide
-- #incident-recovery-timeline
-- #known-issues
-- #next-session-priorities
-- #future-roadmap
-- #project-status
+- [Local Development and Account Recovery](#local-development-and-account-recovery)
+- [Executive Summary](#executive-summary)
+- [Current Operational Status](#current-operational-status)
+- [Architecture](#architecture)
+- [Core Capabilities](#core-capabilities)
+- [Testing Guide](#testing-guide)
+- [Historical Recovery Notes](#historical-recovery-notes)
+- [Future Roadmap](#future-roadmap)
+- [Project Status](#project-status)
 
 ---
+
+# Local Development and Account Recovery
+
+Run Docker Desktop first. From the repository root, start the local stack and
+check backend health:
+
+```powershell
+.\scripts\dev\start.ps1
+Invoke-RestMethod http://localhost:8000/health
+```
+
+The dashboard is at `http://localhost:5173`; the backend health endpoint is
+`http://localhost:8000/health`. Check `/health`, not the backend site root.
+For service diagnostics, use `docker compose ps` and
+`docker compose logs backend --tail 100`.
+
+## Reset or create an account
+
+Reset a password using the **exact existing username**. The command prompts
+for the new password without displaying it; passwords must be at least 10
+characters:
+
+```powershell
+docker exec -it delivery_backend python -m src.scripts.set_user_password dispatcher1
+docker exec -it delivery_backend python -m src.scripts.set_user_password admin
+docker exec -it delivery_backend python -m src.scripts.set_user_password driver1
+```
+
+These are examples: usernames depend on the current database. A role name
+(`dispatcher`, `admin`, or `driver`) is not automatically a username, and a
+driver label such as `D001` works only if an account with that username exists.
+To list the configured accounts:
+
+```powershell
+docker exec delivery_db psql -U postgres -d delivery -c "SELECT username, role, is_active FROM users ORDER BY username;"
+```
+
+Resetting does not create a missing account. To create an admin account if it
+does not exist, run:
+
+```powershell
+docker exec -it delivery_backend python -m src.scripts.create_user admin admin
+```
+
+The creation script prompts for a password. The accepted roles are `driver`,
+`dispatcher`, `manager`, and `admin`. Never put real passwords in source,
+documentation, screenshots, or command history. Reset any password that has
+been exposed.
+
+## Driver app and web troubleshooting
+
+Run Expo commands from `src\mobile`, not the repository root:
+
+```powershell
+Set-Location src\mobile
+npm run go
+```
+
+The phone and office PC must be on the same Wi-Fi for local development. If
+the PC's IP changes, run `.\scripts\dev\configure-mobile-env.ps1` from the
+repository root, restart Expo with `npx expo start -c`, and verify the
+`[API Client] baseURL` log points to `http://<office-PC-IP>:8000`. To run the
+mobile project in a PC browser, use `npx expo start -c --web` from `src\mobile`.
+If Expo reports missing web packages, run
+`npx expo install react-native-web react-dom` from that same directory.
+
+The web client calls `/api/auth/token`; the frontend Nginx proxy strips the
+`/api` prefix before forwarding the request to backend `/auth/token`. If web
+login still returns 405 or shows stale frontend behavior, rebuild the
+frontend and hard-refresh the browser:
+
+```powershell
+docker compose up -d --build frontend
+```
+
+`401 Unauthorized` for intentionally invalid credentials is an expected
+authentication response; it confirms the request reached the login endpoint,
+but does not verify valid account credentials. See the
+[Operations Manual](docs/manuals/OPERATIONS_MANUAL.md) for detailed recovery
+steps.
+
+## Customer SMS status
+
+DIP supports background Twilio texts for out-for-delivery and delivered
+milestones. The backend receives Twilio settings through Docker Compose;
+blank settings keep SMS disabled. Trust Hub business-profile approval alone
+does not complete sender registration: finish the applicable A2P 10DLC
+campaign registration or toll-free verification before testing. Configure
+credentials privately in `.env` (production) or `.env.backend` (local
+development), then follow the safe test steps in the
+[Operations Manual](docs/manuals/OPERATIONS_MANUAL.md#11-customer-tracking-link-and-texts).
+Use the existing company phone for calls for now; this SMS phase does not
+publish a new call number.
 
 # Executive Summary
 
@@ -152,18 +227,17 @@ python -m tools.seed_dev_data
  
 ---
  
-## Authentication Failure
- 
-Verify:
- 
-```http
-Authorization: Bearer <token>
-```
- 
-exists.
- 
+## Web Authentication
+
+The browser sends credentials to `/api/auth/token`; frontend Nginx removes
+`/api` when forwarding to backend `/auth/token`. If this request returns 405,
+rebuild the frontend and hard-refresh the browser as described in
+[Local Development and Account Recovery](#local-development-and-account-recovery).
+For an unknown username or forgotten password, follow the account recovery
+steps in that section. The login request does not use a bearer token; one is
+returned only after valid credentials authenticate.
+
 ---
- 
 # Testing Guide
  
 ## Run All Tests
@@ -223,7 +297,11 @@ requirements.txt dependency failures
  
 ---
  
-# Known Issues
+# Historical Recovery Notes
+
+The notes below predate the frontend API proxy correction documented above.
+They are retained as recovery history and should not be read as the current
+authentication status.
  
 ## Dispatch Dashboard Authentication
  
@@ -253,7 +331,7 @@ Potential Areas:
  
 ---
  
-# Next Session Priorities
+# Historical Validation Priorities
  
 ## Priority 1
  

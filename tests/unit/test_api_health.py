@@ -26,6 +26,33 @@ async def test_health_answers_head_for_uptime_monitors():
     assert response.status_code == 200
 
 
+def test_health_head_methods_are_hidden_from_openapi():
+    paths = app.openapi()["paths"]
+    for path in ("/health", "/health/ready"):
+        assert "get" in paths[path]
+        assert "head" not in paths[path]
+
+
+def test_delivery_endpoints_have_one_openapi_tag():
+    paths = app.openapi()["paths"]
+    delivery_operation = paths["/delivery/recent-proofs"]["get"]
+    assert delivery_operation["tags"] == ["delivery"]
+
+
+def test_router_owned_tags_are_not_duplicated_in_openapi():
+    paths = app.openapi()["paths"]
+    expected_tags = {
+        "/dispatch/drivers": "dispatch",
+        "/routing/optimize": "routing",
+        "/advanced-route/health": "advanced-routing",
+        "/analytics/predict-eta": "analytics",
+        "/tracking/live": "tracking",
+    }
+    for path, expected_tag in expected_tags.items():
+        operation = next(iter(paths[path].values()))
+        assert operation["tags"] == [expected_tag]
+
+
 @pytest.mark.asyncio
 async def test_root_reports_online():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

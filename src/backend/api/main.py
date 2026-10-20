@@ -131,12 +131,12 @@ safe_include(
     "src.backend.api.routes.users.router",
     tags=["Users"],
 )
-safe_include("src.backend.api.routes.delivery.router", tags=["Delivery"])
-safe_include("src.backend.api.routes.dispatch.router", tags=["Dispatch"])
-safe_include("src.backend.api.routes.routing.router", tags=["Routing"])
-safe_include("src.backend.api.routes.advanced_routing.router", tags=["Advanced Routing"])
-safe_include("src.backend.api.routes.analytics.router", tags=["Analytics"])
-safe_include("src.backend.api.routes.tracking.router", tags=["Tracking"])
+safe_include("src.backend.api.routes.delivery.router")
+safe_include("src.backend.api.routes.dispatch.router")
+safe_include("src.backend.api.routes.routing.router")
+safe_include("src.backend.api.routes.advanced_routing.router")
+safe_include("src.backend.api.routes.analytics.router")
+safe_include("src.backend.api.routes.tracking.router")
 safe_include("src.backend.api.routes.public.router", tags=["Public"])
 safe_include("src.backend.api.routes.command_center.router", tags=["Command Center"])
 safe_include("src.backend.api.routes.oidc.router", tags=["OIDC"])
@@ -155,8 +155,10 @@ app.mount("/static/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uplo
 async def root():
     return {"status": "online", "service": "Delivery Intelligence Platform Backend"}
 
-# HEAD too: uptime monitors (UptimeRobot) probe with HEAD before GET.
-@app.api_route("/health", methods=["GET", "HEAD"])
+# Keep HEAD available for uptime monitors without listing it as a separate
+# operation in Swagger.
+@app.get("/health")
+@app.head("/health", include_in_schema=False)
 def health_check():
     return {
         "status": "ok",
@@ -164,7 +166,8 @@ def health_check():
     }
 
 
-@app.api_route("/health/ready", methods=["GET", "HEAD"])
+@app.get("/health/ready")
+@app.head("/health/ready", include_in_schema=False)
 async def readiness_check():
     """Ready only when the database answers (for load balancers / k8s)."""
     try:

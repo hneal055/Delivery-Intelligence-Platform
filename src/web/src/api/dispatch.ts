@@ -10,7 +10,8 @@ import type {
   DriverAvailability,
   DriverAvailabilityCreate,
   AddressMatch,
-  AttentionItem
+  AttentionItem,
+  PackageWorkspaceUpdate
 } from "../types";
 
 export async function listDrivers(status?: string): Promise<Driver[]> {
@@ -111,6 +112,14 @@ export async function markPackageReady(packageId: string): Promise<void> {
 /** Send a package the driver reported a problem with back out. */
 export async function reopenPackage(packageId: string): Promise<void> {
   await apiClient.put(`/dispatch/packages/${packageId}/reopen`);
+}
+
+export async function updatePackageWorkspace(
+  packageId: string,
+  update: Partial<PackageWorkspaceUpdate>
+): Promise<Package> {
+  const response = await apiClient.patch<Package>(`/dispatch/packages/${packageId}`, update);
+  return response.data;
 }
 
 /** Preview what an address geocodes to before creating a job. */

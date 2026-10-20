@@ -19,6 +19,14 @@ export function useWebSocket() {
     wsRef.current = ws;
 
     const unsubscribe = ws.onMessage((message: WebSocketMessage) => {
+      if ((message as { type: string }).type === "package_updated") {
+        queryClient.invalidateQueries({ queryKey: ["packages"] });
+        queryClient.invalidateQueries({ queryKey: ["attention"] });
+        queryClient.invalidateQueries({ queryKey: ["jobs"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+        queryClient.invalidateQueries({ queryKey: ["package-proofs"] });
+        return;
+      }
       if ((message as { type: string }).type === "problem_reported") {
         const msg = message as unknown as { driver_id: string; reason: string; address: string | null };
         notifications.show({
@@ -29,6 +37,7 @@ export function useWebSocket() {
         });
         queryClient.invalidateQueries({ queryKey: ["packages"] });
         queryClient.invalidateQueries({ queryKey: ["attention"] });
+        queryClient.invalidateQueries({ queryKey: ["jobs"] });
         return;
       }
       if (message.type === "driver_location") {

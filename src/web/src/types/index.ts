@@ -118,6 +118,7 @@ export type WebSocketMessage = DriverLocationUpdate | DriverStatusUpdate | { typ
 
 export interface DispatchJob {
   id: string;
+  package_id: string | null;
   driver_id: string | null;
   title: string;
   type: JobType;
@@ -127,6 +128,25 @@ export interface DispatchJob {
   scheduled_at: string | null;
   completed_at: string | null;
   created_at: string;
+}
+
+export interface PackageWorkspaceUpdate {
+  driver_id: string | null;
+  dest_address: string;
+  dest_unit: string;
+  delivery_instructions: string;
+  pickup_address: string;
+  pickup_instructions: string;
+  recipient_name: string;
+  recipient_phone: string;
+  pickup_contact_name: string;
+  pickup_contact_phone: string;
+  deliver_by: string | null;
+  scheduled_at: string | null;
+  ready_for_pickup: boolean;
+  priority: string;
+  job_title: string;
+  job_notes: string;
 }
 
 export interface DispatchJobCreate {
@@ -216,4 +236,3 @@ export interface EquipmentScanEvent {
   driver_id: string;
   timestamp: string;
 }
-

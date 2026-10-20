@@ -1,8 +1,10 @@
 import apiClient, { API_URL } from "./client";
 import type { ProofOfDelivery } from "../types";
 
-export async function getRecentProofs(): Promise<ProofOfDelivery[]> {
-  const response = await apiClient.get("/delivery/recent-proofs");
+export async function getRecentProofs(packageId?: string): Promise<ProofOfDelivery[]> {
+  const response = await apiClient.get("/delivery/recent-proofs", {
+    params: packageId ? { package_id: packageId, limit: 200 } : undefined,
+  });
   // Map backend response to frontend type
   return (response.data as Array<{
     packageId: string;

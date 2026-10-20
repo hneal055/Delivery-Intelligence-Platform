@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -46,6 +46,7 @@ export default function ManifestScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stops, setStops] = useState([]);
+  const manifestSnapshot = useRef(null);
   const [deliveredIds, setDeliveredIds] = useState(new Set());
   const [filter, setFilter] = useState('ALL'); // 'ALL' | 'PENDING' | 'DELIVERED'
   const [isOptimized, setIsOptimized] = useState(false);
@@ -76,6 +77,22 @@ export default function ManifestScreen({ navigation }) {
 
       // Stops are the packages assigned to this driver; undelivered first.
       const packages = await getMyPackages();
+      const snapshot = JSON.stringify(
+        packages.map((p) => [
+          p.id,
+          p.status,
+          p.ready_at,
+          p.pickup_address,
+          p.pickup_lat,
+          p.pickup_lon,
+          p.dest_address,
+          p.dest_lat,
+          p.dest_lon,
+          p.deliver_by,
+        ])
+      );
+      const manifestChanged = snapshot !== manifestSnapshot.current;
+      manifestSnapshot.current = snapshot;
       const rank = { pickup: 0, deliver: 1, done: 2 };
       const ordered = [...packages].sort((a, b) => rank[stopPhase(a)] - rank[stopPhase(b)]);
       setDeliveredIds(new Set(packages.filter((p) => stopPhase(p) === 'done').map((p) => p.id)));
@@ -104,8 +121,10 @@ export default function ManifestScreen({ navigation }) {
           };
         })
       );
-      setIsOptimized(false);
-      setTotalKm(null);
+      if (manifestChanged || overrideCoords !== undefined) {
+        setIsOptimized(false);
+        setTotalKm(null);
+      }
     } catch (err) {
       console.error('Error loading manifest:', err);
     } finally {
@@ -115,14 +134,28 @@ export default function ManifestScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    fetchRouteAndProofs();
-  }, [fetchRouteAndProofs]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+    let refreshTimer;
+    const stopRefreshing = () => {
+      if (refreshTimer) {
+        clearInterval(refreshTimer);
+        refreshTimer = undefined;
+      }
+    };
+    const startRefreshing = () => {
+      stopRefreshing();
       fetchRouteAndProofs();
-    });
-    return unsubscribe;
+      refreshTimer = setInterval(fetchRouteAndProofs, 30000);
+    };
+
+    const unsubscribeFocus = navigation.addListener('focus', startRefreshing);
+    const unsubscribeBlur = navigation.addListener('blur', stopRefreshing);
+    if (navigation.isFocused()) startRefreshing();
+
+    return () => {
+      stopRefreshing();
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
   }, [navigation, fetchRouteAndProofs]);
 
   // Clean up orientation lock if unmounting

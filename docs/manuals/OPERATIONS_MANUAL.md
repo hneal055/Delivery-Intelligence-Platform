@@ -4,7 +4,7 @@ For the owner and dispatcher of Chicago Cargo Couriers. Covers running the
 platform day to day, accounts, the dispatch workflow, and what to do when
 something fails. Drivers get the one-page [Driver Guide](DRIVER_GUIDE.md).
 
-*Last updated 2026-10-11. Replaces the dispatcher and mobile parts of
+*Last updated 2026-10-20. Replaces the dispatcher and mobile parts of
 `docs/USER_GUIDE.md` and the July `Delivery_Intelligence_Platform_Operational_Manual.md.pdf`.*
 
 ---
@@ -21,6 +21,10 @@ something fails. Drivers get the one-page [Driver Guide](DRIVER_GUIDE.md).
 The phones reach the office PC over the **same Wi-Fi network**, or from
 anywhere once public access is switched on (section 10).
 
+The backend health check is `http://localhost:8000/health` on the office PC
+or `http://<office-PC-IP>:8000/health` from another device. Use `/health`,
+not the site root, to check service health.
+
 ## 2. Start and stop
 
 Open PowerShell in `C:\Projects\DELIVERYINTELLIGENCEPLATFORM`.
@@ -31,10 +35,20 @@ Open PowerShell in `C:\Projects\DELIVERYINTELLIGENCEPLATFORM`.
 | **Stop** (data is kept) | `.\scripts\dev\stop.ps1` |
 | Is it running? | `docker compose ps` and open http://localhost:8000/health (shows `"ok"`) |
 | Start the driver app server for phones | `cd src\mobile; npm run go` (leave the window open) |
+| Start the driver app in a PC browser | `cd src\mobile; npx expo start -c --web` |
 
 Docker Desktop must be running first. Never use `start.ps1 -Reset` or
 `stop.ps1 -Wipe` unless you mean to **delete all data**. Never use
 `start.ps1 -Seed` on the real database: it adds 50 fake drivers.
+
+Run Expo commands from `C:\Projects\DELIVERYINTELLIGENCEPLATFORM\src\mobile`,
+not the repository root. If Expo reports a missing `react-native-web` or
+`react-dom` package, install the SDK-compatible packages from that directory:
+
+```powershell
+npx expo install react-native-web react-dom
+npx expo start -c --web
+```
 
 ## 3. Accounts and passwords
 
@@ -48,8 +62,38 @@ packages, proofs), **manager**, **admin**.
 | Lock someone out | Reset their password to one only you know (there is no "disable" button yet) |
 
 - Both commands ask for the password and **don't show it**. Minimum 10 characters.
+- Password reset updates an existing username; it does not create the account.
+  To see which usernames actually exist in the current local database, run:
+
+  ```powershell
+  docker exec delivery_db psql -U postgres -d delivery -c "SELECT username, role, is_active FROM users ORDER BY username;"
+  ```
+
+- Use the exact username shown by that query. A role name is not necessarily a
+  username, and a driver ID such as `D001` exists only if that account was
+  created. For example, reset an existing dispatcher, admin, or driver with:
+
+  ```powershell
+  docker exec -it delivery_backend python -m src.scripts.set_user_password dispatcher1
+  docker exec -it delivery_backend python -m src.scripts.set_user_password admin
+  docker exec -it delivery_backend python -m src.scripts.set_user_password driver1
+  ```
+
+- If the admin account does not exist, create it rather than resetting it:
+
+  ```powershell
+  docker exec -it delivery_backend python -m src.scripts.create_user admin admin
+  ```
+
+  The creation command prompts for a password, confirms it, and requires at
+  least 10 characters. Use `driver`, `dispatcher`, `manager`, or `admin` as
+  the role argument when creating other accounts.
+
 - A driver's **username is their driver ID**. New drivers appear in "Assign Driver" right away.
 - Give each driver their own account. Never share one.
+- Never use demo/example passwords for real accounts. If a password appears
+  in a screenshot, chat, terminal recording, or source file, treat it as
+  exposed and reset it immediately.
 - **`.env` holds the `SECRET_KEY` that signs every login.** Keep it private and never commit it. If it's missing, `start.ps1` stops with *"SECRET_KEY must be set in .env"*. Changing it logs everyone out; that's harmless.
 - Keep account recovery codes (Expo, GitHub, …) in a password manager, not in the project folder.
 
@@ -61,6 +105,13 @@ packages, proofs), **manager**, **admin**.
 4. Open Expo Go on the phone, choose the office PC under *Development servers* (or *Enter URL manually*: `exp://<office-PC-IP>:8081`), and log in with the driver's account.
 5. Allow **Location**, **Camera** and **Notifications**.
 6. Give the driver the [Driver Guide](DRIVER_GUIDE.md).
+
+The mobile app API is `http://<office-PC-IP>:8000`. Its development
+configuration is in `src\mobile\.env` (`EXPO_PUBLIC_API_HOST` and
+`EXPO_PUBLIC_API_PORT=8000`); the mobile client uses that LAN address in
+development. After changing the IP or API settings, restart Expo with
+`npx expo start -c`. Confirm the address in the `[API Client] baseURL` log
+and check `http://<office-PC-IP>:8000/health` from the phone's network.
 
 ## 5. The daily dispatch flow
 
@@ -82,6 +133,12 @@ Packages page; the driver can scan it as a barcode or QR code.
 
 ### During the day (dashboard → **Packages**)
 
+- Open **Details / edit** on a package to view its tracking link, package and
+  recipient information, pickup details, linked dispatch job, driver,
+  schedule, delivery promise, and any recorded proof. Update editable fields
+  there; address changes are geocoded before saving. Delivery completion
+  remains a driver-confirmed action, and delivered/problem packages cannot be
+  reassigned from the workspace.
 - **Not ready for pickup** → when the shipper calls, click **Mark ready**. The driver is alerted.
 - **Problem reported** → a **red alert** pops up on the dashboard with the driver's reason. Call the driver or customer, then either:
   - **Reopen**: it goes back on the driver's list. If it was already picked up, it stays "in the van"; or
@@ -105,7 +162,13 @@ Packages page; the driver can scan it as a barcode or QR code.
 | Dashboard won't load | Stack not running | Start Docker Desktop, then `.\scripts\dev\start.ps1` |
 | Everyone is logged out | `SECRET_KEY` changed, or session expired | Log in again |
 | "Incorrect username or password" | Wrong or forgotten password | `set_user_password` (section 3) |
-| Phone: network error / can't log in | Phone not on office Wi-Fi, PC IP changed, or `npm run go` not running | Check Wi-Fi; run `configure-mobile-env.ps1`; restart `npm run go` |
+| Login still fails after a password reset | Wrong username, wrong database/host, or stale browser/app bundle | Check the exact username with the section 3 SQL command; ensure the app points to this backend; refresh the dashboard with Ctrl+Shift+R or restart Expo with `npx expo start -c` |
+| Login endpoint returns 405 or the browser shows stale frontend behavior | Stale frontend container or API proxy path | Rebuild with `docker compose up -d --build frontend`, then hard-refresh with Ctrl+Shift+R. The web client calls `/api/auth/token`; Nginx forwards it to backend `/auth/token`. |
+| Login returns 401 | Username or password is incorrect, or the account is missing | Check the exact username with the section 3 SQL command; reset an existing account's password if needed. A 401 confirms the request reached authentication. |
+| Phone reports a 15-second request timeout | Phone not on office Wi-Fi, PC IP changed, wrong API URL, firewall blocking port 8000, or Expo not running | Check Wi-Fi; run `.\scripts\dev\configure-mobile-env.ps1` from the repository root; verify `[API Client] baseURL` and open `http://<office-PC-IP>:8000/health` on the phone; restart Expo with `npx expo start -c` |
+| Phone: network error / can't log in | Phone not on office Wi-Fi, PC IP changed, wrong API URL, or Expo not running | Check Wi-Fi; run `.\scripts\dev\configure-mobile-env.ps1` from the repository root; verify the `[API Client] baseURL`; restart Expo with `npx expo start -c` |
+| Expo web bundler says `react-native-web` or `react-dom` cannot be resolved | Expo web packages missing or incompatible | From `src\mobile`, run `npx expo install react-native-web react-dom`, then `npx expo start -c --web` |
+| `npx expo` says project root or `package.json` not found | Expo command run from repository root | Change directory to `src\mobile` before running Expo commands |
 | Driver not in "Assign Driver" | Account isn't a driver, or doesn't exist | Create with `create_user … driver` |
 | "Address not found" | Typo or missing city | Add city, state or ZIP; check the Matched line |
 | Driver gets no alerts | Notifications not allowed, or app closed | Allow notifications; keep the app open (it checks every 30 s). Background push needs the production app on Android |
@@ -114,7 +177,9 @@ Packages page; the driver can scan it as a barcode or QR code.
 | Address lookups fail for everyone | US Census geocoder is down (rare) | Wait and retry; it's a free government service |
 | Start stops with "SECRET_KEY must be set" | `.env` missing the key | Add a `SECRET_KEY=` line (see `.env.example`) |
 
-To look deeper: `docker compose logs backend --tail 100`.
+To look deeper: `docker compose logs backend --tail 100` and
+`docker compose logs frontend --tail 100`. The correct health URL is
+`http://localhost:8000/health`; the web dashboard is `http://localhost:5173`.
 
 ## 7. Backups (automatic)
 
@@ -285,7 +350,7 @@ not to list it, and it is rate-limited per visitor.
   `dip.chicagocargocourier.com` path **`track`** uses the **Phones** policy
   (Bypass, Everyone), the same as `/api`.
 
-### Automatic texts (off until set up)
+### Automatic texts (SMS phase)
 
 When texts are set up, the recipient's phone (the "Recipient phone" on the
 job) gets at most two texts per package:
@@ -294,13 +359,45 @@ job) gets at most two texts per package:
    with the deliver-by time if there is one and the tracking link.
 2. **Delivered**, when the driver confirms delivery, with the time.
 
-Each is sent once, even if the package is scanned again. Packages without a
-valid US phone number are skipped. Texts use **Twilio**; put these in `.env`
-and restart the backend (`docker compose up -d backend`):
+Each is queued once per package when Twilio is configured. Packages without a
+valid US recipient phone are skipped. The backend now receives the Twilio
+settings from Compose; leaving them blank keeps outbound texts disabled.
 
-`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and either `TWILIO_FROM_NUMBER`
-(e.g. `+13125550100`) or `TWILIO_MESSAGING_SERVICE_SID`. Optional:
-`COMPANY_PHONE` (shown on the tracking page). US carriers require the
-sending number to be registered (toll-free verification, or A2P 10DLC for a
-local number) before texts are delivered reliably; Twilio's console walks
-through it. Customers can reply STOP to opt out; Twilio handles that.
+Before enabling customer messages, finish the applicable Twilio sender
+onboarding:
+
+- A Trust Hub business-profile approval is an important prerequisite, but it
+  does not by itself register the sender or authorize messaging.
+- For a US local 10DLC number, complete A2P brand and campaign registration
+  and associate the sending number with the approved campaign or Messaging
+  Service. For a toll-free number, complete toll-free verification instead.
+  Follow the current Twilio Console status and requirements for your sender.
+- Use the main Account SID and Auth Token from Twilio, plus either the
+  Messaging Service SID or the approved Twilio sending number in E.164
+  format (for example `+13125550100`).
+
+Store these in the root `.env` for production:
+
+```text
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_MESSAGING_SERVICE_SID=
+# Or use TWILIO_FROM_NUMBER instead of a Messaging Service SID:
+TWILIO_FROM_NUMBER=
+```
+
+Keep the Auth Token secret and never paste credentials into chat or logs. To
+apply production values, recreate the backend from the project folder with
+`docker compose up -d --force-recreate backend`. For local development, put
+the values in `.env.backend` (the file loaded by `.\scripts\dev\start.ps1`)
+and restart with `.\scripts\dev\start.ps1`.
+
+First validate with an opted-in number you control and a test package. Confirm
+both the Twilio message status and that the customer receives the tracking
+link. Customers can reply STOP to opt out; Twilio handles that. Do not use
+real customer numbers until sender registration is complete and your consent
+and opt-out process is ready.
+
+This SMS phase does not publish a new customer call number. Continue using
+the existing business phone for calls; a visible “Call us” link can be added
+later when call handling is confirmed.

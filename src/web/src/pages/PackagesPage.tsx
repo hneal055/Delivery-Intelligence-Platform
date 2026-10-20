@@ -1,12 +1,13 @@
 import { Table, Badge, Title, Stack, Select, Group, Button, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { usePackages } from "../hooks/usePackages";
 import { markPackageReady, reopenPackage } from "../api/dispatch";
 import type { Package } from "../types";
 import { useDriverFilterOptions, matchesDriver } from "../hooks/useDriverFilterOptions";
+import { PackageWorkspaceDrawer } from "../components/dispatch/PackageWorkspaceDrawer";
 
 function statusColor(status: string): string {
   switch (status) {
@@ -54,6 +55,7 @@ function awaitingReady(pkg: Package): boolean {
 export function PackagesPage() {
   const { data: packages = [], isLoading } = usePackages();
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   // Kept in the address (?driver=driver1) so the Dashboard can open this
   // page filtered, and Back or refresh keeps the filter.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -105,6 +107,13 @@ export function PackagesPage() {
         .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")),
     [packages, statusFilter, driverFilter, packageFilter]
   );
+  const selectedPackage = packages.find((pkg) => pkg.id === selectedPackageId) ?? null;
+
+  useEffect(() => {
+    if (packageFilter && packages.some((pkg) => pkg.id === packageFilter)) {
+      setSelectedPackageId(packageFilter);
+    }
+  }, [packageFilter, packages]);
 
   return (
     <Stack>
@@ -199,6 +208,13 @@ export function PackagesPage() {
                 {pkg.created_at ? new Date(pkg.created_at).toLocaleString() : "N/A"}
               </Table.Td>
               <Table.Td>
+                <Button
+                  size="xs"
+                  variant="light"
+                  onClick={() => setSelectedPackageId(pkg.id)}
+                >
+                  Details / edit
+                </Button>
                 {awaitingReady(pkg) && (
                   <Button size="xs" variant="light" loading={ready.isPending && ready.variables === pkg.id}
                     onClick={() => ready.mutate(pkg.id)}>
@@ -228,6 +244,11 @@ export function PackagesPage() {
           )}
         </Table.Tbody>
       </Table>
+      <PackageWorkspaceDrawer
+        pkg={selectedPackage}
+        opened={Boolean(selectedPackageId && selectedPackage)}
+        onClose={() => setSelectedPackageId(null)}
+      />
     </Stack>
   );
 }
