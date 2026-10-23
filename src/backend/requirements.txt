@@ -21,7 +21,7 @@ Authlib==1.7.2
 babel==2.18.0
 bcrypt==4.0.1
 beautifulsoup4==4.15.0
-black==23.11.0
+black==26.10.1
 bleach==6.4.0
 boto3==1.43.55
 botocore==1.43.55
