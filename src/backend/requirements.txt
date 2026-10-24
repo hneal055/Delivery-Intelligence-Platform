@@ -188,7 +188,7 @@ scikit-learn==1.9.0
 scipy==1.18.0
 Send2Trash==2.1.0
 sendgrid==6.12.5
-setuptools==83.0.0
+setuptools==84.1.0
 shapely==2.1.2
 six==1.17.0
 slowapi==0.1.10
